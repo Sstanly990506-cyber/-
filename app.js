@@ -1,6 +1,10 @@
 const refs = {
   loginView: document.querySelector('#login-view'),
   dashboardView: document.querySelector('#dashboard-view'),
+  navView: document.querySelector('#nav-view'),
+  panelWorkOrders: document.querySelector('#panel-work-orders'),
+  panelCustomers: document.querySelector('#panel-customers'),
+  panelFinances: document.querySelector('#panel-finances'),
   loginForm: document.querySelector('#login-form'),
   loginMessage: document.querySelector('#login-message'),
   companySelect: document.querySelector('#company-select'),
@@ -58,6 +62,7 @@ refs.loginForm.addEventListener('submit', async (event) => {
     refs.loginView.classList.add('hidden');
     refs.dashboardView.classList.remove('hidden');
 
+    showPanel('home');
     connectSync();
     await reloadData();
     refs.loginMessage.textContent = '';
@@ -99,14 +104,46 @@ refs.financeForm.addEventListener('submit', async (event) => {
 
 document.body.addEventListener('click', async (event) => {
   const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  const navButton = target.closest('[data-nav]');
+  if (navButton instanceof HTMLButtonElement) {
+    showPanel(navButton.dataset.nav || 'home');
+    return;
+  }
+
   if (!(target instanceof HTMLButtonElement) || target.dataset.action !== 'delete') {
     return;
   }
+
   await requestAuthed('/api/delete', {
     domain: target.dataset.domain,
     id: target.dataset.id,
   });
 });
+
+function showPanel(nav) {
+  refs.navView.classList.add('hidden');
+  refs.panelWorkOrders.classList.add('hidden');
+  refs.panelCustomers.classList.add('hidden');
+  refs.panelFinances.classList.add('hidden');
+
+  if (nav === 'work-orders') {
+    refs.panelWorkOrders.classList.remove('hidden');
+    return;
+  }
+  if (nav === 'customers') {
+    refs.panelCustomers.classList.remove('hidden');
+    return;
+  }
+  if (nav === 'finances') {
+    refs.panelFinances.classList.remove('hidden');
+    return;
+  }
+  refs.navView.classList.remove('hidden');
+}
 
 function connectSync() {
   if (appState.eventSource) {

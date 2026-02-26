@@ -50,6 +50,30 @@ button {
   padding: 10px 12px;
   cursor: pointer;
 }
+.nav-card {
+  text-align: left;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.nav-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgb(21 40 58 / 10%);
+}
+.nav-card h2 { margin: 0 0 8px; }
+.nav-card p { margin: 0; color: var(--muted); }
+.panel { margin-top: 16px; }
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.back-btn {
+  background: #5f7387;
+  padding: 8px 10px;
+}
 .list {
   list-style: none;
   padding: 0;
