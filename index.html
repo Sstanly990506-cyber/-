@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>上光廠同步作業平台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>上光廠同步作業平台</h1>
+      <p>跨電腦共同使用、即時同步資料</p>
+    </header>
+
+    <main class="container">
+      <section id="login-view" class="card auth-card">
+        <h2>登入系統</h2>
+        <form id="login-form" class="stack">
+          <label>
+            選擇公司
+            <select id="company-select" required>
+              <option value="">請選擇公司</option>
+            </select>
+          </label>
+          <label>
+            帳號
+            <input id="username" required placeholder="admin" />
+          </label>
+          <label>
+            密碼
+            <input id="password" type="password" required placeholder="123456" />
+          </label>
+          <button type="submit">登入</button>
+          <p id="login-message" class="hint"></p>
+        </form>
+      </section>
+
+      <section id="dashboard-view" class="hidden">
+        <div class="card user-bar">
+          <p>公司：<strong id="current-company"></strong>｜使用者：<strong id="current-user"></strong></p>
+        </div>
+
+        <section id="nav-view" class="grid-3">
+          <button class="card nav-card" data-nav="work-orders" type="button">
+            <h2>1 工單作業系統</h2>
+            <p>建立與追蹤工單</p>
+          </button>
+          <button class="card nav-card" data-nav="customers" type="button">
+            <h2>2 客戶系統</h2>
+            <p>維護客戶資料</p>
+          </button>
+          <button class="card nav-card" data-nav="finances" type="button">
+            <h2>3 財金系統</h2>
+            <p>管理收支紀錄</p>
+          </button>
+        </section>
+
+        <section id="panel-work-orders" class="card panel hidden">
+          <div class="panel-head">
+            <h2>工單作業系統</h2>
+            <button type="button" class="back-btn" data-nav="home">返回導航</button>
+          </div>
+          <form id="work-order-form" class="stack">
+            <input id="wo-no" required placeholder="工單編號" />
+            <input id="wo-product" required placeholder="品名" />
+            <input id="wo-qty" type="number" min="1" required placeholder="數量" />
+            <select id="wo-status" required>
+              <option>未完成</option>
+              <option>已完成</option>
+            </select>
+            <button type="submit">新增工單</button>
+          </form>
+          <ul id="wo-list" class="list"></ul>
+        </section>
+
+        <section id="panel-customers" class="card panel hidden">
+          <div class="panel-head">
+            <h2>客戶系統</h2>
+            <button type="button" class="back-btn" data-nav="home">返回導航</button>
+          </div>
+          <form id="customer-form" class="stack">
+            <input id="customer-name" required placeholder="客戶名稱" />
+            <input id="customer-contact" required placeholder="聯絡方式" />
+            <select id="customer-level" required>
+              <option value="">客戶等級</option>
+              <option>A</option>
+              <option>B</option>
+              <option>C</option>
+            </select>
+            <button type="submit">新增客戶</button>
+          </form>
+          <ul id="customer-list" class="list"></ul>
+        </section>
+
+        <section id="panel-finances" class="card panel hidden">
+          <div class="panel-head">
+            <h2>財金系統</h2>
+            <button type="button" class="back-btn" data-nav="home">返回導航</button>
+          </div>
+          <form id="finance-form" class="stack">
+            <select id="finance-type" required>
+              <option value="">收支類型</option>
+              <option>收入</option>
+              <option>支出</option>
+            </select>
+            <input id="finance-amount" type="number" min="0" required placeholder="金額" />
+            <input id="finance-note" required placeholder="備註" />
+            <button type="submit">新增紀錄</button>
+          </form>
+          <ul id="finance-list" class="list"></ul>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
