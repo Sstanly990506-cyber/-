@@ -1,0 +1,101 @@
+:root {
+  --bg: #f3f6fa;
+  --card: #fff;
+  --text: #15283a;
+  --muted: #61788d;
+  --accent: #1765ad;
+  --danger: #bd3434;
+  --border: #d7e1ea;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Noto Sans TC", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.topbar {
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(120deg, #12416f, #1e78c2);
+  padding: 24px 16px;
+}
+.topbar h1 { margin: 0; }
+.topbar p { margin: 6px 0 0; opacity: 0.9; }
+.container { max-width: 1280px; margin: 0 auto; padding: 20px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.auth-card { max-width: 480px; margin: 20px auto; }
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.stack { display: grid; gap: 10px; }
+input, select, button { font: inherit; }
+input, select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+}
+button {
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.nav-card {
+  text-align: left;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.nav-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgb(21 40 58 / 10%);
+}
+.nav-card h2 { margin: 0 0 8px; }
+.nav-card p { margin: 0; color: var(--muted); }
+.panel { margin-top: 16px; }
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.back-btn {
+  background: #5f7387;
+  padding: 8px 10px;
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 8px;
+}
+.list li {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfdff;
+}
+.item-meta { color: var(--muted); font-size: 0.88rem; }
+.row-actions { margin-top: 8px; }
+.row-actions button { background: var(--danger); padding: 6px 10px; font-size: 0.85rem; }
+.hidden { display: none; }
+.hint { min-height: 20px; color: var(--muted); margin: 0; }
+.user-bar { margin-bottom: 12px; }
+
+.nav-card:focus {
+  outline: 2px solid #1e78c2;
+  outline-offset: 2px;
+}
