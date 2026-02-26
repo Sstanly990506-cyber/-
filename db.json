@@ -1,0 +1,19 @@
+{
+  "companies": {
+    "alpha": {
+      "workOrders": [],
+      "customers": [],
+      "finances": []
+    },
+    "beta": {
+      "workOrders": [],
+      "customers": [],
+      "finances": []
+    },
+    "gamma": {
+      "workOrders": [],
+      "customers": [],
+      "finances": []
+    }
+  }
+}
