@@ -7,7 +7,6 @@
   --muted: #6b7280;
   --border: #e5e7eb;
   --ok: #16a34a;
-  --warn: #f59e0b;
 }
 
 * { box-sizing: border-box; }
@@ -63,6 +62,11 @@ input, select {
 }
 .btn.primary:hover { background: var(--primary-dark); }
 .btn.ghost { margin-left: 12px; }
+.btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
 .card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -86,7 +90,27 @@ input, select {
   gap: 16px;
   grid-template-columns: 1.1fr 1fr;
 }
-.table-wrap { overflow: auto; max-height: 420px; }
+.orders-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 16px;
+}
+.side-menu {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+.side-btn {
+  text-align: left;
+  font-weight: 600;
+}
+.filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.table-wrap { overflow: auto; max-height: 460px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; }
 .tag {
@@ -105,6 +129,6 @@ dialog {
 }
 menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0; }
 @media (max-width: 900px) {
-  .card-grid, .split { grid-template-columns: 1fr; }
+  .card-grid, .split, .orders-layout { grid-template-columns: 1fr; }
   .row { grid-template-columns: 1fr; }
 }

@@ -36,21 +36,48 @@
       <section id="ordersView" class="panel hidden">
         <header class="topbar card">
           <h2>工單作業系統</h2>
-          <button class="btn" data-back>返回導航</button>
         </header>
-        <div class="split">
-          <article class="card">
+
+        <div class="orders-layout">
+          <aside class="card side-menu">
+            <button class="btn side-btn active" type="button" data-order-screen="list">工單列表</button>
+            <button class="btn side-btn" type="button" data-order-screen="form">新增工單</button>
+            <button class="btn side-btn" type="button" data-back>返回導航</button>
+          </aside>
+
+          <article id="ordersListScreen" class="card">
+            <h3>工單列表</h3>
+            <div class="filter-row">
+              <button class="btn filter-btn active" data-status-filter="全部" type="button">全部</button>
+              <button class="btn filter-btn" data-status-filter="未完成" type="button">未完成</button>
+              <button class="btn filter-btn" data-status-filter="已送出" type="button">已送出</button>
+              <button class="btn filter-btn" data-status-filter="已完成" type="button">已完成</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>工單編號</th><th>日期</th><th>上游</th><th>下游</th><th>總價</th><th>狀態</th><th></th></tr></thead>
+                <tbody id="ordersTbody"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article id="ordersFormScreen" class="card hidden">
             <h3>新增 / 編輯工單</h3>
             <form id="orderForm" class="form-grid">
               <input id="orderId" type="hidden" />
               <label>工單編號<input id="orderNumber" required /></label>
               <label>日期<input id="orderDate" type="date" required /></label>
-              <label>上游客戶
-                <select id="upstreamSelect" required></select>
+
+              <label>上游客戶（可搜尋）
+                <input id="upstreamInput" list="upstreamOptions" placeholder="輸入關鍵字，例如：彩" required />
+                <datalist id="upstreamOptions"></datalist>
               </label>
-              <label>下游客戶
-                <select id="downstreamSelect" required></select>
+
+              <label>下游客戶（可搜尋）
+                <input id="downstreamInput" list="downstreamOptions" placeholder="輸入關鍵字，例如：彩" required />
+                <datalist id="downstreamOptions"></datalist>
               </label>
+
               <label>張數<input id="sheetCount" type="number" min="1" required /></label>
               <label>長<input id="sizeLength" type="number" step="0.01" min="0" required /></label>
               <label>寬<input id="sizeWidth" type="number" step="0.01" min="0" required /></label>
@@ -71,10 +98,9 @@
               <label>總價<input id="totalPrice" type="number" step="0.01" min="0" required /></label>
               <label>狀態
                 <select id="orderStatus" required>
-                  <option value="待處理">待處理</option>
-                  <option value="製作中">製作中</option>
+                  <option value="未完成">未完成</option>
+                  <option value="已送出">已送出</option>
                   <option value="已完成">已完成</option>
-                  <option value="已取消">已取消</option>
                 </select>
               </label>
               <div class="actions">
@@ -82,15 +108,6 @@
                 <button class="btn" type="button" id="clearOrderBtn">清空</button>
               </div>
             </form>
-          </article>
-          <article class="card">
-            <h3>工單列表</h3>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>工單編號</th><th>日期</th><th>上游</th><th>下游</th><th>總價</th><th>狀態</th><th></th></tr></thead>
-                <tbody id="ordersTbody"></tbody>
-              </table>
-            </div>
           </article>
         </div>
       </section>
@@ -105,6 +122,8 @@
             <h3>新增客戶</h3>
             <form id="customerForm" class="form-grid compact">
               <label>客戶名稱<input id="customerName" required /></label>
+              <label>電話<input id="customerPhone" /></label>
+              <label>地址<input id="customerAddress" /></label>
               <label>角色
                 <select id="customerRole" required>
                   <option value="上游">上游</option>
@@ -116,10 +135,11 @@
             </form>
           </article>
           <article class="card">
-            <h3>客戶清單（可停用）</h3>
+            <h3>客戶清單（可搜尋 / 可停用）</h3>
+            <input id="customerSearch" placeholder="搜尋客戶名稱、電話、地址" />
             <div class="table-wrap">
               <table>
-                <thead><tr><th>名稱</th><th>角色</th><th>狀態</th><th></th></tr></thead>
+                <thead><tr><th>名稱</th><th>電話</th><th>地址</th><th>角色</th><th>狀態</th><th></th></tr></thead>
                 <tbody id="customersTbody"></tbody>
               </table>
             </div>
@@ -134,19 +154,19 @@
         </header>
         <article class="card">
           <p>財經系統入口已啟用二次密碼保護。</p>
-          <p>（示範頁）後續可放：收支報表、應收帳款、月結資料。</p>
+          <p>（示範頁）後續可放：收支報表、應收應付、毛利分析。</p>
         </article>
       </section>
 
       <section id="auditView" class="panel hidden">
         <header class="topbar card">
-          <h2>價格修改稽核紀錄</h2>
+          <h2>總價修改稽核</h2>
           <button class="btn" data-back>返回導航</button>
         </header>
         <article class="card">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>工單編號</th><th>欄位</th><th>修改前</th><th>修改後</th><th>時間</th><th>操作人</th><th>IP/裝置</th></tr></thead>
+              <thead><tr><th>工單</th><th>欄位</th><th>修改前</th><th>修改後</th><th>時間</th><th>操作者</th><th>裝置/IP</th></tr></thead>
               <tbody id="auditTbody"></tbody>
             </table>
           </div>
@@ -155,12 +175,12 @@
     </main>
 
     <dialog id="financeDialog">
-      <form method="dialog" id="financeForm" class="form-grid compact">
-        <h3>輸入財經系統密碼</h3>
+      <form id="financeForm" method="dialog" class="card form-grid compact">
+        <h3>請輸入財經系統密碼</h3>
         <label>密碼<input id="financePassword" type="password" required /></label>
         <menu>
-          <button value="cancel" class="btn">取消</button>
-          <button value="ok" class="btn primary">進入</button>
+          <button class="btn" value="cancel" type="button" id="cancelFinanceBtn">取消</button>
+          <button class="btn primary" value="default" type="submit">確認</button>
         </menu>
       </form>
     </dialog>

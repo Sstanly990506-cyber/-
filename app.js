@@ -5,6 +5,8 @@ const state = {
   customers: JSON.parse(localStorage.getItem("customers") || "[]"),
   orders: JSON.parse(localStorage.getItem("orders") || "[]"),
   audits: JSON.parse(localStorage.getItem("audits") || "[]"),
+  orderStatusFilter: "全部",
+  orderScreen: "list",
 };
 
 const views = ["loginView", "dashboardView", "ordersView", "customersView", "financeView", "auditView"];
@@ -26,7 +28,6 @@ function openFinanceGate() {
   showView("financeView");
 }
 
-
 function save() {
   localStorage.setItem("glossOptions", JSON.stringify(state.glossOptions));
   localStorage.setItem("customers", JSON.stringify(state.customers));
@@ -37,9 +38,25 @@ function save() {
 function showView(id) {
   views.forEach((v) => $(v).classList.add("hidden"));
   $(id).classList.remove("hidden");
-  if (id === "ordersView") renderOrders();
+  if (id === "ordersView") {
+    state.orderScreen = "list";
+    renderOrderScreen();
+    renderOrders();
+  }
   if (id === "customersView") renderCustomers();
   if (id === "auditView") renderAudits();
+}
+
+function renderOrderScreen() {
+  const listScreen = $("ordersListScreen");
+  const formScreen = $("ordersFormScreen");
+  const isList = state.orderScreen === "list";
+  listScreen.classList.toggle("hidden", !isList);
+  formScreen.classList.toggle("hidden", isList);
+
+  document.querySelectorAll("[data-order-screen]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.orderScreen === state.orderScreen);
+  });
 }
 
 function renderGlossOptions() {
@@ -54,10 +71,10 @@ function renderGlossOptions() {
 }
 
 function renderCustomerOptions() {
-  const upstream = $("upstreamSelect");
-  const downstream = $("downstreamSelect");
-  upstream.innerHTML = '<option value="">請選擇</option>';
-  downstream.innerHTML = '<option value="">請選擇</option>';
+  const upstream = $("upstreamOptions");
+  const downstream = $("downstreamOptions");
+  upstream.innerHTML = "";
+  downstream.innerHTML = "";
   const active = state.customers.filter((c) => c.active !== false);
 
   active
@@ -73,7 +90,12 @@ function renderOrders() {
   renderCustomerOptions();
   const body = $("ordersTbody");
   body.innerHTML = "";
-  state.orders.forEach((order) => {
+
+  const filteredOrders = state.orders.filter((order) =>
+    state.orderStatusFilter === "全部" ? true : order.status === state.orderStatusFilter,
+  );
+
+  filteredOrders.forEach((order) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${order.orderNumber}</td>
@@ -90,16 +112,25 @@ function renderOrders() {
 function renderCustomers() {
   const body = $("customersTbody");
   body.innerHTML = "";
-  state.customers.forEach((c) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+  const keyword = $("customerSearch").value.trim().toLowerCase();
+
+  state.customers
+    .filter((c) => {
+      if (!keyword) return true;
+      return [c.name, c.phone || "", c.address || ""].join(" ").toLowerCase().includes(keyword);
+    })
+    .forEach((c) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
       <td>${c.name}</td>
+      <td>${c.phone || "-"}</td>
+      <td>${c.address || "-"}</td>
       <td>${c.role}</td>
       <td><span class="tag ${c.active === false ? "off" : ""}">${c.active === false ? "停用" : "啟用"}</span></td>
       <td><button class="btn" data-toggle-customer="${c.id}">${c.active === false ? "啟用" : "停用"}</button></td>
     `;
-    body.append(tr);
-  });
+      body.append(tr);
+    });
   renderCustomerOptions();
 }
 
@@ -156,7 +187,6 @@ $("financeForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const value = $("financePassword").value;
   if (value !== state.financePassword) {
-    e.preventDefault();
     alert("密碼錯誤");
     return;
   }
@@ -179,12 +209,16 @@ $("customerForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const name = $("customerName").value.trim();
   const role = $("customerRole").value;
+  const phone = $("customerPhone").value.trim();
+  const address = $("customerAddress").value.trim();
   if (!name) return;
-  state.customers.push({ id: crypto.randomUUID(), name, role, active: true });
+  state.customers.push({ id: crypto.randomUUID(), name, role, phone, address, active: true });
   save();
   e.target.reset();
   renderCustomers();
 });
+
+$("customerSearch").addEventListener("input", renderCustomers);
 
 $("customersTbody").addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-toggle-customer]");
@@ -205,8 +239,8 @@ $("orderForm").addEventListener("submit", (e) => {
     id,
     orderNumber: $("orderNumber").value.trim(),
     orderDate: $("orderDate").value,
-    upstream: $("upstreamSelect").value,
-    downstream: $("downstreamSelect").value,
+    upstream: $("upstreamInput").value.trim(),
+    downstream: $("downstreamInput").value.trim(),
     sheetCount: Number($("sheetCount").value),
     sizeLength: Number($("sizeLength").value),
     sizeWidth: Number($("sizeWidth").value),
@@ -235,6 +269,8 @@ $("orderForm").addEventListener("submit", (e) => {
 
   save();
   clearOrderForm();
+  state.orderScreen = "list";
+  renderOrderScreen();
   renderOrders();
 });
 
@@ -246,8 +282,8 @@ $("ordersTbody").addEventListener("click", (e) => {
   $("orderId").value = order.id;
   $("orderNumber").value = order.orderNumber;
   $("orderDate").value = order.orderDate;
-  $("upstreamSelect").value = order.upstream;
-  $("downstreamSelect").value = order.downstream;
+  $("upstreamInput").value = order.upstream;
+  $("downstreamInput").value = order.downstream;
   $("sheetCount").value = order.sheetCount;
   $("sizeLength").value = order.sizeLength;
   $("sizeWidth").value = order.sizeWidth;
@@ -255,9 +291,28 @@ $("ordersTbody").addEventListener("click", (e) => {
   $("glossType").value = order.glossType;
   $("totalPrice").value = order.totalPrice;
   $("orderStatus").value = order.status;
+  state.orderScreen = "form";
+  renderOrderScreen();
 });
 
 $("clearOrderBtn").addEventListener("click", clearOrderForm);
+
+document.querySelectorAll("[data-order-screen]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.orderScreen = btn.dataset.orderScreen;
+    renderOrderScreen();
+  });
+});
+
+document.querySelectorAll("[data-status-filter]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.orderStatusFilter = btn.dataset.statusFilter;
+    document.querySelectorAll("[data-status-filter]").forEach((filterBtn) => {
+      filterBtn.classList.toggle("active", filterBtn.dataset.statusFilter === state.orderStatusFilter);
+    });
+    renderOrders();
+  });
+});
 
 // 快速進入稽核頁：在導航頁按鍵盤 A
 window.addEventListener("keydown", (e) => {
@@ -269,4 +324,5 @@ window.addEventListener("keydown", (e) => {
 renderGlossOptions();
 renderCustomers();
 renderOrders();
+renderOrderScreen();
 showView("loginView");
