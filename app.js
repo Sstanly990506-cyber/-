@@ -12,6 +12,42 @@ const state = {
 const views = ["loginView", "dashboardView", "ordersView", "customersView", "financeView", "auditView"];
 const $ = (id) => document.getElementById(id);
 
+const STORAGE_KEYS = ["glossOptions", "customers", "orders", "audits"];
+let lastSyncAt = 0;
+
+function loadStateFromStorage() {
+  state.glossOptions = JSON.parse(localStorage.getItem("glossOptions") || '["A光","B光"]');
+  state.customers = JSON.parse(localStorage.getItem("customers") || "[]");
+  state.orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  state.audits = JSON.parse(localStorage.getItem("audits") || "[]");
+}
+
+function markSynced(message = "已同步") {
+  const badge = $("syncBadge");
+  if (!badge) return;
+  badge.textContent = message;
+  badge.classList.add("ok");
+  clearTimeout(markSynced._timer);
+  markSynced._timer = setTimeout(() => {
+    badge.textContent = "同步中";
+    badge.classList.remove("ok");
+  }, 1200);
+}
+
+function refreshAllViews() {
+  renderGlossOptions();
+  renderCustomers();
+  renderOrders();
+  renderAudits();
+}
+
+function syncFromOtherClient() {
+  loadStateFromStorage();
+  refreshAllViews();
+  lastSyncAt = Date.now();
+  markSynced("已收到最新資料");
+}
+
 function openFinanceGate() {
   const dialog = $("financeDialog");
   if (dialog && typeof dialog.showModal === "function") {
@@ -33,6 +69,7 @@ function save() {
   localStorage.setItem("customers", JSON.stringify(state.customers));
   localStorage.setItem("orders", JSON.stringify(state.orders));
   localStorage.setItem("audits", JSON.stringify(state.audits));
+  localStorage.setItem("syncTick", String(Date.now()));
 }
 
 function showView(id) {
@@ -320,6 +357,20 @@ window.addEventListener("keydown", (e) => {
     showView("auditView");
   }
 });
+
+
+window.addEventListener("storage", (e) => {
+  if (STORAGE_KEYS.includes(e.key) || e.key === "syncTick") {
+    syncFromOtherClient();
+  }
+});
+
+setInterval(() => {
+  const tick = Number(localStorage.getItem("syncTick") || 0);
+  if (tick > lastSyncAt) {
+    syncFromOtherClient();
+  }
+}, 1500);
 
 renderGlossOptions();
 renderCustomers();
