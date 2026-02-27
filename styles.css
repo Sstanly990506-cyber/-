@@ -45,6 +45,8 @@ h1,h2,h3 { margin: 0 0 10px; }
 }
 .form-grid { display: grid; gap: 12px; }
 .form-grid.compact { max-width: 420px; }
+.order-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.span-2 { grid-column: span 2; }
 label { display: grid; gap: 6px; font-size: 14px; }
 input, select {
   background: #1f2329;
@@ -99,6 +101,7 @@ input, select {
   color: var(--muted);
   font-size: 12px;
 }
+.sync-badge-global { margin-left: 0; }
 
 .nav-card {
   border: none;
@@ -177,5 +180,11 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
 
 @media (max-width: 900px) {
   .card-grid, .split, .orders-layout, .finance-split, .kpi-grid { grid-template-columns: 1fr; }
+  .order-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .span-2 { grid-column: span 2; }
   .row { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .order-grid { grid-template-columns: 1fr; }
+  .span-2 { grid-column: auto; }
 }

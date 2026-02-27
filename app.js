@@ -8,6 +8,8 @@ const state = {
   receivables: JSON.parse(localStorage.getItem("receivables") || "[]"),
   payables: JSON.parse(localStorage.getItem("payables") || "[]"),
   reportRange: { start: "", end: "" },
+  financeScreen: "main",
+  auditFilter: { start: "", end: "", keyword: "" },
   orderStatusFilter: "全部",
   orderScreen: "list",
 };
@@ -31,9 +33,12 @@ function formatTs(ts) {
 }
 
 function updateSyncDetail(source, ts = Date.now()) {
+  const text = `最後更新：${formatTs(ts)}（${source}）`;
   const detail = $("syncDetail");
-  if (!detail) return;
-  detail.textContent = `最後更新：${formatTs(ts)}（${source}）`;
+  if (detail) detail.textContent = text;
+  document.querySelectorAll(".sync-detail-global").forEach((el) => {
+    el.textContent = text;
+  });
 }
 
 function loadStateFromStorage() {
@@ -46,14 +51,18 @@ function loadStateFromStorage() {
 }
 
 function markSynced(message = "已同步") {
-  const badge = $("syncBadge");
-  if (!badge) return;
-  badge.textContent = message;
-  badge.classList.add("ok");
+  const allBadges = [$("syncBadge"), ...document.querySelectorAll(".sync-badge-global")].filter(Boolean);
+  if (!allBadges.length) return;
+  allBadges.forEach((badge) => {
+    badge.textContent = message;
+    badge.classList.add("ok");
+  });
   clearTimeout(markSynced._timer);
   markSynced._timer = setTimeout(() => {
-    badge.textContent = "同步中";
-    badge.classList.remove("ok");
+    allBadges.forEach((badge) => {
+      badge.textContent = "同步中";
+      badge.classList.remove("ok");
+    });
   }, 1200);
 }
 
@@ -167,13 +176,18 @@ function renderOrders() {
   filteredOrders.forEach((order) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${order.orderNumber}</td>
-      <td>${order.orderDate}</td>
-      <td>${order.upstream}</td>
-      <td>${order.downstream}</td>
-      <td>${Number(order.totalPrice).toLocaleString()}</td>
-      <td>${order.status}</td>
-      <td><button class="btn" data-edit="${order.id}">編輯</button></td>`;
+      <td>${order.orderNumber || "-"}</td>
+      <td>${order.orderDate || "-"}</td>
+      <td>${order.upstream || "-"}</td>
+      <td>${order.downstream || "-"}</td>
+      <td>${Number(order.totalPrice || 0).toLocaleString()}</td>
+      <td>${order.status || "未完成"}</td>
+      <td>${order.updatedAt || "-"}</td>
+      <td>
+        <button class="btn" data-edit="${order.id}">編輯</button>
+        <button class="btn" data-quick-status="已完成" data-id="${order.id}">已完成</button>
+        <button class="btn" data-quick-status="已送出" data-id="${order.id}">已送出</button>
+      </td>`;
     body.append(tr);
   });
 }
@@ -203,10 +217,22 @@ function renderCustomers() {
   renderCustomerOptions();
 }
 
+function getFilteredAudits() {
+  const { start, end, keyword } = state.auditFilter;
+  return state.audits.filter((a) => {
+    const normalizedDate = (a.changedAt || "").slice(0, 10);
+    if (start && normalizedDate && normalizedDate < start) return false;
+    if (end && normalizedDate && normalizedDate > end) return false;
+    if (!keyword) return true;
+    const text = [a.orderNumber, a.field, a.user, a.device].join(" ").toLowerCase();
+    return text.includes(keyword.toLowerCase());
+  });
+}
+
 function renderAudits() {
   const body = $("auditTbody");
   body.innerHTML = "";
-  state.audits.forEach((a) => {
+  getFilteredAudits().forEach((a) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${a.orderNumber}</td>
@@ -332,11 +358,28 @@ function renderFinance() {
 
   $("reportStart").value = state.reportRange.start;
   $("reportEnd").value = state.reportRange.end;
+  renderFinanceScreen();
+}
+
+function renderFinanceScreen() {
+  const isMain = state.financeScreen === "main";
+  $("financeMainScreen").classList.toggle("hidden", !isMain);
+  $("financeReportsScreen").classList.toggle("hidden", isMain);
+  $("financeReportsTables").classList.toggle("hidden", isMain);
+  $("financeReportCWrap").classList.toggle("hidden", isMain);
+  document.querySelectorAll("[data-finance-screen]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.financeScreen === state.financeScreen);
+  });
+}
+
+function getTodayText() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function clearOrderForm() {
   $("orderForm").reset();
   $("orderId").value = "";
+  $("orderDate").value = getTodayText();
 }
 
 $("loginForm").addEventListener("submit", (e) => {
@@ -378,6 +421,11 @@ $("financeForm").addEventListener("submit", (e) => {
   showView("financeView");
 });
 
+$("cancelFinanceBtn").addEventListener("click", () => {
+  $("financePassword").value = "";
+  $("financeDialog").close();
+});
+
 $("addGlossBtn").addEventListener("click", () => {
   const input = $("newGlossType");
   const val = input.value.trim();
@@ -390,11 +438,10 @@ $("addGlossBtn").addEventListener("click", () => {
 
 $("customerForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  const name = $("customerName").value.trim();
-  const role = $("customerRole").value;
+  const name = $("customerName").value.trim() || "未命名客戶";
+  const role = $("customerRole").value || "上游";
   const phone = $("customerPhone").value.trim();
   const address = $("customerAddress").value.trim();
-  if (!name) return;
   state.customers.push({ id: crypto.randomUUID(), name, role, phone, address, active: true });
   save();
   e.target.reset();
@@ -424,13 +471,14 @@ $("orderForm").addEventListener("submit", (e) => {
     orderDate: $("orderDate").value,
     upstream: $("upstreamInput").value.trim(),
     downstream: $("downstreamInput").value.trim(),
-    sheetCount: Number($("sheetCount").value),
-    sizeLength: Number($("sizeLength").value),
-    sizeWidth: Number($("sizeWidth").value),
-    sizeUnit: $("sizeUnit").value,
-    glossType: $("glossType").value,
-    totalPrice: Number($("totalPrice").value),
-    status: $("orderStatus").value,
+    sheetCount: Number($("sheetCount").value || 0),
+    sizeLength: Number($("sizeLength").value || 0),
+    sizeWidth: Number($("sizeWidth").value || 0),
+    sizeUnit: $("sizeUnit").value || "mm",
+    glossType: $("glossType").value || "",
+    totalPrice: Number($("totalPrice").value || 0),
+    status: $("orderStatus").value || "未完成",
+    updatedAt: new Date().toLocaleString(),
   };
 
   if (existing) {
@@ -458,22 +506,44 @@ $("orderForm").addEventListener("submit", (e) => {
 });
 
 $("ordersTbody").addEventListener("click", (e) => {
+  const quickBtn = e.target.closest("button[data-quick-status]");
+  if (quickBtn) {
+    const order = state.orders.find((o) => o.id === quickBtn.dataset.id);
+    if (!order) return;
+    const before = order.status;
+    order.status = quickBtn.dataset.quickStatus;
+    order.updatedAt = new Date().toLocaleString();
+    state.audits.unshift({
+      orderNumber: order.orderNumber || "(空白)",
+      field: "狀態",
+      before,
+      after: order.status,
+      changedAt: new Date().toLocaleString(),
+      user: state.user || "未登入",
+      device: `${location.hostname || "localhost"} / ${navigator.userAgent.slice(0, 40)}...`,
+    });
+    save();
+    renderOrders();
+    renderAudits();
+    return;
+  }
+
   const btn = e.target.closest("button[data-edit]");
   if (!btn) return;
   const order = state.orders.find((o) => o.id === btn.dataset.edit);
   if (!order) return;
   $("orderId").value = order.id;
-  $("orderNumber").value = order.orderNumber;
-  $("orderDate").value = order.orderDate;
-  $("upstreamInput").value = order.upstream;
-  $("downstreamInput").value = order.downstream;
-  $("sheetCount").value = order.sheetCount;
-  $("sizeLength").value = order.sizeLength;
-  $("sizeWidth").value = order.sizeWidth;
-  $("sizeUnit").value = order.sizeUnit;
-  $("glossType").value = order.glossType;
-  $("totalPrice").value = order.totalPrice;
-  $("orderStatus").value = order.status;
+  $("orderNumber").value = order.orderNumber || "";
+  $("orderDate").value = order.orderDate || "";
+  $("upstreamInput").value = order.upstream || "";
+  $("downstreamInput").value = order.downstream || "";
+  $("sheetCount").value = order.sheetCount || "";
+  $("sizeLength").value = order.sizeLength || "";
+  $("sizeWidth").value = order.sizeWidth || "";
+  $("sizeUnit").value = order.sizeUnit || "mm";
+  $("glossType").value = order.glossType || "";
+  $("totalPrice").value = order.totalPrice || "";
+  $("orderStatus").value = order.status || "未完成";
   state.orderScreen = "form";
   renderOrderScreen();
 });
@@ -559,6 +629,26 @@ $("exportReportCBtn").addEventListener("click", () => {
   downloadCsv("report-C-收支月報.csv", rows);
 });
 
+document.querySelectorAll("[data-finance-screen]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    state.financeScreen = btn.dataset.financeScreen;
+    renderFinanceScreen();
+  });
+});
+
+$("applyAuditFilterBtn").addEventListener("click", () => {
+  state.auditFilter.start = $("auditStart").value;
+  state.auditFilter.end = $("auditEnd").value;
+  state.auditFilter.keyword = $("auditKeyword").value.trim();
+  renderAudits();
+});
+
+$("exportAuditBtn").addEventListener("click", () => {
+  const rows = [["工單", "欄位", "修改前", "修改後", "時間", "操作者", "裝置/IP"]];
+  getFilteredAudits().forEach((a) => rows.push([a.orderNumber, a.field, a.before, a.after, a.changedAt, a.user, a.device]));
+  downloadCsv("audit-log.csv", rows);
+});
+
 window.addEventListener("storage", (e) => {
   if (STORAGE_KEYS.includes(e.key) || e.key === "syncTick") {
     syncFromOtherClient();
@@ -573,9 +663,15 @@ setInterval(() => {
 }, 1500);
 
 setBuildVersion();
+const now = new Date();
+state.reportRange.start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+state.reportRange.end = now.toISOString().slice(0, 10);
 updateSyncDetail("頁面載入", Number(localStorage.getItem("syncTick") || 0));
+clearOrderForm();
 renderGlossOptions();
 renderCustomers();
 renderOrders();
+renderAudits();
+renderFinance();
 renderOrderScreen();
 showView("loginView");
