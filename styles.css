@@ -32,6 +32,12 @@ body {
 }
 h1,h2,h3 { margin: 0 0 10px; }
 .sub { color: var(--muted); margin-top: 0; }
+.build-version {
+  margin: -4px 0 8px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+}
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -87,6 +93,11 @@ input, select {
 .sync-badge.ok {
   background: #14532d;
   color: #bbf7d0;
+}
+.sync-detail {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .nav-card {

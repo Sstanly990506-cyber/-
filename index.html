@@ -11,6 +11,7 @@
       <section id="loginView" class="panel card">
         <h1>三青實業有限公司內部系統</h1>
         <p class="sub">請先登入系統</p>
+        <p id="buildVersion" class="build-version"></p>
         <form id="loginForm" class="form-grid compact">
           <label>帳號<input id="username" required /></label>
           <label>密碼<input id="password" type="password" required /></label>
@@ -24,6 +25,7 @@
           <div>
             <span id="welcomeText"></span>
             <span id="syncBadge" class="sync-badge">同步中</span>
+            <span id="syncDetail" class="sync-detail">尚未同步</span>
             <button id="logoutBtn" class="btn ghost" type="button">登出</button>
           </div>
         </header>

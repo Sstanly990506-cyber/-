@@ -13,7 +13,25 @@ const views = ["loginView", "dashboardView", "ordersView", "customersView", "fin
 const $ = (id) => document.getElementById(id);
 
 const STORAGE_KEYS = ["glossOptions", "customers", "orders", "audits"];
+const APP_BUILD = "2026-02-27-sync-check-1";
 let lastSyncAt = 0;
+
+function setBuildVersion() {
+  const el = $("buildVersion");
+  if (!el) return;
+  el.textContent = `版本：${APP_BUILD}`;
+}
+
+function formatTs(ts) {
+  if (!ts) return "尚未同步";
+  return new Date(ts).toLocaleTimeString();
+}
+
+function updateSyncDetail(source, ts = Date.now()) {
+  const detail = $("syncDetail");
+  if (!detail) return;
+  detail.textContent = `最後更新：${formatTs(ts)}（${source}）`;
+}
 
 function loadStateFromStorage() {
   state.glossOptions = JSON.parse(localStorage.getItem("glossOptions") || '["A光","B光"]');
@@ -44,8 +62,9 @@ function refreshAllViews() {
 function syncFromOtherClient() {
   loadStateFromStorage();
   refreshAllViews();
-  lastSyncAt = Date.now();
+  lastSyncAt = Number(localStorage.getItem("syncTick") || Date.now());
   markSynced("已收到最新資料");
+  updateSyncDetail("跨分頁同步", lastSyncAt);
 }
 
 function openFinanceGate() {
@@ -65,11 +84,15 @@ function openFinanceGate() {
 }
 
 function save() {
+  const now = Date.now();
   localStorage.setItem("glossOptions", JSON.stringify(state.glossOptions));
   localStorage.setItem("customers", JSON.stringify(state.customers));
   localStorage.setItem("orders", JSON.stringify(state.orders));
   localStorage.setItem("audits", JSON.stringify(state.audits));
-  localStorage.setItem("syncTick", String(Date.now()));
+  localStorage.setItem("syncTick", String(now));
+  lastSyncAt = now;
+  markSynced("已儲存");
+  updateSyncDetail("本機儲存", now);
 }
 
 function showView(id) {
@@ -372,6 +395,8 @@ setInterval(() => {
   }
 }, 1500);
 
+setBuildVersion();
+updateSyncDetail("頁面載入", Number(localStorage.getItem("syncTick") || 0));
 renderGlossOptions();
 renderCustomers();
 renderOrders();
