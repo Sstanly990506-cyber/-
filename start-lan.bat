@@ -11,13 +11,13 @@ echo [INFO] 關閉伺服器請按 Ctrl + C
 
 where py >nul 2>nul
 if %errorlevel%==0 (
-  py -3 -m http.server %PORT% --bind %HOST%
+  py -3 api_server.py --port %PORT% --host %HOST%
   goto end
 )
 
 where python >nul 2>nul
 if %errorlevel%==0 (
-  python -m http.server %PORT% --bind %HOST%
+  python api_server.py --port %PORT% --host %HOST%
   goto end
 )
 

@@ -19,4 +19,4 @@ echo "[INFO] 本機測試： http://127.0.0.1:${PORT}"
 echo "[INFO] 手機/平板：請改用電腦的區網 IP，例如 http://192.168.x.x:${PORT}"
 echo "[INFO] 停止方式：Ctrl + C"
 
-"${PYTHON_CMD}" -m http.server "${PORT}" --bind "${HOST}"
+"${PYTHON_CMD}" api_server.py --port "${PORT}" --host "${HOST}"

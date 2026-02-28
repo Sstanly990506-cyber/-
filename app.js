@@ -19,7 +19,9 @@ const $ = (id) => document.getElementById(id);
 
 const STORAGE_KEYS = ["glossOptions", "customers", "orders", "audits", "receivables", "payables"];
 const APP_BUILD = "2026-02-27-sync-check-1";
+const API_STATE_URL = "/api/state";
 let lastSyncAt = 0;
+let serverSyncEnabled = true;
 
 function setBuildVersion() {
   const el = $("buildVersion");
@@ -41,13 +43,68 @@ function updateSyncDetail(source, ts = Date.now()) {
   });
 }
 
+function applyStatePayload(payload) {
+  state.glossOptions = payload.glossOptions || ["A光", "B光"];
+  state.customers = payload.customers || [];
+  state.orders = payload.orders || [];
+  state.audits = payload.audits || [];
+  state.receivables = payload.receivables || [];
+  state.payables = payload.payables || [];
+}
+
 function loadStateFromStorage() {
-  state.glossOptions = JSON.parse(localStorage.getItem("glossOptions") || '["A光","B光"]');
-  state.customers = JSON.parse(localStorage.getItem("customers") || "[]");
-  state.orders = JSON.parse(localStorage.getItem("orders") || "[]");
-  state.audits = JSON.parse(localStorage.getItem("audits") || "[]");
-  state.receivables = JSON.parse(localStorage.getItem("receivables") || "[]");
-  state.payables = JSON.parse(localStorage.getItem("payables") || "[]");
+  applyStatePayload({
+    glossOptions: JSON.parse(localStorage.getItem("glossOptions") || '["A光","B光"]'),
+    customers: JSON.parse(localStorage.getItem("customers") || "[]"),
+    orders: JSON.parse(localStorage.getItem("orders") || "[]"),
+    audits: JSON.parse(localStorage.getItem("audits") || "[]"),
+    receivables: JSON.parse(localStorage.getItem("receivables") || "[]"),
+    payables: JSON.parse(localStorage.getItem("payables") || "[]"),
+  });
+}
+
+async function pullServerState() {
+  if (!serverSyncEnabled) return;
+  try {
+    const res = await fetch(API_STATE_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const payload = await res.json();
+    const tick = Number(payload.syncTick || payload.serverUpdatedAt || Date.now());
+    if (tick <= lastSyncAt) return;
+    applyStatePayload(payload);
+    localStorage.setItem("syncTick", String(tick));
+    lastSyncAt = tick;
+    refreshAllViews();
+    markSynced("已收到伺服器資料");
+    updateSyncDetail("集中式資料庫", tick);
+  } catch (err) {
+    serverSyncEnabled = false;
+    updateSyncDetail("本機模式（未連到伺服器）", Date.now());
+  }
+}
+
+async function pushServerState(syncTick) {
+  if (!serverSyncEnabled) return;
+  const payload = {
+    glossOptions: state.glossOptions,
+    customers: state.customers,
+    orders: state.orders,
+    audits: state.audits,
+    receivables: state.receivables,
+    payables: state.payables,
+    syncTick,
+  };
+  try {
+    const res = await fetch(API_STATE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    serverSyncEnabled = false;
+    updateSyncDetail("本機模式（未連到伺服器）", Date.now());
+  }
 }
 
 function markSynced(message = "已同步") {
@@ -108,6 +165,7 @@ function save() {
   localStorage.setItem("payables", JSON.stringify(state.payables));
   localStorage.setItem("syncTick", String(now));
   lastSyncAt = now;
+  pushServerState(now);
   markSynced("已儲存");
   updateSyncDetail("本機儲存", now);
 }
@@ -660,6 +718,7 @@ setInterval(() => {
   if (tick > lastSyncAt) {
     syncFromOtherClient();
   }
+  pullServerState();
 }, 1500);
 
 setBuildVersion();
@@ -675,3 +734,4 @@ renderAudits();
 renderFinance();
 renderOrderScreen();
 showView("loginView");
+pullServerState();

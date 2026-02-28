@@ -19,4 +19,4 @@ echo "[INFO] 使用 ${PYTHON_CMD} 啟動網站..."
 echo "[INFO] URL: ${URL}"
 echo "[INFO] 停止方式：Ctrl + C"
 
-"${PYTHON_CMD}" -m http.server "${PORT}" --bind "${HOST}"
+"${PYTHON_CMD}" api_server.py --port "${PORT}" --host "${HOST}"
