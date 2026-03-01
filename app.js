@@ -22,6 +22,7 @@ const APP_BUILD = "2026-02-27-sync-check-1";
 const API_STATE_URL = "/api/state";
 let lastSyncAt = 0;
 let serverSyncEnabled = true;
+let fileModeOnly = false;
 
 function setBuildVersion() {
   const el = $("buildVersion");
@@ -78,8 +79,9 @@ async function pullServerState() {
     markSynced("已收到伺服器資料");
     updateSyncDetail("集中式資料庫", tick);
   } catch (err) {
-    serverSyncEnabled = false;
-    updateSyncDetail("本機模式（未連到伺服器）", Date.now());
+    if (!fileModeOnly) {
+      updateSyncDetail("伺服器連線失敗（重試中）", Date.now());
+    }
   }
 }
 
@@ -102,8 +104,9 @@ async function pushServerState(syncTick) {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
   } catch (err) {
-    serverSyncEnabled = false;
-    updateSyncDetail("本機模式（未連到伺服器）", Date.now());
+    if (!fileModeOnly) {
+      updateSyncDetail("伺服器連線失敗（重試中）", Date.now());
+    }
   }
 }
 
@@ -158,6 +161,7 @@ function openFinanceGate() {
 function ensureServerApiReachable() {
   if (typeof window === "undefined") return;
   if (location.protocol === "file:") {
+    fileModeOnly = true;
     serverSyncEnabled = false;
     updateSyncDetail("本機檔案模式（請改用 start-lan.bat）", Date.now());
   }
@@ -175,7 +179,7 @@ function save() {
   lastSyncAt = now;
   pushServerState(now);
   markSynced("已儲存");
-  updateSyncDetail("本機儲存", now);
+  updateSyncDetail(fileModeOnly ? "本機儲存" : "已送出同步", now);
 }
 
 function showView(id) {
@@ -610,6 +614,7 @@ $("orderForm").addEventListener("submit", (e) => {
   state.orderScreen = "list";
   renderOrderScreen();
   renderOrders();
+  renderFinance();
 });
 
 $("ordersTbody").addEventListener("click", (e) => {
@@ -632,6 +637,7 @@ $("ordersTbody").addEventListener("click", (e) => {
     save();
     renderOrders();
     renderAudits();
+    renderFinance();
     return;
   }
 
