@@ -77,6 +77,11 @@ async function pushServerState(syncTick) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (res.status === 409) {
+      await pullServerState();
+      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（偵測到新版本資料，已自動同步）`, ok: false });
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
   } catch {
     if (!fileModeOnly) {
