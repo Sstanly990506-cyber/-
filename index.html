@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>上光廠內部系統</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="loginView" class="panel card">
+        <h1>三青實業有限公司內部系統</h1>
+        <p class="sub">請先登入系統</p>
+        <p id="buildVersion" class="build-version"></p>
+        <form id="loginForm" class="form-grid compact">
+          <label>帳號<input id="username" required /></label>
+          <label>密碼<input id="password" type="password" required /></label>
+          <button class="btn primary" type="submit">登入</button>
+        </form>
+      </section>
+
+      <section id="dashboardView" class="panel hidden">
+        <header class="topbar card">
+          <h2>功能導航</h2>
+          <div>
+            <span id="welcomeText"></span>
+            <span id="syncBadge" class="sync-badge">同步中</span>
+            <span id="syncDetail" class="sync-detail">尚未同步</span>
+            <button id="logoutBtn" class="btn ghost" type="button">登出</button>
+          </div>
+        </header>
+        <div class="card-grid">
+          <button class="nav-card" type="button" data-target="ordersView">工單作業系統</button>
+          <button class="nav-card" type="button" data-target="customersView">客戶資料系統</button>
+          <button class="nav-card" type="button" data-target="financeView">財經資料系統</button>
+          <button class="nav-card" type="button" data-target="auditView">稽核系統</button>
+        </div>
+      </section>
+
+      <section id="ordersView" class="panel hidden">
+        <header class="topbar card">
+          <h2>工單作業系統</h2>
+          <div>
+            <span class="sync-badge sync-badge-global">同步中</span>
+            <span class="sync-detail sync-detail-global">尚未同步</span>
+            <button class="btn" data-back>返回導航</button>
+          </div>
+        </header>
+
+        <div class="orders-layout">
+          <aside class="card side-menu">
+            <button class="btn side-btn active" type="button" data-order-screen="list">工單列表</button>
+            <button class="btn side-btn" type="button" data-order-screen="form">新增工單</button>
+          </aside>
+
+          <article id="ordersListScreen" class="card">
+            <h3>工單列表</h3>
+            <div class="filter-row">
+              <button class="btn filter-btn active" data-status-filter="全部" type="button">全部</button>
+              <button class="btn filter-btn" data-status-filter="未完成" type="button">未完成</button>
+              <button class="btn filter-btn" data-status-filter="已完成" type="button">已完成</button>
+              <button class="btn filter-btn" data-status-filter="已送出" type="button">已送出</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>工單編號</th><th>日期</th><th>上游</th><th>下游</th><th>總價</th><th>狀態</th><th>最後更新</th><th></th></tr></thead>
+                <tbody id="ordersTbody"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article id="ordersFormScreen" class="card hidden">
+            <h3>新增 / 編輯工單</h3>
+            <form id="orderForm" class="form-grid order-grid">
+              <input id="orderId" type="hidden" />
+              <label>工單編號<input id="orderNumber" /></label>
+              <label>日期<input id="orderDate" type="date" /></label>
+
+              <label>上游客戶（可搜尋）
+                <input id="upstreamInput" list="upstreamOptions" placeholder="輸入關鍵字，例如：彩" />
+                <datalist id="upstreamOptions"></datalist>
+              </label>
+
+              <label>下游客戶（可搜尋）
+                <input id="downstreamInput" list="downstreamOptions" placeholder="輸入關鍵字，例如：彩" />
+                <datalist id="downstreamOptions"></datalist>
+              </label>
+
+              <label>張數<input id="sheetCount" type="number" min="1" /></label>
+              <label>長<input id="sizeLength" type="number" step="0.01" min="0" /></label>
+              <label>寬<input id="sizeWidth" type="number" step="0.01" min="0" /></label>
+              <label>單位
+                <select id="sizeUnit">
+                  <option value="mm">mm</option>
+                  <option value="cm">cm</option>
+                  <option value="inch">inch</option>
+                </select>
+              </label>
+              <label class="span-2">上光種類
+                <div class="row">
+                  <select id="glossType"></select>
+                  <input id="newGlossType" placeholder="新增種類" />
+                  <button type="button" id="addGlossBtn" class="btn">加入</button>
+                </div>
+              </label>
+              <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
+              <label>狀態
+                <select id="orderStatus">
+                  <option value="未完成">未完成</option>
+                  <option value="已送出">已送出</option>
+                  <option value="已完成">已完成</option>
+                </select>
+              </label>
+              <div class="actions span-2">
+                <button class="btn primary" type="submit">儲存工單</button>
+                <button class="btn" type="button" id="clearOrderBtn">清空</button>
+                <button class="btn" type="button" id="exportOrderBtn">匯出工單（白/粉雙聯）</button>
+              </div>
+            </form>
+          </article>
+        </div>
+      </section>
+
+      <section id="customersView" class="panel hidden">
+        <header class="topbar card">
+          <h2>客戶資料系統</h2>
+          <div>
+            <span class="sync-badge sync-badge-global">同步中</span>
+            <span class="sync-detail sync-detail-global">尚未同步</span>
+            <button class="btn" data-back>返回導航</button>
+          </div>
+        </header>
+        <div class="split">
+          <article class="card">
+            <h3>新增客戶</h3>
+            <form id="customerForm" class="form-grid compact">
+              <label>客戶名稱<input id="customerName" /></label>
+              <label>電話<input id="customerPhone" /></label>
+              <label>地址<input id="customerAddress" /></label>
+              <label>角色
+                <select id="customerRole">
+                  <option value="上游">上游</option>
+                  <option value="下游">下游</option>
+                  <option value="兩者">兩者</option>
+                </select>
+              </label>
+              <button class="btn primary" type="submit">新增客戶</button>
+            </form>
+          </article>
+          <article class="card">
+            <h3>客戶清單（可搜尋 / 可停用）</h3>
+            <input id="customerSearch" placeholder="搜尋客戶名稱、電話、地址" />
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>名稱</th><th>電話</th><th>地址</th><th>角色</th><th>狀態</th><th></th></tr></thead>
+                <tbody id="customersTbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="financeView" class="panel hidden">
+        <header class="topbar card">
+          <h2>財經資料系統</h2>
+          <div>
+            <span class="sync-badge sync-badge-global">同步中</span>
+            <span class="sync-detail sync-detail-global">尚未同步</span>
+            <button class="btn" type="button" data-finance-screen="reports">報表中心</button>
+            <button class="btn" type="button" data-finance-screen="invoice">發票系統</button>
+            <button class="btn" type="button" data-finance-screen="main">財經主頁</button>
+            <button class="btn" data-back>返回導航</button>
+          </div>
+        </header>
+
+        <article id="financeMainScreen" class="card">
+          <h3>現金流總覽</h3>
+          <div class="kpi-grid">
+            <div class="kpi"><span>應收未收</span><strong id="kpiReceivable">0</strong></div>
+            <div class="kpi"><span>應付未付</span><strong id="kpiPayable">0</strong></div>
+            <div class="kpi"><span>本月收入</span><strong id="kpiIncome">0</strong></div>
+            <div class="kpi"><span>本月支出</span><strong id="kpiExpense">0</strong></div>
+            <div class="kpi"><span>本月淨額</span><strong id="kpiNet">0</strong></div>
+          </div>
+        </article>
+
+        <div class="split finance-split">
+          <article class="card">
+            <h3>應收管理</h3>
+            <form id="receivableForm" class="form-grid compact">
+              <label>日期<input id="recvDate" type="date" required /></label>
+              <label>客戶<input id="recvCustomer" required /></label>
+              <label>工單編號<input id="recvOrderNumber" required /></label>
+              <label>應收金額<input id="recvAmount" type="number" min="0" step="0.01" required /></label>
+              <label>已收金額<input id="recvReceived" type="number" min="0" step="0.01" value="0" required /></label>
+              <button class="btn primary" type="submit">新增應收</button>
+            </form>
+          </article>
+
+          <article class="card">
+            <h3>應付管理</h3>
+            <form id="payableForm" class="form-grid compact">
+              <label>日期<input id="payDate" type="date" required /></label>
+              <label>供應商<input id="payVendor" required /></label>
+              <label>項目<input id="payItem" required /></label>
+              <label>應付金額<input id="payAmount" type="number" min="0" step="0.01" required /></label>
+              <label>已付金額<input id="payPaid" type="number" min="0" step="0.01" value="0" required /></label>
+              <button class="btn primary" type="submit">新增應付</button>
+            </form>
+          </article>
+        </div>
+
+        <article id="financeReportsScreen" class="card hidden">
+          <h3>報表中心（A/B/C）</h3>
+          <div class="filter-row">
+            <input id="reportStart" type="date" />
+            <input id="reportEnd" type="date" />
+            <button class="btn" type="button" id="applyReportRangeBtn">套用區間</button>
+            <button class="btn" type="button" id="exportReportABtn">匯出報表 A（應收帳齡）</button>
+            <button class="btn" type="button" id="exportReportBBtn">匯出報表 B（毛利）</button>
+            <button class="btn" type="button" id="exportReportCBtn">匯出報表 C（收支月報）</button>
+          </div>
+          <p class="sub">報表 A/B/C 已啟用，並可依日期區間計算與匯出 CSV（可用 Excel 開啟）。</p>
+        </article>
+
+        <div class="split finance-split hidden" id="financeReportsTables">
+          <article class="card">
+            <h3>報表 A：應收帳齡</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>客戶</th><th>工單</th><th>應收</th><th>已收</th><th>未收</th><th>帳齡(天)</th></tr></thead>
+                <tbody id="reportATbody"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>報表 B：工單毛利</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>工單</th><th>客戶</th><th>收入</th><th>估算成本(70%)</th><th>毛利</th></tr></thead>
+                <tbody id="reportBTbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+
+
+
+        <article id="financeInvoiceScreen" class="card hidden">
+          <h3>發票系統（可單選 / 多選工單匯出）</h3>
+          <div class="split finance-split">
+            <form id="invoiceMetaForm" class="form-grid compact">
+              <label>發票日期<input id="invoiceDate" type="date" /></label>
+              <label>發票號碼<input id="invoiceNumber" placeholder="例：AB-12345678" /></label>
+              <label>買方名稱<input id="invoiceBuyerName" placeholder="例：某某印刷有限公司" /></label>
+              <label>買方統一編號<input id="invoiceBuyerTaxId" placeholder="8 碼統編" maxlength="8" /></label>
+              <label>買方地址<input id="invoiceBuyerAddress" /></label>
+              <label>備註<input id="invoiceNote" placeholder="可填付款條件、交貨資訊" /></label>
+            </form>
+
+            <article class="card invoice-order-picker">
+              <h4>選擇工單</h4>
+              <p class="sub">僅顯示狀態為「已送出 / 已完成」的工單。</p>
+              <div class="filter-row">
+                <button class="btn" type="button" id="invoiceSelectAllBtn">全選</button>
+                <button class="btn" type="button" id="invoiceClearSelectBtn">清除選取</button>
+                <button class="btn primary" type="button" id="exportInvoiceBtn">匯出發票</button>
+              </div>
+              <div id="invoiceSelectSummary" class="sub">已選 0 筆，合計 0 元</div>
+              <div class="table-wrap invoice-order-list" id="invoiceOrdersList"></div>
+            </article>
+          </div>
+        </article>
+
+        <article class="card hidden" id="financeReportCWrap">
+          <h3>報表 C：收支月報</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>月份</th><th>收入</th><th>支出</th><th>淨額</th></tr></thead>
+              <tbody id="reportCTbody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="auditView" class="panel hidden">
+        <header class="topbar card">
+          <h2>總價修改稽核</h2>
+          <div>
+            <span class="sync-badge sync-badge-global">同步中</span>
+            <span class="sync-detail sync-detail-global">尚未同步</span>
+            <button class="btn" type="button" id="exportAuditBtn">匯出稽核 CSV</button>
+            <button class="btn" data-back>返回導航</button>
+          </div>
+        </header>
+        <article class="card">
+          <div class="filter-row">
+            <input id="auditStart" type="date" />
+            <input id="auditEnd" type="date" />
+            <input id="auditKeyword" placeholder="搜尋工單、操作者、欄位" />
+            <button class="btn" type="button" id="applyAuditFilterBtn">套用搜尋</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>工單</th><th>欄位</th><th>修改前</th><th>修改後</th><th>時間</th><th>操作者</th><th>裝置/IP</th></tr></thead>
+              <tbody id="auditTbody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <dialog id="financeDialog">
+      <form id="financeForm" method="dialog" class="card form-grid compact">
+        <h3>請輸入財經系統密碼</h3>
+        <label>密碼<input id="financePassword" type="password" required /></label>
+        <menu>
+          <button class="btn" value="cancel" type="button" id="cancelFinanceBtn">取消</button>
+          <button class="btn primary" value="default" type="submit">確認</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>
