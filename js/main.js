@@ -42,7 +42,7 @@ function renderAll() {
   renderAudits(state);
   renderFinance(state);
   renderOrderScreen(state);
-  renderTrips();
+  renderTrips(state);
 }
 
 function showView(id) {
@@ -119,7 +119,7 @@ bindCustomerEvents(state, saveState, renderAll);
 bindOrderEvents(state, saveState, renderAll);
 bindFinanceEvents(state, saveState, renderAll);
 bindAuditEvents(state);
-bindTripEvents();
+bindTripEvents(state);
 renderAll();
 showView('loginView');
 startStoreSync();

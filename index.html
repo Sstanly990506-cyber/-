@@ -185,24 +185,23 @@
           <article class="card">
             <h3>工廠與站點輸入</h3>
             <form id="tripFactoryForm" class="form-grid compact">
-              <label>工廠名稱<input id="tripFactoryName" /></label>
-              <label>工廠地址<input id="tripFactoryAddress" /></label>
-              <label>工廠 Lat<input id="tripFactoryLat" type="number" step="0.000001" /></label>
-              <label>工廠 Lng<input id="tripFactoryLng" type="number" step="0.000001" /></label>
+              <label>工廠名稱<input id="tripFactoryName" value="三清實業有限公司" /></label>
+              <label>工廠地址<input id="tripFactoryAddress" value="新北市中和區立延接53號" /></label>
             </form>
             <hr />
             <form id="tripAddStopForm" class="form-grid compact">
-              <label>站點名稱<input id="tripStopName" required /></label>
-              <label>站點地址<input id="tripStopAddress" required /></label>
-              <label>Lat<input id="tripStopLat" type="number" step="0.000001" required /></label>
-              <label>Lng<input id="tripStopLng" type="number" step="0.000001" required /></label>
+              <label>站點名稱（可搜尋客戶）
+                <input id="tripStopName" list="tripCustomerOptions" placeholder="例如：彩虹" required />
+                <datalist id="tripCustomerOptions"></datalist>
+              </label>
+              <label>站點地址（自動帶入）<input id="tripStopAddress" readonly /></label>
               <label>類型
                 <select id="tripStopType">
-                  <option value="delivery">delivery</option>
-                  <option value="pickup">pickup</option>
+                  <option value="delivery">送貨</option>
+                  <option value="pickup">載貨</option>
                 </select>
               </label>
-              <label>關聯工單<input id="tripRelatedOrderId" placeholder="WO-001" /></label>
+              <label>工號 / 工單號<input id="tripRelatedOrderId" placeholder="WO-001" required /></label>
               <label>備註<input id="tripStopNote" /></label>
               <button class="btn primary" type="submit">新增站點</button>
             </form>
@@ -218,7 +217,7 @@
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>#</th><th>站點</th><th>類型</th><th>工單</th><th>地址</th><th></th></tr></thead>
+                <thead><tr><th>#</th><th>站點</th><th>類型</th><th>工號</th><th>地址</th><th></th></tr></thead>
                 <tbody id="tripStopsTbody"></tbody>
               </table>
             </div>
