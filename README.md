@@ -1,5 +1,6 @@
 # 上光廠內部系統（前端原型）
 
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
 你遇到的 `ERR_CONNECTION_REFUSED` 代表：
 **瀏覽器連到 `localhost`，但網站伺服器沒有成功啟動**。
 
@@ -17,6 +18,62 @@
 
 這個模式是用系統內建的 PowerShell 啟動。  
 ⚠️ 但這是「純前端靜態模式」，資料仍會落在各裝置瀏覽器，不會跨手機/電腦共用。
+=======
+codex/develop-a-web-based-internal-system
+這個版本是前端原型（`index.html + app.js + styles.css`），
+你說得沒錯：**要先把網站開起來，才能在瀏覽器使用**。
+
+## 1) 啟動方式（最簡單）
+
+在專案資料夾執行：
+
+```bash
+python -m http.server 4173 --bind 0.0.0.0
+```
+
+看到這行代表啟動成功：
+
+```text
+Serving HTTP on 0.0.0.0 port 4173
+```
+
+## 2) 打開網站
+
+在瀏覽器開：
+
+```text
+http://localhost:4173
+```
+
+## 3) 登入與測試
+
+- 登入頁：帳號/密碼先輸入任意內容即可進入（目前是原型版）。
+- 財經系統二次密碼（預設）：
+
+```text
+finance123
+```
+
+## 4) 常見問題
+
+### Q1. 點按鈕沒反應
+- 先確認你是用 `http://localhost:4173` 開啟，
+  不要直接雙擊 `index.html`（有些瀏覽器對本機檔案模式限制較多）。
+
+### Q2. 想重置資料
+- 目前資料存在瀏覽器 `localStorage`。
+- 在瀏覽器開發者工具清除該站點儲存資料，或直接換無痕視窗測試。
+
+### Q3. 關掉終端機網站就不能用
+- 是正常的，因為 `python -m http.server` 關掉後服務就停止。
+
+## 5) 停止網站
+=======
+你遇到的 `ERR_CONNECTION_REFUSED` 代表：
+**瀏覽器連到 `localhost`，但網站伺服器沒有成功啟動**。
+
+這版已改成「可自動檢查 Python」的啟動方式，請直接照下面步驟。
+>>>>>> main
 
 ---
 
@@ -52,13 +109,20 @@ http://127.0.0.1:4173
 ## 手動啟動（備用）
 
 ```bash
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
 python3 api_server.py --port 4173 --host 127.0.0.1
+=======
+python3 -m http.server 4173 --bind 127.0.0.1
+>>>>>> main
 ```
 
 （若你的系統是 `python` 指令，就把 `python3` 改成 `python`）
 
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
 這個模式會啟動「集中式資料庫（SQLite）」在專案資料夾 `data.db`。
 
+=======
+>>>>>> main
 ---
 
 ## 還是開不了時（快速排查）
@@ -88,6 +152,7 @@ curl -I http://127.0.0.1:4173
 
 若看到 `HTTP/1.0 200 OK` 代表網站已正常啟動。
 
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
 ### 4) 有開起來但畫面「看起來沒更新」
 - 先確認網址列是 `http://127.0.0.1:4173`（不是 `file://`）。
 - 按 `Ctrl + F5` 強制重新整理。
@@ -146,6 +211,10 @@ curl -I http://127.0.0.1:4173
 - 所有電腦都連這台主機網址
 - 這樣大家看到的就是同一份資料
 
+=======
+---
+
+>>>>>> main
 ## 登入與測試資料
 
 - 登入頁：帳號/密碼目前可輸入任意內容（原型版）。
@@ -158,6 +227,10 @@ finance123
 ---
 
 ## 停止網站
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
+=======
+ main
+>>>>>> main
 
 在執行伺服器的終端機按：
 
