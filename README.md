@@ -1,5 +1,24 @@
 # 上光廠內部系統（前端原型）
 
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
+你遇到的 `ERR_CONNECTION_REFUSED` 代表：
+**瀏覽器連到 `localhost`，但網站伺服器沒有成功啟動**。
+
+這版已改成「可自動檢查 Python」的啟動方式，請直接照下面步驟。
+
+---
+
+## 你說你沒有安裝 Python（可直接用）
+
+如果你是 Windows，可以**不用安裝 Python**，直接：
+
+1. 雙擊 `start-no-python.bat`
+2. 瀏覽器會開 `http://127.0.0.1:4173`
+3. 黑色視窗不要關掉（關掉網站就停止）
+
+這個模式是用系統內建的 PowerShell 啟動。  
+⚠️ 但這是「純前端靜態模式」，資料仍會落在各裝置瀏覽器，不會跨手機/電腦共用。
+=======
 codex/develop-a-web-based-internal-system
 這個版本是前端原型（`index.html + app.js + styles.css`），
 你說得沒錯：**要先把網站開起來，才能在瀏覽器使用**。
@@ -54,6 +73,7 @@ finance123
 **瀏覽器連到 `localhost`，但網站伺服器沒有成功啟動**。
 
 這版已改成「可自動檢查 Python」的啟動方式，請直接照下面步驟。
+>>>>>> main
 
 ---
 
@@ -89,11 +109,20 @@ http://127.0.0.1:4173
 ## 手動啟動（備用）
 
 ```bash
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
+python3 api_server.py --port 4173 --host 127.0.0.1
+=======
 python3 -m http.server 4173 --bind 127.0.0.1
+>>>>>> main
 ```
 
 （若你的系統是 `python` 指令，就把 `python3` 改成 `python`）
 
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
+這個模式會啟動「集中式資料庫（SQLite）」在專案資料夾 `data.db`。
+
+=======
+>>>>>> main
 ---
 
 ## 還是開不了時（快速排查）
@@ -123,8 +152,69 @@ curl -I http://127.0.0.1:4173
 
 若看到 `HTTP/1.0 200 OK` 代表網站已正常啟動。
 
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
+### 4) 有開起來但畫面「看起來沒更新」
+- 先確認網址列是 `http://127.0.0.1:4173`（不是 `file://`）。
+- 按 `Ctrl + F5` 強制重新整理。
+- 登入頁左下會顯示版本號（例如 `版本：2026-02-27-sync-check-1`），如果沒看到新版本，代表你還在舊資料夾。
+- 建議關掉舊的 PowerShell 視窗後重開一次伺服器。
+
 ---
 
+
+## 重要：如果你是用手機打開
+
+你截圖裡是 `127.0.0.1`，這個位址只代表「當前這台裝置自己」。
+
+- 在**手機**輸入 `127.0.0.1`，會連到手機自己，不會連到你的電腦。
+- 所以會出現 `ERR_CONNECTION_REFUSED`（這是正常結果）。
+
+### 手機要連線請這樣做
+
+1. 在電腦啟動 LAN 模式：
+   - Windows：雙擊 `start-lan.bat`
+   - Mac/Linux：`./start-lan.sh`
+2. 手機和電腦連同一個 Wi‑Fi
+3. 手機瀏覽器輸入：`http://你的電腦IP:4173`
+   - 例：`http://192.168.1.23:4173`
+   - 啟動 `start-lan` 後，終端機會直接列出可用網址，可直接照打
+
+
+### 為什麼右上角會從「集中式資料庫」變成「本機儲存」？
+常見原因：
+1. 你是用 `start-no-python.bat` 或 `file://` 直接開檔（這會是本機模式）。
+2. 伺服器暫時斷線，系統會顯示重試中；連回後會再顯示集中式同步。
+
+### 工單與財經沒連動怎麼排查
+1. 工單要設成「已完成」或「已送出」。
+2. 工單要有總價（總價是 0 的話，應收未收會是 0）。
+3. 到財經主頁看「應收未收」是否更新。
+
+### 手機還是連不到時（最常見）
+1. 請確認你啟動的是 `start-lan.bat`（不是 `start-no-python.bat`）。
+2. 確認電腦防火牆已允許 Python 對私有網路連線。
+   - Windows 第一次啟動時若跳出防火牆提示，請勾選「私人網路」。
+3. 先在電腦瀏覽器打開 `http://127.0.0.1:4173/api/health`，看到 `{"ok": true ...}` 才是正確啟動。
+4. 手機和電腦一定要同一個 Wi‑Fi（不要一個用 5G 一個用 Wi‑Fi）。
+
+
+## 資料現在存在哪裡？（白話）
+
+- 目前已支援「集中式資料庫模式」：`start.bat` / `start.sh` / `start-lan.bat` / `start-lan.sh` 會用 `api_server.py + data.db`。
+- 在這個模式下，手機和電腦都連同一台主機網址時，會看到同一份資料。
+- 如果你用 `start-no-python.bat`（PowerShell 靜態模式），資料會回到各裝置瀏覽器本機，不共用。
+
+
+### 只用磁碟也能跨電腦同步嗎？
+可以，但要有「一台中央主機」：
+- 資料庫存這台主機的磁碟（地端，不上雲）
+- 所有電腦都連這台主機網址
+- 這樣大家看到的就是同一份資料
+
+=======
+---
+
+>>>>>> main
 ## 登入與測試資料
 
 - 登入頁：帳號/密碼目前可輸入任意內容（原型版）。
@@ -137,7 +227,10 @@ finance123
 ---
 
 ## 停止網站
+<<<<<< codex/develop-a-web-based-internal-system-jduqzj
+=======
  main
+>>>>>> main
 
 在執行伺服器的終端機按：
 
