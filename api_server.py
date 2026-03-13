@@ -107,11 +107,18 @@ def infer_segment(a, b):
     return {"durationSec": duration_sec, "distanceM": meters}
 
 
-def evaluate_route(route):
+def evaluate_route(route, segment_cache=None):
     total_duration = 0
     total_distance = 0
     for i in range(len(route) - 1):
-        seg = infer_segment(route[i], route[i + 1])
+        if segment_cache is None:
+            seg = infer_segment(route[i], route[i + 1])
+        else:
+            key = (route[i].get("id"), route[i + 1].get("id"))
+            seg = segment_cache.get(key)
+            if seg is None:
+                seg = infer_segment(route[i], route[i + 1])
+                segment_cache[key] = seg
         total_duration += seg["durationSec"]
         total_distance += seg["distanceM"]
     return total_duration, total_distance
@@ -148,11 +155,12 @@ def optimize_trip(payload):
     best_duration = None
     best_distance = None
     candidate_count = 0
+    segment_cache = {}
 
     for d_perm in itertools.permutations(deliveries):
         for p_perm in itertools.permutations(pickups):
             route = [factory] + list(d_perm) + list(p_perm) + [factory]
-            duration, distance = evaluate_route(route)
+            duration, distance = evaluate_route(route, segment_cache)
             candidate_count += 1
             if best_duration is None or duration < best_duration:
                 best_route = route

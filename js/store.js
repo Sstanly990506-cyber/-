@@ -1,6 +1,14 @@
 import { formatTs, getTodayText } from './shared.js';
 
 const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables'];
+const DEFAULT_STATE_PAYLOAD = {
+  glossOptions: ['PVA光', 'PVB光/油', '耐磨', '壓光'],
+  customers: [],
+  orders: [],
+  audits: [],
+  receivables: [],
+  payables: [],
+};
 const API_STATE_URL = '/api/state';
 
 export const state = {
@@ -26,32 +34,32 @@ let onRefresh = () => {};
 let onSyncUi = () => {};
 
 function applyStatePayload(payload) {
-  state.glossOptions = payload.glossOptions || ['PVA光', 'PVB光/油', '耐磨', '壓光'];
-  state.customers = payload.customers || [];
-  state.orders = payload.orders || [];
-  state.audits = payload.audits || [];
-  state.receivables = payload.receivables || [];
-  state.payables = payload.payables || [];
-}
-
-function loadLocalState() {
-  applyStatePayload({
-    glossOptions: JSON.parse(localStorage.getItem('glossOptions') || '["PVA光","PVB光/油","耐磨","壓光"]'),
-    customers: JSON.parse(localStorage.getItem('customers') || '[]'),
-    orders: JSON.parse(localStorage.getItem('orders') || '[]'),
-    audits: JSON.parse(localStorage.getItem('audits') || '[]'),
-    receivables: JSON.parse(localStorage.getItem('receivables') || '[]'),
-    payables: JSON.parse(localStorage.getItem('payables') || '[]'),
+  STORAGE_KEYS.forEach((key) => {
+    state[key] = payload[key] || DEFAULT_STATE_PAYLOAD[key];
   });
 }
 
+function safeJsonParse(raw, fallback) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function loadLocalState() {
+  const payload = {};
+  STORAGE_KEYS.forEach((key) => {
+    const fallback = DEFAULT_STATE_PAYLOAD[key];
+    payload[key] = safeJsonParse(localStorage.getItem(key) || JSON.stringify(fallback), fallback);
+  });
+  applyStatePayload(payload);
+}
+
 function saveLocalState(now) {
-  localStorage.setItem('glossOptions', JSON.stringify(state.glossOptions));
-  localStorage.setItem('customers', JSON.stringify(state.customers));
-  localStorage.setItem('orders', JSON.stringify(state.orders));
-  localStorage.setItem('audits', JSON.stringify(state.audits));
-  localStorage.setItem('receivables', JSON.stringify(state.receivables));
-  localStorage.setItem('payables', JSON.stringify(state.payables));
+  STORAGE_KEYS.forEach((key) => {
+    localStorage.setItem(key, JSON.stringify(state[key]));
+  });
   localStorage.setItem('syncTick', String(now));
 }
 
