@@ -1,5 +1,4 @@
 :root {
-<<<<<< codex/develop-a-web-based-internal-system-jduqzj
   --bg: #1c1f24;
   --card: #2b2f36;
   --primary: #f59e0b;
@@ -8,17 +7,6 @@
   --muted: #9ca3af;
   --border: #4b5563;
   --ok: #22c55e;
-=======
-  --bg: #f4f6fb;
-  --card: #ffffff;
-  --primary: #4f46e5;
-  --primary-dark: #3730a3;
-  --text: #1f2937;
-  --muted: #6b7280;
-  --border: #e5e7eb;
-  --ok: #16a34a;
-  --warn: #f59e0b;
->>>>>> main
 }
 
 * { box-sizing: border-box; }
@@ -26,11 +14,7 @@ body {
   margin: 0;
   font-family: "Noto Sans TC", "PingFang TC", system-ui, sans-serif;
   color: var(--text);
-<<<<<< codex/develop-a-web-based-internal-system-jduqzj
   background: linear-gradient(135deg, #111317 0%, #1c1f24 45%, #2a2f37 100%);
-=======
-  background: radial-gradient(circle at top right, #e0e7ff, var(--bg) 40%);
->>>>>> main
 }
 .app-shell {
   max-width: 1200px;
@@ -44,7 +28,6 @@ body {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 18px;
-<<<<<< codex/develop-a-web-based-internal-system-jduqzj
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 h1,h2,h3 { margin: 0 0 10px; }
@@ -55,17 +38,10 @@ h1,h2,h3 { margin: 0 0 10px; }
   font-size: 13px;
   font-weight: 600;
 }
-=======
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-}
-h1,h2,h3 { margin: 0 0 10px; }
-.sub { color: var(--muted); margin-top: 0; }
->>>>>> main
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-<<<<<< codex/develop-a-web-based-internal-system-jduqzj
   gap: 12px;
 }
 .topbar > div {
@@ -83,13 +59,6 @@ label { display: grid; gap: 6px; font-size: 14px; }
 input, select {
   background: #1f2329;
   color: var(--text);
-=======
-}
-.form-grid { display: grid; gap: 12px; }
-.form-grid.compact { max-width: 420px; }
-label { display: grid; gap: 6px; font-size: 14px; }
-input, select {
->>>>>> main
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -98,18 +67,11 @@ input, select {
 .row { display: grid; gap: 8px; grid-template-columns: 1fr 1fr auto; }
 .actions { display: flex; gap: 10px; }
 .btn {
-<<<<<< codex/develop-a-web-based-internal-system-jduqzj
   border: 1px solid #6b7280;
   border-radius: 10px;
   padding: 10px 14px;
   background: #1f2329;
   color: var(--text);
-=======
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  padding: 10px 14px;
-  background: white;
->>>>>> main
   cursor: pointer;
 }
 .btn.primary {
@@ -119,7 +81,6 @@ input, select {
 }
 .btn.primary:hover { background: var(--primary-dark); }
 .btn.ghost { margin-left: 12px; }
-<<<<<< codex/develop-a-web-based-internal-system-jduqzj
 .btn.active {
   background: var(--primary);
   color: white;
@@ -150,28 +111,15 @@ input, select {
 }
 .sync-badge-global { margin-left: 0; }
 
-=======
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
->>>>>> main
 .nav-card {
   border: none;
   border-radius: 16px;
   min-height: 120px;
   font-size: 20px;
   font-weight: 700;
-<<<<<< codex/develop-a-web-based-internal-system-jduqzj
   color: var(--text);
   background: linear-gradient(140deg, #313743, #242933);
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
-=======
-  color: #111827;
-  background: linear-gradient(140deg, #eef2ff, #ffffff);
-  box-shadow: 0 10px 20px rgba(79, 70, 229, 0.1);
->>>>>> main
   cursor: pointer;
 }
 .nav-card:hover { transform: translateY(-2px); }
@@ -181,7 +129,6 @@ input, select {
   gap: 16px;
   grid-template-columns: 1.1fr 1fr;
 }
-<<<<<< codex/develop-a-web-based-internal-system-jduqzj
 .orders-layout {
   display: grid;
   grid-template-columns: 240px 1fr;
@@ -206,11 +153,6 @@ input, select {
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; }
 th { color: #f3f4f6; }
-=======
-.table-wrap { overflow: auto; max-height: 420px; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; }
->>>>>> main
 .tag {
   padding: 3px 8px;
   border-radius: 999px;
@@ -304,15 +246,18 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   gap: 10px;
 }
 
+.trip-route-item.confirmed {
+  border-color: #3dbb78;
+  box-shadow: inset 0 0 0 1px #3dbb7866;
+}
+
 
 #tripOrdersTbody input[type="checkbox"] {
   width: 22px;
   height: 22px;
   cursor: pointer;
 }
-=======
 @media (max-width: 900px) {
   .card-grid, .split { grid-template-columns: 1fr; }
   .row { grid-template-columns: 1fr; }
 }
- main
