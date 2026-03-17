@@ -30,12 +30,19 @@ export function renderAudits(state) {
   });
 }
 
+function applyAuditFilter(state) {
+  state.auditFilter.start = $('auditStart').value;
+  state.auditFilter.end = $('auditEnd').value;
+  state.auditFilter.keyword = $('auditKeyword').value.trim();
+  renderAudits(state);
+}
+
 export function bindAuditEvents(state) {
-  $('applyAuditFilterBtn')?.addEventListener('click', () => {
-    state.auditFilter.start = $('auditStart').value;
-    state.auditFilter.end = $('auditEnd').value;
-    state.auditFilter.keyword = $('auditKeyword').value.trim();
-    renderAudits(state);
+  $('applyAuditFilterBtn')?.addEventListener('click', () => applyAuditFilter(state));
+
+  ['auditStart', 'auditEnd', 'auditKeyword'].forEach((id) => {
+    $(id)?.addEventListener('input', () => applyAuditFilter(state));
+    $(id)?.addEventListener('change', () => applyAuditFilter(state));
   });
 
   $('exportAuditBtn')?.addEventListener('click', () => {

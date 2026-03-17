@@ -34,6 +34,47 @@ function getInvoiceMeta() {
   };
 }
 
+
+function findOrderByNumber(state, key) {
+  const text = (key || '').trim().toLowerCase();
+  if (!text) return null;
+  return state.orders.find((o) => (o.orderNumber || '').trim().toLowerCase() === text)
+    || state.orders.find((o) => (o.orderNumber || '').toLowerCase().includes(text));
+}
+
+function updateFinanceSmartHint(state) {
+  const hint = $('financeSmartHint');
+  if (!hint) return;
+  const order = findOrderByNumber(state, $('recvOrderNumber')?.value || '');
+  if (!order) {
+    hint.textContent = '智能建議：輸入工單編號可自動帶入客戶與金額。';
+    return;
+  }
+  hint.textContent = `智能建議：已找到工單 ${order.orderNumber || '-'}，可快速建立應收。`;
+}
+
+function autofillReceivableFromOrder(state) {
+  const order = findOrderByNumber(state, $('recvOrderNumber')?.value || '');
+  if (!order) return updateFinanceSmartHint(state);
+  if ($('recvCustomer') && !$('recvCustomer').value.trim()) $('recvCustomer').value = order.downstream || order.upstream || '';
+  if ($('recvAmount') && Number($('recvAmount').value || 0) <= 0) $('recvAmount').value = String(Number(order.totalPrice || 0));
+  if ($('recvDate') && !$('recvDate').value) $('recvDate').value = order.orderDate || getTodayText();
+  updateFinanceSmartHint(state);
+}
+
+function applyInvoiceBuyerBySelection(state) {
+  const selected = getSelectedInvoiceOrders(state);
+  if (!selected.length) return;
+  const customerNames = selected.map((o) => o.downstream || o.upstream || '').filter(Boolean);
+  if (!customerNames.length) return;
+  const count = new Map();
+  customerNames.forEach((n) => count.set(n, (count.get(n) || 0) + 1));
+  const [bestName] = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
+  const customer = state.customers.find((c) => (c.name || '').trim() === bestName);
+  if ($('invoiceBuyerName') && !$('invoiceBuyerName').value.trim()) $('invoiceBuyerName').value = bestName;
+  if ($('invoiceBuyerAddress') && customer?.address && !$('invoiceBuyerAddress').value.trim()) $('invoiceBuyerAddress').value = customer.address;
+}
+
 function renderInvoiceMeta(meta) {
   return `<div class="meta">
     <div>發票日期：${meta.date || '-'}</div>
@@ -259,8 +300,28 @@ export function renderFinance(state) {
 export function bindFinanceEvents(state, saveState, renderAll) {
   $('receivableForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
-    state.receivables.unshift({ id: crypto.randomUUID(), date: $('recvDate').value, customer: $('recvCustomer').value.trim(), orderNumber: $('recvOrderNumber').value.trim(), amount: Number($('recvAmount').value), received: Number($('recvReceived').value) });
+    const orderNumber = $('recvOrderNumber').value.trim();
+    const item = {
+      id: crypto.randomUUID(),
+      date: $('recvDate').value || getTodayText(),
+      customer: $('recvCustomer').value.trim(),
+      orderNumber,
+      amount: Number($('recvAmount').value || 0),
+      received: Number($('recvReceived').value || 0),
+    };
+
+    const dup = state.receivables.find((r) => (r.orderNumber || '').trim() === orderNumber);
+    if (dup) {
+      dup.date = item.date;
+      dup.customer = item.customer || dup.customer;
+      dup.amount = item.amount;
+      dup.received = item.received;
+    } else {
+      state.receivables.unshift(item);
+    }
+
     e.target.reset();
+    updateFinanceSmartHint(state);
     saveState();
     renderAll();
   });
@@ -300,10 +361,12 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     if (!box) return;
     if (box.checked) selectedInvoiceOrderIds.add(box.dataset.invoiceOrderId);
     else selectedInvoiceOrderIds.delete(box.dataset.invoiceOrderId);
+    applyInvoiceBuyerBySelection(state);
     renderInvoicePicker(state);
   });
   $('invoiceSelectAllBtn')?.addEventListener('click', () => {
     getInvoiceEligibleOrders(state).forEach((o) => selectedInvoiceOrderIds.add(o.id));
+    applyInvoiceBuyerBySelection(state);
     renderInvoicePicker(state);
   });
   $('invoiceClearSelectBtn')?.addEventListener('click', () => {
@@ -312,6 +375,11 @@ export function bindFinanceEvents(state, saveState, renderAll) {
   });
   $('exportInvoiceBtn')?.addEventListener('click', () => openInvoiceWindow(state));
   $('sendLineReminderBtn')?.addEventListener('click', () => openLineReminder(state, getLinkedReceivablesData(state)));
+
+  $('recvOrderNumber')?.addEventListener('input', () => autofillReceivableFromOrder(state));
+  $('recvOrderNumber')?.addEventListener('blur', () => autofillReceivableFromOrder(state));
+  $('recvCustomer')?.addEventListener('input', () => updateFinanceSmartHint(state));
+  updateFinanceSmartHint(state);
 
   document.querySelectorAll('[data-finance-screen]').forEach((btn) => {
     btn.addEventListener('click', () => {
