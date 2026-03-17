@@ -1,4 +1,4 @@
-import { $, getTodayText, money } from './shared.js';
+import { $, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
 
 function toTaiInch(value, unit) {
@@ -29,6 +29,57 @@ function syncAddressFromDownstream(state) {
   if (!customer) return;
   $('downstreamInput').value = customer.name || downstream;
   $('orderAddress').value = customer.address || '';
+}
+
+
+function nextOrderNumber(state) {
+  const d = getTodayText().replaceAll('-', '');
+  const prefix = `WO-${d}-`;
+  const seq = state.orders
+    .map((o) => o.orderNumber || '')
+    .filter((n) => n.startsWith(prefix))
+    .map((n) => Number(n.slice(prefix.length)) || 0);
+  const next = (Math.max(0, ...seq) + 1).toString().padStart(3, '0');
+  return `${prefix}${next}`;
+}
+
+function findSmartPriceSuggestion(state, editingId = '') {
+  const downstream = $('downstreamInput').value.trim();
+  const upstream = $('upstreamInput').value.trim();
+  const glossType = $('glossType').value || '';
+  const sheetCount = Number($('sheetCount').value || 0);
+  const area = Number($('sizeLength').value || 0) * Number($('sizeWidth').value || 0);
+
+  const candidates = state.orders.filter((o) => {
+    if (editingId && o.id === editingId) return false;
+    if (Number(o.totalPrice || 0) <= 0 || Number(o.sheetCount || 0) <= 0) return false;
+    if (glossType && o.glossType !== glossType) return false;
+    if (downstream && o.downstream !== downstream) return false;
+    if (!downstream && upstream && o.upstream !== upstream) return false;
+    return true;
+  });
+
+  if (!candidates.length) return null;
+
+  const avgPerSheet = candidates.reduce((sum, o) => sum + Number(o.totalPrice || 0) / Number(o.sheetCount || 1), 0) / candidates.length;
+  const estBySheet = sheetCount > 0 ? Math.round(avgPerSheet * sheetCount) : null;
+  const avgArea = candidates.reduce((sum, o) => sum + Number(o.sizeLength || 0) * Number(o.sizeWidth || 0), 0) / candidates.length;
+  const areaFactor = avgArea > 0 && area > 0 ? area / avgArea : 1;
+  const estimated = estBySheet ? Math.max(0, Math.round(estBySheet * areaFactor)) : null;
+
+  return { estimated, candidates: candidates.length, avgPerSheet: Math.round(avgPerSheet) };
+}
+
+function updateOrderSmartHint(state) {
+  const hint = $('orderSmartHint');
+  if (!hint) return;
+  const suggestion = findSmartPriceSuggestion(state, $('orderId').value);
+  if (!suggestion || !suggestion.estimated) {
+    hint.textContent = '智能建議：填入客戶 / 上光種類 / 張數後，系統會自動估算建議總價。';
+    return;
+  }
+  hint.textContent = `智能建議：依 ${suggestion.candidates} 筆歷史工單估算，建議總價約 NT$ ${suggestion.estimated.toLocaleString()}（平均每張 ${suggestion.avgPerSheet.toLocaleString()}）`;
+  if (!$('totalPrice').value) $('totalPrice').value = String(suggestion.estimated);
 }
 
 
@@ -94,7 +145,6 @@ function renderOrderTable(order) {
       <tr><th>地址</th><td colspan="3">${order.address || '-'}</td></tr>
       <tr><th>張數</th><td>${order.sheetCount || 0}</td><th>狀態</th><td>${order.status || '-'}</td></tr>
       <tr><th>尺寸（台吋）</th><td>${taiInchText}</td><th>上光種類</th><td>${order.glossType || '-'}</td></tr>
-      <tr><th>總價</th><td colspan="3">NT$ ${money(order.totalPrice || 0)}</td></tr>
     </table>
     <div class="footer"><span>客戶簽收：______________</span><span>製單人：______________</span></div>`;
 }
@@ -105,6 +155,8 @@ export function renderOrderScreen(state) {
   const isList = state.orderScreen === 'list';
   listScreen.classList.toggle('hidden', !isList);
   formScreen.classList.toggle('hidden', isList);
+
+  updateOrderSmartHint(state);
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.orderScreen === state.orderScreen);
@@ -177,6 +229,10 @@ export function bindOrderEvents(state, saveState, renderAll) {
       updatedAt: new Date().toLocaleString(),
     };
 
+    if (!payload.orderNumber) payload.orderNumber = nextOrderNumber(state);
+    const duplicated = state.orders.find((o) => o.id !== id && (o.orderNumber || '').trim() === payload.orderNumber.trim());
+    if (duplicated) return alert(`工單編號已存在：${payload.orderNumber}`);
+
     if (existing) {
       if (existing.totalPrice !== payload.totalPrice) {
         state.audits.unshift({
@@ -245,22 +301,28 @@ export function bindOrderEvents(state, saveState, renderAll) {
     $('orderStatus').value = order.status || '未完成';
     state.orderScreen = 'form';
     renderOrderScreen(state);
+    updateOrderSmartHint(state);
   });
 
-  $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); });
+  $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });
 
   ['sizeLength', 'sizeWidth', 'sizeUnit'].forEach((id) => {
-    $(id)?.addEventListener('input', updateTaiInchPreview);
-    $(id)?.addEventListener('change', updateTaiInchPreview);
+    $(id)?.addEventListener('input', () => { updateTaiInchPreview(); updateOrderSmartHint(state); });
+    $(id)?.addEventListener('change', () => { updateTaiInchPreview(); updateOrderSmartHint(state); });
   });
   updateTaiInchPreview();
 
-  $('downstreamInput')?.addEventListener('change', () => syncAddressFromDownstream(state));
-  $('downstreamInput')?.addEventListener('blur', () => syncAddressFromDownstream(state));
-  $('downstreamInput')?.addEventListener('input', () => syncAddressFromDownstream(state));
+  $('downstreamInput')?.addEventListener('change', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
+  $('downstreamInput')?.addEventListener('blur', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
+  $('downstreamInput')?.addEventListener('input', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
+  $('upstreamInput')?.addEventListener('input', () => updateOrderSmartHint(state));
+  $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
+  $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('exportOrderBtn')?.addEventListener('click', () => {
     openOrderExportWindow(buildOrderFromForm());
   });
+
+  updateOrderSmartHint(state);
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
     btn.addEventListener('click', () => {

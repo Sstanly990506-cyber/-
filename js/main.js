@@ -31,8 +31,22 @@ function renderDashboard() {
   const today = new Date().toISOString().slice(0, 10);
   const todayCount = state.orders.filter((o) => (o.orderDate || '').slice(0, 10) === today).length;
   const pending = state.orders.filter((o) => (o.status || '未完成') !== '已完成').length;
+  const recvOutstanding = state.receivables.reduce((sum, r) => sum + Math.max(0, Number(r.amount || 0) - Number(r.received || 0)), 0);
+  const topCustomer = Object.entries(state.orders.reduce((acc, o) => {
+    const c = (o.downstream || o.upstream || '').trim();
+    if (!c) return acc;
+    acc[c] = (acc[c] || 0) + 1;
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1])[0];
+
   if ($('dashTodayOrders')) $('dashTodayOrders').textContent = String(todayCount);
   if ($('dashPendingOrders')) $('dashPendingOrders').textContent = String(pending);
+
+  const tip = $('dashboardSmartTip');
+  if (tip) {
+    const customerText = topCustomer ? `熱度最高客戶：${topCustomer[0]}（${topCustomer[1]} 筆）` : '尚無客戶熱度資料';
+    tip.textContent = `智能總覽：待處理工單 ${pending} 筆，應收未收約 NT$ ${recvOutstanding.toLocaleString()}。${customerText}`;
+  }
 }
 
 function renderAll() {
