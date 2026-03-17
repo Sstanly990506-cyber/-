@@ -1,4 +1,4 @@
-import { $, getTodayText, money } from './shared.js';
+import { $, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
 
 function toTaiInch(value, unit) {
@@ -94,7 +94,6 @@ function renderOrderTable(order) {
       <tr><th>地址</th><td colspan="3">${order.address || '-'}</td></tr>
       <tr><th>張數</th><td>${order.sheetCount || 0}</td><th>狀態</th><td>${order.status || '-'}</td></tr>
       <tr><th>尺寸（台吋）</th><td>${taiInchText}</td><th>上光種類</th><td>${order.glossType || '-'}</td></tr>
-      <tr><th>總價</th><td colspan="3">NT$ ${money(order.totalPrice || 0)}</td></tr>
     </table>
     <div class="footer"><span>客戶簽收：______________</span><span>製單人：______________</span></div>`;
 }
