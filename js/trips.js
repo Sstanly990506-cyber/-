@@ -1,12 +1,13 @@
 import { $, money } from './shared.js';
 import { DEFAULT_FACTORY } from './trips/constants.js';
-import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, validateBusinessRoute } from './trips/core.js';
+import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, validateBusinessRoute, buildGoogleMapsUrl } from './trips/core.js';
 import { formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js';
 
 let manualStops = [];
 let selectedOrderIds = new Set();
 let manualRoute = [];
 let lastResult = null;
+let manualRouteConfirmed = false;
 
 function findCustomer(state, keyword) {
   const key = (keyword || '').trim().toLowerCase();
@@ -16,7 +17,8 @@ function findCustomer(state, keyword) {
 }
 
 function getExecutableOrders(state) {
-  return state.orders;
+  const preferred = state.orders.filter((o) => ['未完成', '已送出'].includes(o.status || '未完成'));
+  return preferred.length ? preferred : state.orders;
 }
 
 function selectedOrderStops(state) {
@@ -26,11 +28,10 @@ function selectedOrderStops(state) {
       id: o.id,
       name: o.downstream || o.upstream || o.orderNumber || '未命名站點',
       address: o.address || '-',
-      lat: DEFAULT_FACTORY.lat + ((o.id || '').length % 7) / 1000,
-      lng: DEFAULT_FACTORY.lng + ((o.orderNumber || '').length % 11) / 1000,
+      ...inferLatLngFromAddress(o.address || o.downstream || o.upstream || o.orderNumber || ''),
       type: 'delivery',
       relatedOrderId: o.orderNumber || '',
-      note: 'from-completed-order',
+      note: 'from-order-pool',
     }));
 }
 
@@ -54,7 +55,7 @@ function renderOrdersPool(state) {
       <td>${order.orderNumber || '-'}</td>
       <td>${order.downstream || order.upstream || '-'}</td>
       <td>${order.address || '-'}</td>
-      <td>送貨</td>
+      <td>${order.status || '未完成'}</td>
       <td>${order.orderNumber || '-'}</td>`;
     body.append(tr);
   });
@@ -66,7 +67,7 @@ function renderSelectedStops(state) {
   body.innerHTML = '';
   const stops = allStops(state);
   stops.forEach((s, idx) => {
-    const canDelete = s.note === 'from-completed-order' ? '' : `<button class="btn" data-del-stop="${s.id}">刪除</button>`;
+    const canDelete = s.note === 'from-order-pool' ? '' : `<button class="btn" data-del-stop="${s.id}">刪除</button>`;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${idx + 1}</td><td>${s.name}</td><td>${s.type}</td><td>${s.relatedOrderId || '-'}</td><td>${s.address || '-'}</td><td>${canDelete}</td>`;
     body.append(tr);
@@ -81,7 +82,8 @@ function updateManualHint() {
     return;
   }
   const score = evaluateRoute(manualRoute);
-  $('tripManualHint').textContent = `手動路線預估：${formatDuration(score.totalDurationSec)} / ${money(score.totalDistanceM)} m`;
+  const confirmNote = manualRouteConfirmed ? '（已確認）' : '（尚未確認）';
+  $('tripManualHint').textContent = `手動路線預估：${formatDuration(score.totalDurationSec)} / ${money(score.totalDistanceM)} m ${confirmNote}`;
 }
 
 function renderAll(state) {
@@ -89,7 +91,7 @@ function renderAll(state) {
   renderOrdersPool(state);
   renderSelectedStops(state);
   renderResult(lastResult);
-  renderManualRoute(manualRoute);
+  renderManualRoute(manualRoute, manualRouteConfirmed);
   updateManualHint();
 }
 
@@ -98,6 +100,13 @@ function createManualStop(state) {
   const customer = findCustomer(state, name);
   if (customer && customer.active === false) return alert('此客戶已停用'), null;
   if (!customer) return alert('請從客戶系統已有資料選擇客戶'), null;
+
+  const relatedOrderId = $('tripRelatedOrderId').value.trim();
+  if (!relatedOrderId) return alert('請填寫工號'), null;
+  if (allStops(state).some((s) => (s.relatedOrderId || '').trim() === relatedOrderId)) {
+    return alert('此工號已存在於車趟站點，請勿重複新增'), null;
+  }
+
   const address = customer.address || '';
   const pos = inferLatLngFromAddress(address || customer.name);
   return {
@@ -107,7 +116,7 @@ function createManualStop(state) {
     lat: pos.lat,
     lng: pos.lng,
     type: $('tripStopType').value,
-    relatedOrderId: $('tripRelatedOrderId').value.trim(),
+    relatedOrderId,
     note: 'manual-trip-stop',
   };
 }
@@ -124,16 +133,36 @@ async function runOptimize(state) {
     lastResult = optimizeTrip(DEFAULT_FACTORY, stops);
   }
   manualRoute = (lastResult.bestRoute.orderedStops || []).map((r) => ({ ...r }));
+  manualRouteConfirmed = false;
+}
+
+function confirmManualRoute() {
+  if (!manualRoute.length) return alert('請先點「最佳化車輛」產生路線');
+  if (!validateBusinessRoute(manualRoute)) return alert('目前路線不合法：pickup 不能排在 delivery 前面');
+
+  const score = evaluateRoute(manualRoute);
+  if (lastResult) {
+    lastResult.bestRoute.orderedStops = manualRoute.map((s) => ({ ...s }));
+    lastResult.bestRoute.pointIds = manualRoute.map((s) => s.id);
+    lastResult.bestRoute.totalDurationSec = score.totalDurationSec;
+    lastResult.bestRoute.totalDistanceM = score.totalDistanceM;
+    lastResult.googleMapsUrl = buildGoogleMapsUrl(manualRoute);
+  }
+  manualRouteConfirmed = true;
+  alert(`已確認手動路線（預估 ${formatDuration(score.totalDurationSec)}）`);
 }
 
 function executeSelectedOrders(state, saveState, renderAllApp) {
   const selectedOrders = getExecutableOrders(state).filter((o) => selectedOrderIds.has(o.id));
   if (!selectedOrders.length) return alert('請先勾選要執行的工單');
+  if (manualRoute.length && !manualRouteConfirmed) return alert('你有手動調整路線，請先按「確認手動路線」');
+
   saveState();
   renderAllApp();
   selectedOrderIds = new Set();
   lastResult = null;
   manualRoute = [];
+  manualRouteConfirmed = false;
 }
 
 export function renderTrips(state) {
@@ -156,6 +185,7 @@ export function bindTripEvents(state, saveState, renderAllApp) {
     const stop = createManualStop(state);
     if (!stop) return;
     manualStops.push(stop);
+    manualRouteConfirmed = false;
     e.target.reset();
     $('tripCustomerAddress').value = '';
     renderAll(state);
@@ -166,13 +196,16 @@ export function bindTripEvents(state, saveState, renderAllApp) {
     if (!cb) return;
     if (cb.checked) selectedOrderIds.add(cb.dataset.tripOrderCheck);
     else selectedOrderIds.delete(cb.dataset.tripOrderCheck);
+    manualRouteConfirmed = false;
     renderSelectedStops(state);
+    updateManualHint();
   });
 
   $('tripStopsTbody')?.addEventListener('click', (e) => {
     const del = e.target.closest('button[data-del-stop]');
     if (!del) return;
     manualStops = manualStops.filter((s) => s.id !== del.dataset.delStop);
+    manualRouteConfirmed = false;
     renderAll(state);
   });
 
@@ -181,11 +214,17 @@ export function bindTripEvents(state, saveState, renderAllApp) {
     renderAll(state);
   });
 
+  $('tripConfirmManualBtn')?.addEventListener('click', () => {
+    confirmManualRoute();
+    renderAll(state);
+  });
+
   $('tripClearBtn')?.addEventListener('click', () => {
     manualStops = [];
     selectedOrderIds = new Set();
     manualRoute = [];
     lastResult = null;
+    manualRouteConfirmed = false;
     renderAll(state);
   });
 
@@ -206,7 +245,8 @@ export function bindTripEvents(state, saveState, renderAllApp) {
       [manualRoute[idx], manualRoute[target]] = [manualRoute[target], manualRoute[idx]];
       return alert('不合法：pickup 不能排在 delivery 前面');
     }
+    manualRouteConfirmed = false;
     updateManualHint();
-    renderManualRoute(manualRoute);
+    renderManualRoute(manualRoute, manualRouteConfirmed);
   });
 }

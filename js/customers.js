@@ -1,5 +1,45 @@
 import { $ } from './shared.js';
 
+function normalizePhone(phone = '') {
+  return phone.replace(/[^\d+]/g, '');
+}
+
+function inferRoleFromHistory(state, name) {
+  const key = (name || '').trim();
+  if (!key) return null;
+  const asUp = state.orders.some((o) => (o.upstream || '').trim() === key);
+  const asDown = state.orders.some((o) => (o.downstream || '').trim() === key);
+  if (asUp && asDown) return '兩者';
+  if (asUp) return '上游';
+  if (asDown) return '下游';
+  return null;
+}
+
+function updateCustomerSmartHint(state) {
+  const hint = $('customerSmartHint');
+  if (!hint) return;
+  const name = $('customerName')?.value.trim() || '';
+  if (!name) {
+    hint.textContent = '智能建議：可直接輸入電話與地址，系統會避免重複客戶。';
+    return;
+  }
+
+  const existed = state.customers.find((c) => (c.name || '').trim().toLowerCase() === name.toLowerCase());
+  if (existed) {
+    hint.textContent = `智能提醒：客戶「${name}」已存在（目前${existed.active === false ? '停用' : '啟用'}）。`;
+    return;
+  }
+
+  const role = inferRoleFromHistory(state, name);
+  if (role) {
+    hint.textContent = `智能建議：歷史工單顯示「${name}」常用角色為「${role}」，已幫你預選。`;
+    $('customerRole').value = role;
+    return;
+  }
+
+  hint.textContent = `智能建議：尚無「${name}」歷史資料，請確認角色/地址後新增。`;
+}
+
 export function renderCustomerOptions(state) {
   const upstream = $('upstreamOptions');
   const downstream = $('downstreamOptions');
@@ -47,14 +87,33 @@ export function bindCustomerEvents(state, saveState, renderAll) {
     e.preventDefault();
     const name = $('customerName').value.trim() || '未命名客戶';
     const role = $('customerRole').value || '上游';
-    const phone = $('customerPhone').value.trim();
+    const phone = normalizePhone($('customerPhone').value.trim());
     const address = $('customerAddress').value.trim();
+
+    const duplicate = state.customers.find((c) => (c.name || '').trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      if (duplicate.active === false) {
+        duplicate.active = true;
+        duplicate.role = role || duplicate.role;
+        duplicate.phone = phone || duplicate.phone;
+        duplicate.address = address || duplicate.address;
+        saveState();
+        e.target.reset();
+        updateCustomerSmartHint(state);
+        renderAll();
+        return alert(`已重新啟用既有客戶：${name}`);
+      }
+      return alert(`客戶已存在：${name}`);
+    }
+
     state.customers.push({ id: crypto.randomUUID(), name, role, phone, address, active: true });
     saveState();
     e.target.reset();
+    updateCustomerSmartHint(state);
     renderAll();
   });
 
+  $('customerName')?.addEventListener('input', () => updateCustomerSmartHint(state));
   $('customerSearch')?.addEventListener('input', () => renderCustomers(state));
 
   $('customersTbody')?.addEventListener('click', (e) => {
@@ -66,4 +125,6 @@ export function bindCustomerEvents(state, saveState, renderAll) {
     saveState();
     renderAll();
   });
+
+  updateCustomerSmartHint(state);
 }
