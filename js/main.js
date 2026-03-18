@@ -1,4 +1,5 @@
 import { $, COMPANY_INFO } from './shared.js';
+import { applyUiSettings, bindSettingsEvents, renderSettings } from './settings.js';
 import {
   state,
   configureStore,
@@ -16,7 +17,7 @@ import { renderAudits, bindAuditEvents } from './audit.js';
 import { renderTrips, bindTripEvents } from './trips.js';
 
 const APP_BUILD = '2026-03-18-enterprise-core-1';
-const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'financeView', 'auditView'];
+const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
 const REMINDER_LAST_SIGNATURE_KEY = 'smartReminderLastSignature';
@@ -59,16 +60,27 @@ function getRolePerms() {
   return ROLE_PERMS[state.userRole || 'viewer'] || ROLE_PERMS.viewer;
 }
 
+function isModuleEnabled(viewId) {
+  if (!viewId || !viewId.endsWith('View') || viewId === 'settingsView' || viewId === 'dashboardView' || viewId === 'loginView') return true;
+  return state.settings?.moduleEnabled?.[viewId] !== false;
+}
+
 function hasViewPermission(viewId) {
+  if (viewId === 'loginView' || viewId === 'dashboardView' || viewId === 'settingsView') return true;
+  if (!isModuleEnabled(viewId)) return false;
+  if (state.settings?.openAccess) return true;
   return getRolePerms().includes(viewId);
 }
 
 function applyRoleUi() {
   document.querySelectorAll('.nav-card').forEach((card) => {
+    const enabled = isModuleEnabled(card.dataset.target);
     const allowed = hasViewPermission(card.dataset.target);
     card.disabled = !allowed;
-    card.title = allowed ? '' : '目前帳號沒有此模組權限';
-    card.style.opacity = allowed ? '1' : '0.45';
+    card.classList.toggle('is-locked', !allowed);
+    card.classList.toggle('is-hidden-module', !enabled);
+    card.title = !enabled ? '此模組已在設定中停用' : allowed ? '' : '目前帳號沒有此模組權限';
+    card.style.opacity = allowed ? '1' : '0.5';
     card.style.cursor = allowed ? 'pointer' : 'not-allowed';
   });
 }
@@ -201,6 +213,7 @@ function renderDashboard() {
 }
 
 function renderAll() {
+  applyUiSettings(state);
   renderDashboard();
   renderCustomers(state);
   renderOrders(state, renderCustomerOptions);
@@ -208,9 +221,14 @@ function renderAll() {
   renderFinance(state);
   renderOrderScreen(state);
   renderTrips(state);
+  renderSettings(state);
 }
 
 function showView(id) {
+  if (id !== 'loginView' && !state.user) {
+    alert('請先登入系統。');
+    return;
+  }
   if (id !== 'loginView' && !hasViewPermission(id)) {
     appendSystemEvent(`權限拒絕：嘗試進入 ${id}`, 'warning', { role: state.userRole || 'viewer' });
     saveState();
@@ -227,7 +245,8 @@ function showView(id) {
 }
 
 function openFinanceGate() {
-  if (!hasViewPermission('financeView')) return alert('此帳號沒有財經模組權限。');
+  if (!hasViewPermission('financeView')) return alert(isModuleEnabled('financeView') ? '此帳號沒有財經模組權限。' : '財經模組目前已停用。');
+  if (state.settings?.openAccess || !state.settings?.financeGateEnabled) return showView('financeView');
   const dialog = $('financeDialog');
   if (dialog && typeof dialog.showModal === 'function') return dialog.showModal();
   const input = window.prompt('請輸入財經系統密碼');
@@ -251,6 +270,8 @@ function bindCoreEvents() {
     saveState();
     showView('dashboardView');
   });
+
+  $('settingsBtn')?.addEventListener('click', () => showView('settingsView'));
 
   $('logoutBtn')?.addEventListener('click', () => {
     appendSystemEvent(`使用者登出：${state.user || 'unknown'}`, 'info', { role: state.userRole || 'viewer' });
@@ -298,6 +319,7 @@ bindOrderEvents(state, saveState, renderAll);
 bindFinanceEvents(state, saveState, renderAll);
 bindAuditEvents(state);
 bindTripEvents(state, saveState, renderAll);
+bindSettingsEvents(state, saveState, renderAll);
 renderAll();
 showView('loginView');
 startStoreSync();
