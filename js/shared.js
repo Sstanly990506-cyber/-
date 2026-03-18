@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
   companyName: '三青實業有限公司',
   companyAddress: 'No. 53, Liyan St, Zhonghe District, New Taipei City, Taiwan 235',
   companyPhone: '02-2222-2222',
+  companyIndustry: '印刷 / 製造業',
   companyEmail: 'service@example.com',
   companyWebsite: 'https://example.com',
   companyTaxId: '12345678',
@@ -40,6 +41,7 @@ const DEFAULT_SETTINGS = {
   receivableOverdueDays: 30,
   payableWarningDays: 14,
   inventoryLowStockDefault: 100,
+  modulePageNotes: Object.fromEntries(MODULE_DEFINITIONS.map((module) => [module.id, `${module.label}的首頁說明，可依公司需求調整。`])),
   moduleLabels: Object.fromEntries(MODULE_DEFINITIONS.map((module) => [module.id, module.label])),
   moduleDescriptions: Object.fromEntries(MODULE_DEFINITIONS.map((module) => [module.id, module.description])),
   moduleIcons: Object.fromEntries(MODULE_DEFINITIONS.map((module) => [module.id, module.icon])),
@@ -88,6 +90,7 @@ export function mergeSettings(raw = {}) {
     moduleLabels: { ...defaults.moduleLabels, ...(raw.moduleLabels || {}) },
     moduleDescriptions: { ...defaults.moduleDescriptions, ...(raw.moduleDescriptions || {}) },
     moduleIcons: { ...defaults.moduleIcons, ...(raw.moduleIcons || {}) },
+    modulePageNotes: { ...defaults.modulePageNotes, ...(raw.modulePageNotes || {}) },
     moduleEnabled: { ...defaults.moduleEnabled, ...(raw.moduleEnabled || {}) },
   };
 }

@@ -79,6 +79,7 @@ function applyRoleUi() {
   document.querySelectorAll('.nav-card').forEach((card) => {
     const enabled = isModuleEnabled(card.dataset.target);
     const allowed = hasViewPermission(card.dataset.target);
+    card.hidden = !enabled;
     card.disabled = !allowed;
     card.classList.toggle('is-locked', !allowed);
     card.classList.toggle('is-hidden-module', !enabled);

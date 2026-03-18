@@ -64,6 +64,7 @@ h1,h2,h3,h4 { margin: 0 0 10px; }
 }
 .topbar-heading h2 { margin-bottom: 4px; }
 .topbar-heading .sub { margin-bottom: 0; }
+.module-page-note { max-width: 720px; }
 .topbar > div:last-child {
   display: flex;
   align-items: center;

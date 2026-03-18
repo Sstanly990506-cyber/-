@@ -11,6 +11,7 @@ function moduleSettingsHtml(settings) {
     const label = settings.moduleLabels[module.id] || module.label;
     const description = settings.moduleDescriptions[module.id] || module.description;
     const icon = settings.moduleIcons[module.id] || module.icon;
+    const pageNote = settings.modulePageNotes[module.id] || `${label} 的頁面說明`;
     const enabled = settings.moduleEnabled[module.id] !== false;
     return `
       <label class="settings-module-card">
@@ -25,6 +26,7 @@ function moduleSettingsHtml(settings) {
           <label>圖示<input data-settings-module-icon="${module.id}" value="${icon}" maxlength="4" /></label>
           <label>名稱<input data-settings-module-label="${module.id}" value="${label}" placeholder="模組名稱" /></label>
           <label class="span-2">描述<input data-settings-module-description="${module.id}" value="${description}" placeholder="模組說明" /></label>
+          <label class="span-2">頁面說明<input data-settings-module-page-note="${module.id}" value="${pageNote}" placeholder="模組頁面內說明" /></label>
         </div>
         <span class="check-row">
           <input data-settings-module-enabled="${module.id}" type="checkbox" ${enabled ? 'checked' : ''} />
@@ -41,6 +43,7 @@ function fillForm(settings) {
     settingsCompanyName: settings.companyName,
     settingsCompanyAddress: settings.companyAddress,
     settingsCompanyPhone: settings.companyPhone,
+    settingsCompanyIndustry: settings.companyIndustry,
     settingsCompanyEmail: settings.companyEmail,
     settingsCompanyWebsite: settings.companyWebsite,
     settingsCompanyTaxId: settings.companyTaxId,
@@ -83,6 +86,7 @@ function collectSettings() {
     companyName: $('settingsCompanyName')?.value.trim() || defaults.companyName,
     companyAddress: $('settingsCompanyAddress')?.value.trim() || defaults.companyAddress,
     companyPhone: $('settingsCompanyPhone')?.value.trim() || defaults.companyPhone,
+    companyIndustry: $('settingsCompanyIndustry')?.value.trim() || defaults.companyIndustry,
     companyEmail: $('settingsCompanyEmail')?.value.trim() || defaults.companyEmail,
     companyWebsite: $('settingsCompanyWebsite')?.value.trim() || defaults.companyWebsite,
     companyTaxId: $('settingsCompanyTaxId')?.value.trim() || defaults.companyTaxId,
@@ -115,6 +119,11 @@ function collectSettings() {
     next.moduleDescriptions[moduleId] = input.value.trim() || getModuleMeta(moduleId)?.description || '';
   });
 
+  document.querySelectorAll('[data-settings-module-page-note]').forEach((input) => {
+    const moduleId = input.dataset.settingsModulePageNote;
+    next.modulePageNotes[moduleId] = input.value.trim() || `${next.moduleLabels[moduleId] || moduleId} 的頁面說明`;
+  });
+
   document.querySelectorAll('[data-settings-module-icon]').forEach((input) => {
     const moduleId = input.dataset.settingsModuleIcon;
     next.moduleIcons[moduleId] = input.value.trim() || getModuleMeta(moduleId)?.icon || '⚙️';
@@ -136,7 +145,7 @@ function updateSettingsPreview(settingsLike) {
   const settings = mergeSettings(settingsLike);
   const enabledCount = MODULE_DEFINITIONS.filter((module) => settings.moduleEnabled[module.id] !== false).length;
   if ($('settingsPreviewTitle')) $('settingsPreviewTitle').textContent = settings.appTitle;
-  if ($('settingsPreviewCompany')) $('settingsPreviewCompany').textContent = `${settings.companyName}｜${settings.companyPhone}｜${settings.companyEmail}`;
+  if ($('settingsPreviewCompany')) $('settingsPreviewCompany').textContent = `${settings.companyName}｜${settings.companyIndustry}｜${settings.companyPhone}`;
   if ($('settingsPreviewMessage')) $('settingsPreviewMessage').textContent = settings.dashboardAnnouncement || settings.dashboardHeroSubtitle;
   if ($('settingsPreviewSummary')) $('settingsPreviewSummary').textContent = `已啟用 ${enabledCount} 個模組｜首頁 ${landingLabel(settings.defaultLandingView)}｜${settings.openAccess ? '全員可用模式' : '角色權限模式'}`;
 }
@@ -146,12 +155,22 @@ export function applyUiSettings(state) {
   applyRuntimeBranding(settings);
 
   if ($('appLoginTitle')) $('appLoginTitle').textContent = settings.loginTitle;
-  if ($('appLoginAddress')) $('appLoginAddress').textContent = `${settings.companyAddress}｜${settings.companyPhone}`;
+  if ($('appLoginAddress')) $('appLoginAddress').textContent = `${settings.companyAddress}｜${settings.companyIndustry}｜${settings.companyPhone}`;
   if ($('appLoginMessage')) $('appLoginMessage').textContent = settings.loginMessage;
   if ($('dashboardHeroTitle')) $('dashboardHeroTitle').textContent = settings.dashboardHeroTitle;
   if ($('dashboardHeroSubtitle')) $('dashboardHeroSubtitle').textContent = settings.dashboardHeroSubtitle;
   if ($('dashboardAnnouncement')) $('dashboardAnnouncement').textContent = settings.dashboardAnnouncement;
   if ($('welcomeText') && state.user) $('welcomeText').textContent = `${settings.welcomePrefix || '你好'}，${state.user}（${state.userRole || 'viewer'}）`;
+
+  document.querySelectorAll('[data-module-title]').forEach((el) => {
+    const moduleId = el.dataset.moduleTitle;
+    el.textContent = settings.moduleLabels[moduleId] || getModuleMeta(moduleId)?.label || moduleId;
+  });
+
+  document.querySelectorAll('[data-module-note]').forEach((el) => {
+    const moduleId = el.dataset.moduleNote;
+    el.textContent = settings.modulePageNotes[moduleId] || settings.moduleDescriptions[moduleId] || '';
+  });
 
   document.querySelectorAll('.nav-card').forEach((card) => {
     const moduleId = card.dataset.target;
