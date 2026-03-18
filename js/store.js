@@ -1,6 +1,6 @@
-import { formatTs, getTodayText } from './shared.js';
+import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js';
 
-const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents'];
+const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents', 'settings'];
 const API_STATE_URL = '/api/state';
 
 export const state = {
@@ -14,6 +14,7 @@ export const state = {
   receivables: [],
   payables: [],
   systemEvents: [],
+  settings: getDefaultSettings(),
   reportRange: { start: '', end: '' },
   financeScreen: 'main',
   auditFilter: { start: '', end: '', keyword: '' },
@@ -35,6 +36,8 @@ function applyStatePayload(payload) {
   state.receivables = payload.receivables || [];
   state.payables = payload.payables || [];
   state.systemEvents = payload.systemEvents || [];
+  state.settings = mergeSettings(payload.settings || state.settings || {});
+  state.financePassword = state.settings.financePassword;
 }
 
 function loadLocalState() {
@@ -46,6 +49,7 @@ function loadLocalState() {
     receivables: JSON.parse(localStorage.getItem('receivables') || '[]'),
     payables: JSON.parse(localStorage.getItem('payables') || '[]'),
     systemEvents: JSON.parse(localStorage.getItem('systemEvents') || '[]'),
+    settings: JSON.parse(localStorage.getItem('settings') || 'null'),
   });
 }
 
@@ -57,6 +61,7 @@ function saveLocalState(now) {
   localStorage.setItem('receivables', JSON.stringify(state.receivables));
   localStorage.setItem('payables', JSON.stringify(state.payables));
   localStorage.setItem('systemEvents', JSON.stringify(state.systemEvents));
+  localStorage.setItem('settings', JSON.stringify(state.settings));
   localStorage.setItem('syncTick', String(now));
 }
 
@@ -74,6 +79,7 @@ async function pushServerState(syncTick) {
     receivables: state.receivables,
     payables: state.payables,
     systemEvents: state.systemEvents.slice(0, 500),
+    settings: state.settings,
     syncTick,
   };
 
@@ -167,6 +173,8 @@ function normalizeStateData() {
 
   state.audits = state.audits.slice(0, 5000);
   state.systemEvents = state.systemEvents.slice(0, 2000);
+  state.settings = mergeSettings(state.settings || {});
+  state.financePassword = state.settings.financePassword;
 }
 
 export function getIntegrityReport() {
