@@ -1,3 +1,8 @@
+export const COMPANY_INFO = {
+  name: '三青實業有限公司',
+  address: 'No. 53, Liyan St, Zhonghe District, New Taipei City, Taiwan 235',
+};
+
 export const $ = (id) => document.getElementById(id);
 
 export function money(n) {

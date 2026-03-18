@@ -45,7 +45,7 @@ export function renderResult(result) {
   `;
 }
 
-export function renderManualRoute(route) {
+export function renderManualRoute(route, confirmed = false) {
   const wrap = $('tripManualRoute');
   if (!wrap) return;
   wrap.innerHTML = '';
@@ -57,7 +57,7 @@ export function renderManualRoute(route) {
   route.forEach((s, idx) => {
     const fixed = idx === 0 || idx === route.length - 1;
     const div = document.createElement('div');
-    div.className = 'trip-route-item';
+    div.className = `trip-route-item ${confirmed ? 'confirmed' : ''}`.trim();
     div.innerHTML = `<strong>${idx + 1}. ${s.name}</strong><span>${s.type || 'factory'}</span><div>${fixed ? '<span class="sub">固定</span>' : `<button class="btn" data-route-up="${idx}">上移</button> <button class="btn" data-route-down="${idx}">下移</button>`}</div>`;
     wrap.append(div);
   });
