@@ -5,6 +5,7 @@ import { formatDuration, renderCustomerOptions, renderResult, renderManualRoute 
 
 let manualStops = [];
 let selectedOrderIds = new Set();
+let orderStopTypes = {};
 let manualRoute = [];
 let lastResult = null;
 let manualRouteConfirmed = false;
@@ -16,20 +17,27 @@ function findCustomer(state, keyword) {
     || state.customers.find((c) => (c.name || '').toLowerCase().includes(key));
 }
 
-function getExecutableOrders(state) {
-  const preferred = state.orders.filter((o) => ['未完成', '已送出'].includes(o.status || '未完成'));
-  return preferred.length ? preferred : state.orders;
+function getTripOrders(state) {
+  return state.orders;
+}
+
+function getOrderStopType(orderId) {
+  return orderStopTypes[orderId] || 'delivery';
+}
+
+function typeLabel(type) {
+  return type === 'pickup' ? '載貨' : '送貨';
 }
 
 function selectedOrderStops(state) {
-  return getExecutableOrders(state)
+  return getTripOrders(state)
     .filter((o) => selectedOrderIds.has(o.id))
     .map((o) => ({
       id: o.id,
       name: o.downstream || o.upstream || o.orderNumber || '未命名站點',
       address: o.address || '-',
       ...inferLatLngFromAddress(o.address || o.downstream || o.upstream || o.orderNumber || ''),
-      type: 'delivery',
+      type: getOrderStopType(o.id),
       relatedOrderId: o.orderNumber || '',
       note: 'from-order-pool',
     }));
@@ -43,11 +51,14 @@ function renderOrdersPool(state) {
   const body = $('tripOrdersTbody');
   if (!body) return;
   body.innerHTML = '';
-  const executableOrders = getExecutableOrders(state);
+  const orders = getTripOrders(state);
   selectedOrderIds.forEach((id) => {
-    if (!executableOrders.some((o) => o.id === id)) selectedOrderIds.delete(id);
+    if (!orders.some((o) => o.id === id)) selectedOrderIds.delete(id);
   });
-  executableOrders.forEach((order) => {
+  Object.keys(orderStopTypes).forEach((id) => {
+    if (!orders.some((o) => o.id === id)) delete orderStopTypes[id];
+  });
+  orders.forEach((order) => {
     const checked = selectedOrderIds.has(order.id) ? 'checked' : '';
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -55,8 +66,13 @@ function renderOrdersPool(state) {
       <td>${order.orderNumber || '-'}</td>
       <td>${order.downstream || order.upstream || '-'}</td>
       <td>${order.address || '-'}</td>
-      <td>${order.status || '未完成'}</td>
-      <td>${order.orderNumber || '-'}</td>`;
+      <td>
+        <select data-trip-order-type="${order.id}">
+          <option value="delivery" ${getOrderStopType(order.id) === 'delivery' ? 'selected' : ''}>送貨</option>
+          <option value="pickup" ${getOrderStopType(order.id) === 'pickup' ? 'selected' : ''}>載貨</option>
+        </select>
+      </td>
+      <td>${order.status || '未完成'}</td>`;
     body.append(tr);
   });
 }
@@ -69,11 +85,11 @@ function renderSelectedStops(state) {
   stops.forEach((s, idx) => {
     const canDelete = s.note === 'from-order-pool' ? '' : `<button class="btn" data-del-stop="${s.id}">刪除</button>`;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${idx + 1}</td><td>${s.name}</td><td>${s.type}</td><td>${s.relatedOrderId || '-'}</td><td>${s.address || '-'}</td><td>${canDelete}</td>`;
+    tr.innerHTML = `<td>${idx + 1}</td><td>${s.name}</td><td>${typeLabel(s.type)}</td><td>${s.relatedOrderId || '-'}</td><td>${s.address || '-'}</td><td>${canDelete}</td>`;
     body.append(tr);
   });
   $('tripStopsCount').textContent = String(stops.length);
-  $('tripStopsTypeSummary').textContent = `delivery ${stops.filter((s) => s.type === 'delivery').length} / pickup ${stops.filter((s) => s.type === 'pickup').length}`;
+  $('tripStopsTypeSummary').textContent = `送貨 ${stops.filter((s) => s.type === 'delivery').length} / 載貨 ${stops.filter((s) => s.type === 'pickup').length}`;
 }
 
 function updateManualHint() {
@@ -153,13 +169,14 @@ function confirmManualRoute() {
 }
 
 function executeSelectedOrders(state, saveState, renderAllApp) {
-  const selectedOrders = getExecutableOrders(state).filter((o) => selectedOrderIds.has(o.id));
+  const selectedOrders = getTripOrders(state).filter((o) => selectedOrderIds.has(o.id));
   if (!selectedOrders.length) return alert('請先勾選要執行的工單');
   if (manualRoute.length && !manualRouteConfirmed) return alert('你有手動調整路線，請先按「確認手動路線」');
 
   saveState();
   renderAllApp();
   selectedOrderIds = new Set();
+  orderStopTypes = {};
   lastResult = null;
   manualRoute = [];
   manualRouteConfirmed = false;
@@ -192,6 +209,15 @@ export function bindTripEvents(state, saveState, renderAllApp) {
   });
 
   $('tripOrdersTbody')?.addEventListener('change', (e) => {
+    const typeSelect = e.target.closest('select[data-trip-order-type]');
+    if (typeSelect) {
+      orderStopTypes[typeSelect.dataset.tripOrderType] = typeSelect.value;
+      manualRouteConfirmed = false;
+      renderSelectedStops(state);
+      updateManualHint();
+      return;
+    }
+
     const cb = e.target.closest('input[data-trip-order-check]');
     if (!cb) return;
     if (cb.checked) selectedOrderIds.add(cb.dataset.tripOrderCheck);
@@ -222,6 +248,7 @@ export function bindTripEvents(state, saveState, renderAllApp) {
   $('tripClearBtn')?.addEventListener('click', () => {
     manualStops = [];
     selectedOrderIds = new Set();
+    orderStopTypes = {};
     manualRoute = [];
     lastResult = null;
     manualRouteConfirmed = false;

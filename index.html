@@ -210,16 +210,16 @@
         </article>
 
         <article class="card">
-          <h3>工單（可勾選）</h3>
+          <h3>工單（顯示全部，可勾選）</h3>
           <div class="filter-row">
             <button class="btn primary" type="button" id="tripOptimizeBtn">最佳化車輛</button>
             <button class="btn" type="button" id="tripClearBtn">清空已選</button>
             <button class="btn" type="button" id="tripExecuteBtn">執行</button>
           </div>
-          <p>已選工單：<strong id="tripStopsCount">0</strong>（<span id="tripStopsTypeSummary">delivery 0 / pickup 0</span>）</p>
+          <p>已選工單：<strong id="tripStopsCount">0</strong>（<span id="tripStopsTypeSummary">送貨 0 / 載貨 0</span>）</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>勾選</th><th>工單號</th><th>客戶</th><th>地址</th><th>類型</th><th>工號</th></tr></thead>
+              <thead><tr><th>勾選</th><th>工單號</th><th>客戶</th><th>地址</th><th>配送類型</th><th>工單狀態</th></tr></thead>
               <tbody id="tripOrdersTbody"></tbody>
             </table>
           </div>
