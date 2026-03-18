@@ -1,10 +1,11 @@
 import { formatTs, getTodayText } from './shared.js';
 
-const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables'];
+const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents'];
 const API_STATE_URL = '/api/state';
 
 export const state = {
   user: null,
+  userRole: 'viewer',
   financePassword: '123',
   glossOptions: [],
   customers: [],
@@ -12,6 +13,7 @@ export const state = {
   audits: [],
   receivables: [],
   payables: [],
+  systemEvents: [],
   reportRange: { start: '', end: '' },
   financeScreen: 'main',
   auditFilter: { start: '', end: '', keyword: '' },
@@ -32,6 +34,7 @@ function applyStatePayload(payload) {
   state.audits = payload.audits || [];
   state.receivables = payload.receivables || [];
   state.payables = payload.payables || [];
+  state.systemEvents = payload.systemEvents || [];
 }
 
 function loadLocalState() {
@@ -42,6 +45,7 @@ function loadLocalState() {
     audits: JSON.parse(localStorage.getItem('audits') || '[]'),
     receivables: JSON.parse(localStorage.getItem('receivables') || '[]'),
     payables: JSON.parse(localStorage.getItem('payables') || '[]'),
+    systemEvents: JSON.parse(localStorage.getItem('systemEvents') || '[]'),
   });
 }
 
@@ -52,6 +56,7 @@ function saveLocalState(now) {
   localStorage.setItem('audits', JSON.stringify(state.audits));
   localStorage.setItem('receivables', JSON.stringify(state.receivables));
   localStorage.setItem('payables', JSON.stringify(state.payables));
+  localStorage.setItem('systemEvents', JSON.stringify(state.systemEvents));
   localStorage.setItem('syncTick', String(now));
 }
 
@@ -68,6 +73,7 @@ async function pushServerState(syncTick) {
     audits: state.audits,
     receivables: state.receivables,
     payables: state.payables,
+    systemEvents: state.systemEvents.slice(0, 500),
     syncTick,
   };
 
@@ -99,6 +105,7 @@ export async function pullServerState() {
     const tick = Number(payload.syncTick || payload.serverUpdatedAt || Date.now());
     if (tick <= lastSyncAt) return;
     applyStatePayload(payload);
+    normalizeStateData();
     localStorage.setItem('syncTick', String(tick));
     lastSyncAt = tick;
     onRefresh();
@@ -110,7 +117,99 @@ export async function pullServerState() {
   }
 }
 
+function uniqueById(rows) {
+  const map = new Map();
+  rows.forEach((item) => {
+    if (!item || !item.id) return;
+    map.set(item.id, item);
+  });
+  return [...map.values()];
+}
+
+function normalizeMoney(v) {
+  const num = Number(v || 0);
+  return Number.isFinite(num) ? Math.max(0, num) : 0;
+}
+
+function normalizeStateData() {
+  state.customers = uniqueById(state.customers).map((c) => ({
+    ...c,
+    name: String(c.name || '').trim(),
+    phone: String(c.phone || '').trim(),
+    address: String(c.address || '').trim(),
+  }));
+
+  state.orders = uniqueById(state.orders).map((o) => ({
+    ...o,
+    orderNumber: String(o.orderNumber || '').trim(),
+    upstream: String(o.upstream || '').trim(),
+    downstream: String(o.downstream || '').trim(),
+    address: String(o.address || '').trim(),
+    totalPrice: normalizeMoney(o.totalPrice),
+    sheetCount: Math.max(0, Number(o.sheetCount || 0)),
+  }));
+
+  state.receivables = uniqueById(state.receivables).map((r) => ({
+    ...r,
+    orderNumber: String(r.orderNumber || '').trim(),
+    customer: String(r.customer || '').trim(),
+    amount: normalizeMoney(r.amount),
+    received: normalizeMoney(r.received),
+  })).map((r) => ({ ...r, received: Math.min(r.received, r.amount) }));
+
+  state.payables = uniqueById(state.payables).map((p) => ({
+    ...p,
+    vendor: String(p.vendor || '').trim(),
+    item: String(p.item || '').trim(),
+    amount: normalizeMoney(p.amount),
+    paid: normalizeMoney(p.paid),
+  })).map((p) => ({ ...p, paid: Math.min(p.paid, p.amount) }));
+
+  state.audits = state.audits.slice(0, 5000);
+  state.systemEvents = state.systemEvents.slice(0, 2000);
+}
+
+export function getIntegrityReport() {
+  const issues = [];
+  const orderNumberSet = new Set();
+
+  state.orders.forEach((o) => {
+    const no = (o.orderNumber || '').trim();
+    if (!no) issues.push({ level: 'warning', text: `有工單缺少編號（ID: ${o.id || '-'})` });
+    if (no && orderNumberSet.has(no)) issues.push({ level: 'critical', text: `工單編號重複：${no}` });
+    if (no) orderNumberSet.add(no);
+    if (!o.address) issues.push({ level: 'info', text: `工單 ${no || o.id || '-'} 缺少地址` });
+  });
+
+  state.receivables.forEach((r) => {
+    if (Number(r.received || 0) > Number(r.amount || 0)) {
+      issues.push({ level: 'critical', text: `應收 ${r.orderNumber || r.id} 已收大於應收` });
+    }
+  });
+
+  return {
+    total: issues.length,
+    critical: issues.filter((i) => i.level === 'critical').length,
+    warning: issues.filter((i) => i.level === 'warning').length,
+    info: issues.filter((i) => i.level === 'info').length,
+    issues: issues.slice(0, 10),
+  };
+}
+
+export function appendSystemEvent(message, level = 'info', meta = {}) {
+  state.systemEvents.unshift({
+    id: crypto.randomUUID(),
+    at: new Date().toISOString(),
+    user: state.user || 'system',
+    level,
+    message,
+    meta,
+  });
+  if (state.systemEvents.length > 2000) state.systemEvents.length = 2000;
+}
+
 export function saveState() {
+  normalizeStateData();
   const now = Date.now();
   saveLocalState(now);
   lastSyncAt = now;
@@ -125,6 +224,7 @@ export function configureStore({ refreshFn, syncUiFn }) {
 
 export function initializeStore() {
   loadLocalState();
+  normalizeStateData();
   const now = new Date();
   state.reportRange.start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   state.reportRange.end = now.toISOString().slice(0, 10);

@@ -1,4 +1,4 @@
-import { $, money, downloadCsv, getTodayText } from './shared.js';
+import { $, COMPANY_INFO, money, downloadCsv, getTodayText } from './shared.js';
 import { getOrderReceivableKey } from './store.js';
 
 const selectedInvoiceOrderIds = new Set();
@@ -32,6 +32,47 @@ function getInvoiceMeta() {
     buyerAddress: $('invoiceBuyerAddress')?.value.trim() || '',
     note: $('invoiceNote')?.value.trim() || '',
   };
+}
+
+
+function findOrderByNumber(state, key) {
+  const text = (key || '').trim().toLowerCase();
+  if (!text) return null;
+  return state.orders.find((o) => (o.orderNumber || '').trim().toLowerCase() === text)
+    || state.orders.find((o) => (o.orderNumber || '').toLowerCase().includes(text));
+}
+
+function updateFinanceSmartHint(state) {
+  const hint = $('financeSmartHint');
+  if (!hint) return;
+  const order = findOrderByNumber(state, $('recvOrderNumber')?.value || '');
+  if (!order) {
+    hint.textContent = '智能建議：輸入工單編號可自動帶入客戶與金額。';
+    return;
+  }
+  hint.textContent = `智能建議：已找到工單 ${order.orderNumber || '-'}，可快速建立應收。`;
+}
+
+function autofillReceivableFromOrder(state) {
+  const order = findOrderByNumber(state, $('recvOrderNumber')?.value || '');
+  if (!order) return updateFinanceSmartHint(state);
+  if ($('recvCustomer') && !$('recvCustomer').value.trim()) $('recvCustomer').value = order.downstream || order.upstream || '';
+  if ($('recvAmount') && Number($('recvAmount').value || 0) <= 0) $('recvAmount').value = String(Number(order.totalPrice || 0));
+  if ($('recvDate') && !$('recvDate').value) $('recvDate').value = order.orderDate || getTodayText();
+  updateFinanceSmartHint(state);
+}
+
+function applyInvoiceBuyerBySelection(state) {
+  const selected = getSelectedInvoiceOrders(state);
+  if (!selected.length) return;
+  const customerNames = selected.map((o) => o.downstream || o.upstream || '').filter(Boolean);
+  if (!customerNames.length) return;
+  const count = new Map();
+  customerNames.forEach((n) => count.set(n, (count.get(n) || 0) + 1));
+  const [bestName] = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
+  const customer = state.customers.find((c) => (c.name || '').trim() === bestName);
+  if ($('invoiceBuyerName') && !$('invoiceBuyerName').value.trim()) $('invoiceBuyerName').value = bestName;
+  if ($('invoiceBuyerAddress') && customer?.address && !$('invoiceBuyerAddress').value.trim()) $('invoiceBuyerAddress').value = customer.address;
 }
 
 function renderInvoiceMeta(meta) {
@@ -89,7 +130,7 @@ function openInvoiceWindow(state) {
 
   const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>發票匯出</title>
   <style>body{font-family:"Noto Sans TC",sans-serif;padding:16px}.copy{border:2px solid #555;padding:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:6px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}.sum{font-weight:700;text-align:right}</style></head><body>
-  <div class="copy"><h2>電子發票</h2>${renderInvoiceMeta(meta)}<table><thead><tr><th>#</th><th>工單</th><th>客戶</th><th>日期</th><th>金額</th></tr></thead><tbody>${rows}</tbody></table><div class="sum">合計：NT$ ${money(total)}</div></div>
+  <div class="copy"><h2>${COMPANY_INFO.name} 電子發票</h2><p>${COMPANY_INFO.address}</p>${renderInvoiceMeta(meta)}<table><thead><tr><th>#</th><th>工單</th><th>客戶</th><th>日期</th><th>金額</th></tr></thead><tbody>${rows}</tbody></table><div class="sum">合計：NT$ ${money(total)}</div></div>
   <script>window.print();</script></body></html>`;
 
   const win = window.open('', '_blank', 'width=980,height=760');
@@ -213,11 +254,44 @@ function renderTodayAlerts(state, reportA) {
 }
 
 function openLineReminder(state, reportA) {
-  const alerts = buildTodayAlerts(state, reportA);
-  const text = `【三清提醒】\n${alerts.join('\n')}`;
-  const url = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
+  const dueCritical = reportA.filter((r) => r.remain > 0 && r.age >= 30).slice(0, 5);
+  const dueSoon = reportA.filter((r) => r.remain > 0 && r.age >= 7 && r.age < 30).slice(0, 5);
+  const unpaid = state.payables
+    .map((p) => ({ ...p, unpaid: Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)) }))
+    .filter((p) => p.unpaid > 0)
+    .slice(0, 5);
+
+  const lines = [];
+  lines.push(`【${COMPANY_INFO.name} 財經智能提醒】`);
+  lines.push(`時間：${new Date().toLocaleString()}`);
+  lines.push('');
+
+  if (dueCritical.length) {
+    lines.push('🔴 應收逾期（>=30天）');
+    dueCritical.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / 未收 ${money(r.remain)} / 帳齡 ${r.age} 天`));
+    lines.push('');
+  }
+
+  if (dueSoon.length) {
+    lines.push('🟠 應收警示（7~29天）');
+    dueSoon.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / 未收 ${money(r.remain)} / 帳齡 ${r.age} 天`));
+    lines.push('');
+  }
+
+  if (unpaid.length) {
+    lines.push('🔵 應付待付款');
+    unpaid.forEach((p) => lines.push(`- ${p.vendor || '-'} / ${p.item || '-'} / 未付 ${money(p.unpaid)}`));
+    lines.push('');
+  }
+
+  if (!dueCritical.length && !dueSoon.length && !unpaid.length) {
+    lines.push('✅ 今日財經狀態正常，無需特別提醒。');
+  }
+
+  const url = `https://line.me/R/msg/text/?${encodeURIComponent(lines.join('\n'))}`;
   window.open(url, '_blank', 'noopener');
 }
+
 
 
 export function renderFinance(state) {
@@ -259,8 +333,28 @@ export function renderFinance(state) {
 export function bindFinanceEvents(state, saveState, renderAll) {
   $('receivableForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
-    state.receivables.unshift({ id: crypto.randomUUID(), date: $('recvDate').value, customer: $('recvCustomer').value.trim(), orderNumber: $('recvOrderNumber').value.trim(), amount: Number($('recvAmount').value), received: Number($('recvReceived').value) });
+    const orderNumber = $('recvOrderNumber').value.trim();
+    const item = {
+      id: crypto.randomUUID(),
+      date: $('recvDate').value || getTodayText(),
+      customer: $('recvCustomer').value.trim(),
+      orderNumber,
+      amount: Number($('recvAmount').value || 0),
+      received: Number($('recvReceived').value || 0),
+    };
+
+    const dup = state.receivables.find((r) => (r.orderNumber || '').trim() === orderNumber);
+    if (dup) {
+      dup.date = item.date;
+      dup.customer = item.customer || dup.customer;
+      dup.amount = item.amount;
+      dup.received = item.received;
+    } else {
+      state.receivables.unshift(item);
+    }
+
     e.target.reset();
+    updateFinanceSmartHint(state);
     saveState();
     renderAll();
   });
@@ -300,10 +394,12 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     if (!box) return;
     if (box.checked) selectedInvoiceOrderIds.add(box.dataset.invoiceOrderId);
     else selectedInvoiceOrderIds.delete(box.dataset.invoiceOrderId);
+    applyInvoiceBuyerBySelection(state);
     renderInvoicePicker(state);
   });
   $('invoiceSelectAllBtn')?.addEventListener('click', () => {
     getInvoiceEligibleOrders(state).forEach((o) => selectedInvoiceOrderIds.add(o.id));
+    applyInvoiceBuyerBySelection(state);
     renderInvoicePicker(state);
   });
   $('invoiceClearSelectBtn')?.addEventListener('click', () => {
@@ -312,6 +408,11 @@ export function bindFinanceEvents(state, saveState, renderAll) {
   });
   $('exportInvoiceBtn')?.addEventListener('click', () => openInvoiceWindow(state));
   $('sendLineReminderBtn')?.addEventListener('click', () => openLineReminder(state, getLinkedReceivablesData(state)));
+
+  $('recvOrderNumber')?.addEventListener('input', () => autofillReceivableFromOrder(state));
+  $('recvOrderNumber')?.addEventListener('blur', () => autofillReceivableFromOrder(state));
+  $('recvCustomer')?.addEventListener('input', () => updateFinanceSmartHint(state));
+  updateFinanceSmartHint(state);
 
   document.querySelectorAll('[data-finance-screen]').forEach((btn) => {
     btn.addEventListener('click', () => {
