@@ -74,6 +74,20 @@ function setSyncUi(badgeText, source, ts = Date.now()) {
   onSyncUi({ badgeText, detailText: `最後更新：${formatTs(ts)}（${source}）`, ok: true });
 }
 
+async function readJsonOrThrow(res) {
+  let payload = null;
+  try {
+    payload = await res.json();
+  } catch {
+    payload = null;
+  }
+  if (!res.ok) {
+    const message = payload?.error ? `${res.status} ${payload.error}` : `HTTP ${res.status}`;
+    throw new Error(message);
+  }
+  return payload;
+}
+
 async function pushServerState(syncTick) {
   if (!serverSyncEnabled) return;
   const payload = {
@@ -101,14 +115,22 @@ async function pushServerState(syncTick) {
       onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（偵測到新版本資料，已自動同步）`, ok: false });
       return;
     }
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
+    await readJsonOrThrow(res);
+    pendingSyncTick = 0;
+    lastSyncAt = Math.max(lastSyncAt, syncTick);
+    setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
+  } catch (err) {
+=======
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     pendingSyncTick = 0;
     lastSyncAt = Math.max(lastSyncAt, syncTick);
     setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
   } catch {
+>>>>>> main
     pendingSyncTick = 0;
     if (!fileModeOnly) {
-      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗（重試中））`, ok: false });
+      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
     }
   }
 }
@@ -117,8 +139,7 @@ export async function pullServerState() {
   if (!serverSyncEnabled) return;
   try {
     const res = await fetch(API_STATE_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const payload = await res.json();
+    const payload = await readJsonOrThrow(res);
     const tick = Number(payload.syncTick || payload.serverUpdatedAt || Date.now());
     if (pendingSyncTick && tick < pendingSyncTick) return;
     if (tick <= lastSyncAt) return;
@@ -128,9 +149,9 @@ export async function pullServerState() {
     lastSyncAt = tick;
     onRefresh();
     setSyncUi('已收到伺服器資料', '集中式資料庫', tick);
-  } catch {
+  } catch (err) {
     if (!fileModeOnly) {
-      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗（重試中））`, ok: false });
+      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
     }
   }
 }
