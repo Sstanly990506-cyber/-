@@ -1,5 +1,20 @@
 import { $ } from './shared.js';
 
+function getCustomerRoles(state) {
+  const roles = state.settings?.moduleInternals?.customers?.roles || { '上游': true, '下游': true, '兩者': true };
+  const items = ['上游', '下游', '兩者'].filter((role) => roles[role] !== false);
+  return items.length ? items : ['上游'];
+}
+
+function renderCustomerRoleOptions(state) {
+  const select = $('customerRole');
+  if (!select) return;
+  const roles = getCustomerRoles(state);
+  const current = select.value;
+  select.innerHTML = roles.map((role) => `<option value="${role}">${role}</option>`).join('');
+  select.value = roles.includes(current) ? current : roles[0];
+}
+
 function normalizePhone(phone = '') {
   return phone.replace(/[^\d+]/g, '');
 }
@@ -33,7 +48,8 @@ function updateCustomerSmartHint(state) {
   const role = inferRoleFromHistory(state, name);
   if (role) {
     hint.textContent = `智能建議：歷史工單顯示「${name}」常用角色為「${role}」，已幫你預選。`;
-    $('customerRole').value = role;
+    const roles = getCustomerRoles(state);
+    if (roles.includes(role)) $('customerRole').value = role;
     return;
   }
 
@@ -57,6 +73,7 @@ export function renderCustomerOptions(state) {
 }
 
 export function renderCustomers(state) {
+  renderCustomerRoleOptions(state);
   const body = $('customersTbody');
   if (!body) return;
   body.innerHTML = '';
@@ -86,7 +103,7 @@ export function bindCustomerEvents(state, saveState, renderAll) {
   $('customerForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const name = $('customerName').value.trim() || '未命名客戶';
-    const role = $('customerRole').value || '上游';
+    const role = $('customerRole').value || getCustomerRoles(state)[0];
     const phone = normalizePhone($('customerPhone').value.trim());
     const address = $('customerAddress').value.trim();
 
