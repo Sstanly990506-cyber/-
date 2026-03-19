@@ -4,75 +4,111 @@ import json
 import math
 import os
 import socket
-import sqlite3
-from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+import time
+from pathlib import Path
+from threading import Lock
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-DB_PATH = os.environ.get("APP_DB_PATH", "data.db")
+from flask import Flask, abort, jsonify, request, send_from_directory
+from psycopg import connect
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+
+BASE_DIR = Path(__file__).resolve().parent
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 SENSITIVE_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".py", ".bat", ".ps1", ".sh"}
+DEFAULT_APP_STATE = {
+    "glossOptions": ["PVA光", "PVB光/油", "耐磨", "壓光"],
+    "customers": [],
+    "orders": [],
+    "audits": [],
+    "receivables": [],
+    "payables": [],
+    "systemEvents": [],
+    "settings": None,
+    "inventoryItems": [],
+    "syncTick": 0,
+}
+DB_INIT_LOCK = Lock()
+DB_INITIALIZED = False
+
+app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 
 
-class AppServer(ThreadingHTTPServer):
-    allow_reuse_address = True
+def normalize_database_url(url: str) -> str:
+    if not url:
+        raise RuntimeError("DATABASE_URL 未設定，無法連線到 PostgreSQL")
+    parsed = urlparse(url)
+    if parsed.scheme not in {"postgres", "postgresql"}:
+        raise RuntimeError("DATABASE_URL 必須是 PostgreSQL 連線字串")
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.setdefault("sslmode", "require")
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS app_state (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            state_json TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        INSERT OR IGNORE INTO app_state (id, state_json, updated_at)
-        VALUES (1, ?, strftime('%s','now') * 1000)
-        """,
-        (
-            json.dumps(
-                {
-                    "glossOptions": ["A光", "B光"],
-                    "customers": [],
-                    "orders": [],
-                    "audits": [],
-                    "receivables": [],
-                    "payables": [],
-                    "syncTick": 0,
-                },
-                ensure_ascii=False,
-            ),
-        ),
-    )
-    conn.commit()
-    conn.close()
+def get_db_connection():
+    return connect(normalize_database_url(DATABASE_URL), row_factory=dict_row)
+
+
+def ensure_db():
+    global DB_INITIALIZED
+    if DB_INITIALIZED:
+        return
+    with DB_INIT_LOCK:
+        if DB_INITIALIZED:
+            return
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_state (
+                        id SMALLINT PRIMARY KEY CHECK (id = 1),
+                        state_json JSONB NOT NULL,
+                        updated_at BIGINT NOT NULL
+                    )
+                    """
+                )
+                cur.execute(
+                    """
+                    INSERT INTO app_state (id, state_json, updated_at)
+                    VALUES (1, %s, %s)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (Jsonb(DEFAULT_APP_STATE), 0),
+                )
+            conn.commit()
+        DB_INITIALIZED = True
 
 
 def read_state():
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute("SELECT state_json, updated_at FROM app_state WHERE id = 1").fetchone()
-    conn.close()
-    state = json.loads(row[0])
-    state["serverUpdatedAt"] = row[1]
+    ensure_db()
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT state_json, updated_at FROM app_state WHERE id = 1")
+            row = cur.fetchone()
+    state = row["state_json"] if isinstance(row["state_json"], dict) else json.loads(row["state_json"])
+    state["serverUpdatedAt"] = int(row["updated_at"] or 0)
     return state
 
 
 def write_state(new_state):
-    tick = int(new_state.get("syncTick") or 0)
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute("SELECT updated_at FROM app_state WHERE id = 1").fetchone()
-    current_tick = int(row[0] if row else 0)
-    if tick < current_tick:
-        conn.close()
-        return False, current_tick
-    conn.execute(
-        "UPDATE app_state SET state_json = ?, updated_at = ? WHERE id = 1",
-        (json.dumps(new_state, ensure_ascii=False), tick),
-    )
-    conn.commit()
-    conn.close()
+    ensure_db()
+    tick = int(new_state.get("syncTick") or int(time.time() * 1000))
+    payload = dict(new_state)
+    payload["syncTick"] = tick
+    with get_db_connection() as conn:
+        with conn.transaction():
+            with conn.cursor() as cur:
+                cur.execute("SELECT updated_at FROM app_state WHERE id = 1 FOR UPDATE")
+                row = cur.fetchone()
+                current_tick = int((row or {}).get("updated_at") or 0)
+                if tick < current_tick:
+                    return False, current_tick
+                cur.execute(
+                    "UPDATE app_state SET state_json = %s, updated_at = %s WHERE id = 1",
+                    (Jsonb(payload), tick),
+                )
+        conn.commit()
     return True, tick
 
 
@@ -176,65 +212,66 @@ def optimize_trip(payload):
     }
 
 
-class Handler(SimpleHTTPRequestHandler):
-    def _json(self, code, payload):
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+def is_sensitive_path(path: str) -> bool:
+    normalized = path.split("?", 1)[0].lower()
+    return any(normalized.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
 
-    def _is_sensitive_path(self):
-        path = self.path.split("?", 1)[0].lower()
-        return any(path.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
 
-    def do_GET(self):
-        if self.path == "/api/state":
-            self._json(200, read_state())
-            return
-        if self.path == "/api/health":
-            self._json(200, {"ok": True, "db": DB_PATH})
-            return
-        if self._is_sensitive_path():
-            self.send_error(403, "forbidden")
-            return
-        return super().do_GET()
+@app.get("/api/health")
+def health():
+    ensure_db()
+    return jsonify({"ok": True, "database": "postgresql", "hasDatabaseUrl": bool(DATABASE_URL)})
 
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        raw = self.rfile.read(length) if length else b"{}"
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except Exception:
-            self._json(400, {"error": "invalid json"})
-            return
 
-        if self.path == "/api/state":
-            required = ["glossOptions", "customers", "orders", "audits", "receivables", "payables"]
-            for key in required:
-                if key not in payload:
-                    self._json(400, {"error": f"missing key: {key}"})
-                    return
-            if not payload.get("syncTick"):
-                payload["syncTick"] = int(__import__("time").time() * 1000)
-            ok, tick = write_state(payload)
-            if not ok:
-                self._json(409, {"error": "stale syncTick", "serverSyncTick": tick})
-                return
-            self._json(200, {"ok": True, "syncTick": payload["syncTick"]})
-            return
+@app.get("/api/state")
+def get_state():
+    return jsonify(read_state())
 
-        if self.path == "/api/trips/optimize":
-            try:
-                result = optimize_trip(payload)
-            except ValueError as err:
-                self._json(400, {"error": str(err)})
-                return
-            self._json(200, result)
-            return
 
-        self.send_error(404)
+@app.post("/api/state")
+def post_state():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "invalid json"}), 400
+
+    required = ["glossOptions", "customers", "orders", "audits", "receivables", "payables"]
+    for key in required:
+        if key not in payload:
+            return jsonify({"error": f"missing key: {key}"}), 400
+
+    ok, tick = write_state(payload)
+    if not ok:
+        return jsonify({"error": "stale syncTick", "serverSyncTick": tick}), 409
+    return jsonify({"ok": True, "syncTick": tick})
+
+
+@app.post("/api/trips/optimize")
+def post_optimize_trip():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "invalid json"}), 400
+    try:
+        result = optimize_trip(payload)
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    return jsonify(result)
+
+
+@app.get("/")
+def index():
+    return send_from_directory(BASE_DIR, "index.html")
+
+
+@app.get("/<path:path>")
+def static_files(path):
+    if path.startswith("api/"):
+        abort(404)
+    if is_sensitive_path(path):
+        abort(403)
+    file_path = BASE_DIR / path
+    if not file_path.exists() or not file_path.is_file():
+        abort(404)
+    return send_from_directory(BASE_DIR, path)
 
 
 if __name__ == "__main__":
@@ -245,8 +282,8 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=4173)
     args = parser.parse_args()
 
-    init_db()
-    print(f"[INFO] centralized DB: {DB_PATH}")
+    ensure_db()
+    print("[INFO] centralized DB: PostgreSQL via DATABASE_URL")
     print(f"[INFO] server running: http://{args.host}:{args.port}")
     if args.host == "0.0.0.0":
         lan_ips = get_lan_ips()
@@ -256,4 +293,4 @@ if __name__ == "__main__":
                 print(f"       http://{ip}:{args.port}")
         else:
             print("[WARN] 無法自動偵測區網 IP，請手動查詢電腦 IP 後讓手機連線。")
-    AppServer((args.host, args.port), Handler).serve_forever()
+    app.run(host=args.host, port=args.port)

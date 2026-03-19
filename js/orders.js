@@ -83,7 +83,7 @@ function updateOrderSmartHint(state) {
 }
 
 
-function buildOrderFromForm() {
+function buildOrderFromForm(state) {
   return {
     orderNumber: $('orderNumber').value.trim(),
     orderDate: $('orderDate').value,
@@ -96,7 +96,7 @@ function buildOrderFromForm() {
     sizeUnit: $('sizeUnit').value || 'mm',
     glossType: $('glossType').value || '',
     totalPrice: Number($('totalPrice').value || 0),
-    status: $('orderStatus').value || '未完成',
+    status: $('orderStatus').value || getEnabledOrderStatuses(state)[0],
   };
 }
 
@@ -157,10 +157,41 @@ export function renderOrderScreen(state) {
   formScreen.classList.toggle('hidden', isList);
 
   updateOrderSmartHint(state);
+  $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.orderScreen === state.orderScreen);
   });
+}
+
+function getOrderModuleSettings(state) {
+  return state.settings?.moduleInternals?.orders || { statuses: { '未完成': true, '已送出': true, '已完成': true }, quickActions: { '已送出': true, '已完成': true }, showFilters: true, showExport: true };
+}
+
+function getEnabledOrderStatuses(state) {
+  const settings = getOrderModuleSettings(state);
+  const statuses = ['未完成', '已送出', '已完成'].filter((status) => settings.statuses?.[status] !== false);
+  return statuses.length ? statuses : ['未完成'];
+}
+
+function renderOrderStatusOptions(state) {
+  const select = $('orderStatus');
+  if (!select) return;
+  const statuses = getEnabledOrderStatuses(state);
+  const current = select.value;
+  select.innerHTML = statuses.map((status) => `<option value="${status}">${status}</option>`).join('');
+  select.value = statuses.includes(current) ? current : statuses[0];
+}
+
+function renderOrderFilters(state) {
+  const wrap = $('orderStatusFilters');
+  if (!wrap) return;
+  const settings = getOrderModuleSettings(state);
+  wrap.classList.toggle('hidden', settings.showFilters === false);
+  const statuses = getEnabledOrderStatuses(state);
+  const items = ['全部', ...statuses];
+  if (!items.includes(state.orderStatusFilter)) state.orderStatusFilter = '全部';
+  wrap.innerHTML = items.map((status) => `<button class="btn filter-btn ${state.orderStatusFilter === status ? 'active' : ''}" data-status-filter="${status}" type="button">${status}</button>`).join('');
 }
 
 function renderGlossOptions(state) {
@@ -177,10 +208,14 @@ function renderGlossOptions(state) {
 export function renderOrders(state, renderCustomerOptions) {
   renderGlossOptions(state);
   renderCustomerOptions(state);
+  renderOrderStatusOptions(state);
+  renderOrderFilters(state);
   const body = $('ordersTbody');
   body.innerHTML = '';
 
-  const filtered = state.orders.filter((order) => (state.orderStatusFilter === '全部' ? true : order.status === state.orderStatusFilter));
+  const settings = getOrderModuleSettings(state);
+  const visibleStatuses = new Set(getEnabledOrderStatuses(state));
+  const filtered = state.orders.filter((order) => visibleStatuses.has(order.status || '未完成')).filter((order) => (state.orderStatusFilter === '全部' ? true : order.status === state.orderStatusFilter));
 
   filtered.forEach((order) => {
     const tr = document.createElement('tr');
@@ -194,8 +229,8 @@ export function renderOrders(state, renderCustomerOptions) {
       <td>${order.updatedAt || '-'}</td>
       <td>
         <button class="btn" data-edit="${order.id}">編輯</button>
-        <button class="btn" data-quick-status="已完成" data-id="${order.id}">已完成</button>
-        <button class="btn" data-quick-status="已送出" data-id="${order.id}">已送出</button>
+        ${settings.quickActions?.['已完成'] && visibleStatuses.has('已完成') ? `<button class="btn" data-quick-status="已完成" data-id="${order.id}">已完成</button>` : ''}
+        ${settings.quickActions?.['已送出'] && visibleStatuses.has('已送出') ? `<button class="btn" data-quick-status="已送出" data-id="${order.id}">已送出</button>` : ''}
       </td>`;
     body.append(tr);
   });
@@ -225,7 +260,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     const existing = state.orders.find((o) => o.id === id);
     const payload = {
       id,
-      ...buildOrderFromForm(),
+      ...buildOrderFromForm(state),
       updatedAt: new Date().toLocaleString(),
     };
 
@@ -302,6 +337,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     state.orderScreen = 'form';
     renderOrderScreen(state);
     updateOrderSmartHint(state);
+  $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
   });
 
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });
@@ -319,10 +355,11 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('exportOrderBtn')?.addEventListener('click', () => {
-    openOrderExportWindow(buildOrderFromForm());
+    openOrderExportWindow(buildOrderFromForm(state));
   });
 
   updateOrderSmartHint(state);
+  $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
     btn.addEventListener('click', () => {
