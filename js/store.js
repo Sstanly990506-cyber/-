@@ -115,11 +115,19 @@ async function pushServerState(syncTick) {
       onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（偵測到新版本資料，已自動同步）`, ok: false });
       return;
     }
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
     await readJsonOrThrow(res);
     pendingSyncTick = 0;
     lastSyncAt = Math.max(lastSyncAt, syncTick);
     setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
   } catch (err) {
+=======
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    pendingSyncTick = 0;
+    lastSyncAt = Math.max(lastSyncAt, syncTick);
+    setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
+  } catch {
+>>>>>> main
     pendingSyncTick = 0;
     if (!fileModeOnly) {
       onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
