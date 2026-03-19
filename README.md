@@ -57,7 +57,8 @@ python3 api_server.py --port 4173 --host 127.0.0.1
 
 （若你的系統是 `python` 指令，就把 `python3` 改成 `python`）
 
-這個模式會啟動「集中式資料庫（SQLite）」在專案資料夾 `data.db`。
+這個模式會啟動 Python API，並透過環境變數 `DATABASE_URL` 連到 PostgreSQL（例如 Neon）。
+如果沒有設定 `DATABASE_URL`，API 會無法啟動。
 
 ---
 
@@ -135,7 +136,7 @@ curl -I http://127.0.0.1:4173
 
 ## 資料現在存在哪裡？（白話）
 
-- 目前已支援「集中式資料庫模式」：`start.bat` / `start.sh` / `start-lan.bat` / `start-lan.sh` 會用 `api_server.py + data.db`。
+- 目前已支援「集中式資料庫模式」：`start.bat` / `start.sh` / `start-lan.bat` / `start-lan.sh` 會用 `api_server.py + PostgreSQL(DATABASE_URL)`。
 - 在這個模式下，手機和電腦都連同一台主機網址時，會看到同一份資料。
 - 如果你用 `start-no-python.bat`（PowerShell 靜態模式），資料會回到各裝置瀏覽器本機，不共用。
 
