@@ -1,6 +1,6 @@
-import { formatTs, getTodayText } from './shared.js';
+import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js';
 
-const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents'];
+const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents', 'settings', 'inventoryItems'];
 const API_STATE_URL = '/api/state';
 
 export const state = {
@@ -14,6 +14,8 @@ export const state = {
   receivables: [],
   payables: [],
   systemEvents: [],
+  settings: getDefaultSettings(),
+  inventoryItems: [],
   reportRange: { start: '', end: '' },
   financeScreen: 'main',
   auditFilter: { start: '', end: '', keyword: '' },
@@ -22,6 +24,7 @@ export const state = {
 };
 
 let lastSyncAt = 0;
+let pendingSyncTick = 0;
 let serverSyncEnabled = true;
 let fileModeOnly = false;
 let onRefresh = () => {};
@@ -35,6 +38,9 @@ function applyStatePayload(payload) {
   state.receivables = payload.receivables || [];
   state.payables = payload.payables || [];
   state.systemEvents = payload.systemEvents || [];
+  state.settings = mergeSettings(payload.settings || state.settings || {});
+  state.inventoryItems = payload.inventoryItems || [];
+  state.financePassword = state.settings.financePassword;
 }
 
 function loadLocalState() {
@@ -46,6 +52,8 @@ function loadLocalState() {
     receivables: JSON.parse(localStorage.getItem('receivables') || '[]'),
     payables: JSON.parse(localStorage.getItem('payables') || '[]'),
     systemEvents: JSON.parse(localStorage.getItem('systemEvents') || '[]'),
+    settings: JSON.parse(localStorage.getItem('settings') || 'null'),
+    inventoryItems: JSON.parse(localStorage.getItem('inventoryItems') || '[]'),
   });
 }
 
@@ -57,11 +65,27 @@ function saveLocalState(now) {
   localStorage.setItem('receivables', JSON.stringify(state.receivables));
   localStorage.setItem('payables', JSON.stringify(state.payables));
   localStorage.setItem('systemEvents', JSON.stringify(state.systemEvents));
+  localStorage.setItem('settings', JSON.stringify(state.settings));
+  localStorage.setItem('inventoryItems', JSON.stringify(state.inventoryItems));
   localStorage.setItem('syncTick', String(now));
 }
 
 function setSyncUi(badgeText, source, ts = Date.now()) {
   onSyncUi({ badgeText, detailText: `最後更新：${formatTs(ts)}（${source}）`, ok: true });
+}
+
+async function readJsonOrThrow(res) {
+  let payload = null;
+  try {
+    payload = await res.json();
+  } catch {
+    payload = null;
+  }
+  if (!res.ok) {
+    const message = payload?.error ? `${res.status} ${payload.error}` : `HTTP ${res.status}`;
+    throw new Error(message);
+  }
+  return payload;
 }
 
 async function pushServerState(syncTick) {
@@ -74,6 +98,8 @@ async function pushServerState(syncTick) {
     receivables: state.receivables,
     payables: state.payables,
     systemEvents: state.systemEvents.slice(0, 500),
+    settings: state.settings,
+    inventoryItems: state.inventoryItems,
     syncTick,
   };
 
@@ -84,14 +110,19 @@ async function pushServerState(syncTick) {
       body: JSON.stringify(payload),
     });
     if (res.status === 409) {
+      pendingSyncTick = 0;
       await pullServerState();
       onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（偵測到新版本資料，已自動同步）`, ok: false });
       return;
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  } catch {
+    await readJsonOrThrow(res);
+    pendingSyncTick = 0;
+    lastSyncAt = Math.max(lastSyncAt, syncTick);
+    setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
+  } catch (err) {
+    pendingSyncTick = 0;
     if (!fileModeOnly) {
-      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗（重試中））`, ok: false });
+      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
     }
   }
 }
@@ -100,9 +131,9 @@ export async function pullServerState() {
   if (!serverSyncEnabled) return;
   try {
     const res = await fetch(API_STATE_URL, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const payload = await res.json();
+    const payload = await readJsonOrThrow(res);
     const tick = Number(payload.syncTick || payload.serverUpdatedAt || Date.now());
+    if (pendingSyncTick && tick < pendingSyncTick) return;
     if (tick <= lastSyncAt) return;
     applyStatePayload(payload);
     normalizeStateData();
@@ -110,9 +141,9 @@ export async function pullServerState() {
     lastSyncAt = tick;
     onRefresh();
     setSyncUi('已收到伺服器資料', '集中式資料庫', tick);
-  } catch {
+  } catch (err) {
     if (!fileModeOnly) {
-      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗（重試中））`, ok: false });
+      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
     }
   }
 }
@@ -167,6 +198,17 @@ function normalizeStateData() {
 
   state.audits = state.audits.slice(0, 5000);
   state.systemEvents = state.systemEvents.slice(0, 2000);
+  state.inventoryItems = uniqueById(state.inventoryItems).map((item) => ({
+    ...item,
+    material: String(item.material || '').trim(),
+    category: String(item.category || '').trim(),
+    unit: String(item.unit || '').trim(),
+    note: String(item.note || '').trim(),
+    stock: normalizeMoney(item.stock),
+    safetyStock: normalizeMoney(item.safetyStock),
+  }));
+  state.settings = mergeSettings(state.settings || {});
+  state.financePassword = state.settings.financePassword;
 }
 
 export function getIntegrityReport() {
@@ -212,9 +254,14 @@ export function saveState() {
   normalizeStateData();
   const now = Date.now();
   saveLocalState(now);
-  lastSyncAt = now;
+  if (fileModeOnly || !serverSyncEnabled) {
+    lastSyncAt = now;
+    setSyncUi('已儲存', '本機儲存', now);
+    return;
+  }
+  pendingSyncTick = now;
+  onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(now)}（資料送出中）`, ok: false });
   pushServerState(now);
-  setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', now);
 }
 
 export function configureStore({ refreshFn, syncUiFn }) {
