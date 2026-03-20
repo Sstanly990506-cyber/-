@@ -8,6 +8,7 @@ const state = {
 };
 
 const views = ["loginView", "dashboardView", "ordersView", "customersView", "financeView", "auditView"];
+const API_STATE_URL = "/api/state";
 const $ = (id) => document.getElementById(id);
 
 function openFinanceGate() {
@@ -27,11 +28,41 @@ function openFinanceGate() {
 }
 
 
-function save() {
+function persistLocalCache() {
   localStorage.setItem("glossOptions", JSON.stringify(state.glossOptions));
   localStorage.setItem("customers", JSON.stringify(state.customers));
   localStorage.setItem("orders", JSON.stringify(state.orders));
   localStorage.setItem("audits", JSON.stringify(state.audits));
+}
+
+async function loadRemoteState() {
+  const res = await fetch(API_STATE_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const payload = await res.json();
+  state.glossOptions = Array.isArray(payload.glossOptions) ? payload.glossOptions : state.glossOptions;
+  state.customers = Array.isArray(payload.customers) ? payload.customers : [];
+  state.orders = Array.isArray(payload.orders) ? payload.orders : [];
+  state.audits = Array.isArray(payload.audits) ? payload.audits : [];
+  persistLocalCache();
+}
+
+async function save() {
+  persistLocalCache();
+  const payload = {
+    glossOptions: state.glossOptions,
+    customers: state.customers,
+    orders: state.orders,
+    audits: state.audits,
+    receivables: [],
+    payables: [],
+    syncTick: Date.now(),
+  };
+  const res = await fetch(API_STATE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
 function showView(id) {
@@ -171,8 +202,9 @@ $("addGlossBtn").addEventListener("click", () => {
   if (!val) return;
   if (!state.glossOptions.includes(val)) state.glossOptions.push(val);
   input.value = "";
-  save();
-  renderGlossOptions();
+  save()
+    .then(() => renderGlossOptions())
+    .catch(() => alert("儲存失敗，請確認後端 API 與資料庫連線。"));
 });
 
 $("customerForm").addEventListener("submit", (e) => {
@@ -181,9 +213,12 @@ $("customerForm").addEventListener("submit", (e) => {
   const role = $("customerRole").value;
   if (!name) return;
   state.customers.push({ id: crypto.randomUUID(), name, role, active: true });
-  save();
-  e.target.reset();
-  renderCustomers();
+  save()
+    .then(() => {
+      e.target.reset();
+      renderCustomers();
+    })
+    .catch(() => alert("新增客戶失敗，請確認後端 API 與資料庫連線。"));
 });
 
 $("customersTbody").addEventListener("click", (e) => {
@@ -192,8 +227,9 @@ $("customersTbody").addEventListener("click", (e) => {
   const id = btn.dataset.toggleCustomer;
   const customer = state.customers.find((c) => c.id === id);
   customer.active = !customer.active;
-  save();
-  renderCustomers();
+  save()
+    .then(() => renderCustomers())
+    .catch(() => alert("更新客戶失敗，請確認後端 API 與資料庫連線。"));
 });
 
 $("orderForm").addEventListener("submit", (e) => {
@@ -233,9 +269,12 @@ $("orderForm").addEventListener("submit", (e) => {
     state.orders.unshift(payload);
   }
 
-  save();
-  clearOrderForm();
-  renderOrders();
+  save()
+    .then(() => {
+      clearOrderForm();
+      renderOrders();
+    })
+    .catch(() => alert("儲存工單失敗，請確認後端 API 與資料庫連線。"));
 });
 
 $("ordersTbody").addEventListener("click", (e) => {
@@ -270,3 +309,14 @@ renderGlossOptions();
 renderCustomers();
 renderOrders();
 showView("loginView");
+
+loadRemoteState()
+  .then(() => {
+    renderGlossOptions();
+    renderCustomers();
+    renderOrders();
+    renderAudits();
+  })
+  .catch(() => {
+    console.warn("API 狀態讀取失敗，暫時使用 localStorage 快取。");
+  });

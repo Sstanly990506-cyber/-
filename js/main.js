@@ -1,4 +1,5 @@
 import { $, COMPANY_INFO } from './shared.js';
+import { applyUiSettings, bindSettingsEvents, renderSettings } from './settings.js';
 import {
   state,
   configureStore,
@@ -14,9 +15,12 @@ import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents } from
 import { renderFinance, bindFinanceEvents } from './finance.js';
 import { renderAudits, bindAuditEvents } from './audit.js';
 import { renderTrips, bindTripEvents } from './trips.js';
+import { renderOpsCenter } from './ops-center.js';
+import { renderInventory, bindInventoryEvents } from './inventory.js';
+import { renderNotifications } from './notifications.js';
 
 const APP_BUILD = '2026-03-18-enterprise-core-1';
-const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'financeView', 'auditView'];
+const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
 const REMINDER_LAST_SIGNATURE_KEY = 'smartReminderLastSignature';
@@ -30,11 +34,11 @@ const ACCOUNTS = [
 ];
 
 const ROLE_PERMS = {
-  admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'financeView', 'auditView'],
-  ops: ['dashboardView', 'ordersView', 'customersView', 'tripsView'],
-  finance: ['dashboardView', 'financeView'],
-  audit: ['dashboardView', 'auditView'],
-  viewer: ['dashboardView'],
+  admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView'],
+  ops: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView'],
+  finance: ['dashboardView', 'financeView', 'notificationsView'],
+  audit: ['dashboardView', 'auditView', 'notificationsView'],
+  viewer: ['dashboardView', 'notificationsView'],
 };
 
 function setBuildVersion() {
@@ -59,16 +63,28 @@ function getRolePerms() {
   return ROLE_PERMS[state.userRole || 'viewer'] || ROLE_PERMS.viewer;
 }
 
+function isModuleEnabled(viewId) {
+  if (!viewId || !viewId.endsWith('View') || viewId === 'settingsView' || viewId === 'dashboardView' || viewId === 'loginView') return true;
+  return state.settings?.moduleEnabled?.[viewId] !== false;
+}
+
 function hasViewPermission(viewId) {
+  if (viewId === 'loginView' || viewId === 'dashboardView' || viewId === 'settingsView') return true;
+  if (!isModuleEnabled(viewId)) return false;
+  if (state.settings?.openAccess) return true;
   return getRolePerms().includes(viewId);
 }
 
 function applyRoleUi() {
   document.querySelectorAll('.nav-card').forEach((card) => {
+    const enabled = isModuleEnabled(card.dataset.target);
     const allowed = hasViewPermission(card.dataset.target);
+    card.hidden = !enabled;
     card.disabled = !allowed;
-    card.title = allowed ? '' : '目前帳號沒有此模組權限';
-    card.style.opacity = allowed ? '1' : '0.45';
+    card.classList.toggle('is-locked', !allowed);
+    card.classList.toggle('is-hidden-module', !enabled);
+    card.title = !enabled ? '此模組已在設定中停用' : allowed ? '' : '目前帳號沒有此模組權限';
+    card.style.opacity = allowed ? '1' : '0.5';
     card.style.cursor = allowed ? 'pointer' : 'not-allowed';
   });
 }
@@ -84,20 +100,24 @@ function buildSystemAlerts() {
   const alerts = [];
   const openOrders = state.orders.filter((o) => !['已完成', '已取消'].includes(o.status || '未完成'));
 
-  openOrders.filter((o) => daysFrom(o.orderDate) >= 3).slice(0, 5)
-    .forEach((o) => alerts.push({ level: 'warning', module: '工單', text: `工單 ${o.orderNumber || '-'} 已待處理 ${daysFrom(o.orderDate)} 天` }));
+  const orderWarningDays = Number(state.settings?.orderWarningDays || 3);
+  const receivableOverdueDays = Number(state.settings?.receivableOverdueDays || 30);
+  const payableWarningDays = Number(state.settings?.payableWarningDays || 14);
+
+  openOrders.filter((o) => daysFrom(o.orderDate) >= orderWarningDays).slice(0, 5)
+    .forEach((o) => alerts.push({ level: 'warning', module: '工單', text: `工單 ${o.orderNumber || '-'} 已待處理 ${daysFrom(o.orderDate)} 天（門檻 ${orderWarningDays} 天）` }));
 
   openOrders.filter((o) => !o.address || Number(o.totalPrice || 0) <= 0).slice(0, 5)
     .forEach((o) => alerts.push({ level: 'info', module: '工單', text: `工單 ${o.orderNumber || '-'} 建議補齊${!o.address ? '地址' : ''}${!o.address && Number(o.totalPrice || 0) <= 0 ? '、' : ''}${Number(o.totalPrice || 0) <= 0 ? '總價' : ''}` }));
 
   state.receivables
     .map((r) => ({ ...r, remain: Math.max(0, Number(r.amount || 0) - Number(r.received || 0)) }))
-    .filter((r) => r.remain > 0 && daysFrom(r.date) >= 30).slice(0, 5)
+    .filter((r) => r.remain > 0 && daysFrom(r.date) >= receivableOverdueDays).slice(0, 5)
     .forEach((r) => alerts.push({ level: 'critical', module: '財經', text: `應收逾期 ${daysFrom(r.date)} 天：${r.customer || '-'} / ${r.orderNumber || '-'} / 未收 ${r.remain.toLocaleString()}` }));
 
   state.payables
     .map((p) => ({ ...p, unpaid: Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)) }))
-    .filter((p) => p.unpaid > 0 && daysFrom(p.date) >= 14).slice(0, 5)
+    .filter((p) => p.unpaid > 0 && daysFrom(p.date) >= payableWarningDays).slice(0, 5)
     .forEach((p) => alerts.push({ level: 'warning', module: '財經', text: `應付待付款：${p.vendor || '-'} / ${p.item || '-'} / 未付 ${p.unpaid.toLocaleString()}` }));
 
   const inactiveNames = new Set(state.customers.filter((c) => c.active === false).map((c) => (c.name || '').trim()));
@@ -105,6 +125,9 @@ function buildSystemAlerts() {
     .filter((o) => inactiveNames.has((o.upstream || '').trim()) || inactiveNames.has((o.downstream || '').trim()))
     .slice(0, 5)
     .forEach((o) => alerts.push({ level: 'warning', module: '客戶', text: `工單 ${o.orderNumber || '-'} 使用了停用客戶` }));
+
+  const inventoryWarnings = state.inventoryItems.filter((item) => Number(item.stock || 0) <= Number(item.safetyStock || 0));
+  inventoryWarnings.slice(0, 5).forEach((item) => alerts.push({ level: 'warning', module: '庫存', text: `${item.material || '-'} 庫存偏低：${item.stock || 0} / 安全量 ${item.safetyStock || 0}` }));
 
   const today = new Date().toISOString().slice(0, 10);
   const priceChangesToday = state.audits.filter((a) => a.field === '總價' && String(a.changedAt || '').includes(today));
@@ -178,6 +201,7 @@ function renderDashboard() {
   const todayCount = state.orders.filter((o) => (o.orderDate || '').slice(0, 10) === today).length;
   const pending = state.orders.filter((o) => (o.status || '未完成') !== '已完成').length;
   const recvOutstanding = state.receivables.reduce((sum, r) => sum + Math.max(0, Number(r.amount || 0) - Number(r.received || 0)), 0);
+  const inventoryWarnings = state.inventoryItems.filter((item) => Number(item.stock || 0) <= Number(item.safetyStock || 0));
   const topCustomer = Object.entries(state.orders.reduce((acc, o) => {
     const c = (o.downstream || o.upstream || '').trim();
     if (!c) return acc;
@@ -194,13 +218,14 @@ function renderDashboard() {
   if (tip) {
     const customerText = topCustomer ? `熱度最高客戶：${topCustomer[0]}（${topCustomer[1]} 筆）` : '尚無客戶熱度資料';
     const riskText = alerts.length ? `智能提醒 ${alerts.length} 筆（風險 ${getRiskScore(alerts)}）` : '智能提醒 0 筆';
-    tip.textContent = `智能總覽：待處理工單 ${pending} 筆，應收未收約 NT$ ${recvOutstanding.toLocaleString()}。${customerText}｜資料完整性 C:${integrity.critical}/W:${integrity.warning}｜${riskText}｜${COMPANY_INFO.name}`;
+    tip.textContent = `智能總覽：待處理工單 ${pending} 筆，應收未收約 NT$ ${recvOutstanding.toLocaleString()}。${customerText}｜低庫存 ${inventoryWarnings.length} 項｜資料完整性 C:${integrity.critical}/W:${integrity.warning}｜${riskText}｜${COMPANY_INFO.name}`;
   }
 
   applyRoleUi();
 }
 
 function renderAll() {
+  applyUiSettings(state);
   renderDashboard();
   renderCustomers(state);
   renderOrders(state, renderCustomerOptions);
@@ -208,9 +233,17 @@ function renderAll() {
   renderFinance(state);
   renderOrderScreen(state);
   renderTrips(state);
+  renderOpsCenter(state);
+  renderInventory(state);
+  renderNotifications(state);
+  renderSettings(state);
 }
 
 function showView(id) {
+  if (id !== 'loginView' && !state.user) {
+    alert('請先登入系統。');
+    return;
+  }
   if (id !== 'loginView' && !hasViewPermission(id)) {
     appendSystemEvent(`權限拒絕：嘗試進入 ${id}`, 'warning', { role: state.userRole || 'viewer' });
     saveState();
@@ -227,7 +260,8 @@ function showView(id) {
 }
 
 function openFinanceGate() {
-  if (!hasViewPermission('financeView')) return alert('此帳號沒有財經模組權限。');
+  if (!hasViewPermission('financeView')) return alert(isModuleEnabled('financeView') ? '此帳號沒有財經模組權限。' : '財經模組目前已停用。');
+  if (state.settings?.openAccess || !state.settings?.financeGateEnabled) return showView('financeView');
   const dialog = $('financeDialog');
   if (dialog && typeof dialog.showModal === 'function') return dialog.showModal();
   const input = window.prompt('請輸入財經系統密碼');
@@ -246,10 +280,18 @@ function bindCoreEvents() {
 
     state.user = account.display;
     state.userRole = account.role;
-    $('welcomeText').textContent = `你好，${state.user}（${state.userRole}）`;
+    const prefix = state.settings?.welcomePrefix || '你好';
+    $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
     appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
     saveState();
-    showView('dashboardView');
+    const landing = state.settings?.defaultLandingView || 'dashboardView';
+    showView(hasViewPermission(landing) ? landing : 'dashboardView');
+  });
+
+  document.addEventListener('click', (e) => {
+    const opener = e.target.closest('[data-open-view]');
+    if (!opener) return;
+    showView(opener.dataset.openView);
   });
 
   $('logoutBtn')?.addEventListener('click', () => {
@@ -284,25 +326,45 @@ function bindCoreEvents() {
   });
 
   window.addEventListener('keydown', (e) => {
+    if (!state.settings?.enableKeyboardShortcut) return;
     if (e.key.toLowerCase() === 'a' && !$('dashboardView').classList.contains('hidden')) showView('auditView');
   });
 }
 
-configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
-setBuildVersion();
-initializeStore();
-clearOrderForm();
-bindCoreEvents();
-bindCustomerEvents(state, saveState, renderAll);
-bindOrderEvents(state, saveState, renderAll);
-bindFinanceEvents(state, saveState, renderAll);
-bindAuditEvents(state);
-bindTripEvents(state, saveState, renderAll);
-renderAll();
-showView('loginView');
-startStoreSync();
-pullServerState();
+function bootstrapFailed(err) {
+  console.error(err);
+  const message = `系統初始化失敗：${err?.message || err}`;
+  if ($('appLoginMessage')) $('appLoginMessage').textContent = message;
+  if ($('buildVersion')) $('buildVersion').textContent = '版本：初始化失敗';
+  $('loginForm')?.addEventListener('submit', (e) => {
+    if (window.__appBootstrapped) return;
+    e.preventDefault();
+    alert(`${message}\n請先按 Ctrl + F5 強制重新整理；若仍失敗，再檢查 /api/health。`);
+  });
+}
 
-setInterval(() => {
-  if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
-}, 60000);
+try {
+  configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
+  setBuildVersion();
+  initializeStore();
+  clearOrderForm();
+  bindCoreEvents();
+  bindCustomerEvents(state, saveState, renderAll);
+  bindOrderEvents(state, saveState, renderAll);
+  bindFinanceEvents(state, saveState, renderAll);
+  bindAuditEvents(state);
+  bindTripEvents(state, saveState, renderAll);
+  bindInventoryEvents(state, saveState, renderAll);
+  bindSettingsEvents(state, saveState, renderAll);
+  window.__appBootstrapped = true;
+  renderAll();
+  showView('loginView');
+  startStoreSync();
+  pullServerState();
+
+  setInterval(() => {
+    if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
+  }, 60000);
+} catch (err) {
+  bootstrapFailed(err);
+}
