@@ -65,7 +65,10 @@ function loadLocalState() {
     systemEvents: readStorageJson('systemEvents', []),
     settings: readStorageJson('settings', null),
     inventoryItems: readStorageJson('inventoryItems', []),
+<<<<<< codex-d2sdch
     users: readStorageJson('users', []),
+=======
+>>>>>> main
   });
 }
 
