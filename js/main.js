@@ -331,6 +331,45 @@ function bindCoreEvents() {
   });
 }
 
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
+function bootstrapFailed(err) {
+  console.error(err);
+  const message = `系統初始化失敗：${err?.message || err}`;
+  if ($('appLoginMessage')) $('appLoginMessage').textContent = message;
+  if ($('buildVersion')) $('buildVersion').textContent = '版本：初始化失敗';
+  $('loginForm')?.addEventListener('submit', (e) => {
+    if (window.__appBootstrapped) return;
+    e.preventDefault();
+    alert(`${message}\n請先按 Ctrl + F5 強制重新整理；若仍失敗，再檢查 /api/health。`);
+  });
+}
+
+try {
+  configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
+  setBuildVersion();
+  initializeStore();
+  clearOrderForm();
+  bindCoreEvents();
+  bindCustomerEvents(state, saveState, renderAll);
+  bindOrderEvents(state, saveState, renderAll);
+  bindFinanceEvents(state, saveState, renderAll);
+  bindAuditEvents(state);
+  bindTripEvents(state, saveState, renderAll);
+  bindInventoryEvents(state, saveState, renderAll);
+  bindSettingsEvents(state, saveState, renderAll);
+  renderAll();
+  showView('loginView');
+  startStoreSync();
+  pullServerState();
+  window.__appBootstrapped = true;
+
+  setInterval(() => {
+    if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
+  }, 60000);
+} catch (err) {
+  bootstrapFailed(err);
+}
+=======
 configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
 setBuildVersion();
 initializeStore();
@@ -351,3 +390,4 @@ pullServerState();
 setInterval(() => {
   if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
 }, 60000);
+>>>>>> main
