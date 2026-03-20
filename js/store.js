@@ -41,7 +41,10 @@ function applyStatePayload(payload) {
   state.settings = mergeSettings(payload.settings || state.settings || {});
   state.inventoryItems = payload.inventoryItems || [];
   state.financePassword = state.settings.financePassword;
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
+=======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
+>>>>>> main
 }
 
 function readStorageJson(key, fallback) {
@@ -51,13 +54,19 @@ function readStorageJson(key, fallback) {
   } catch {
     return fallback;
   }
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
 =======
+=======
+>>>>>> main
 >>>>>> main
 }
 
 function loadLocalState() {
   applyStatePayload({
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
+=======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
+>>>>>> main
     glossOptions: readStorageJson('glossOptions', ['PVA光', 'PVB光/油', '耐磨', '壓光']),
     customers: readStorageJson('customers', []),
     orders: readStorageJson('orders', []),
@@ -67,6 +76,8 @@ function loadLocalState() {
     systemEvents: readStorageJson('systemEvents', []),
     settings: readStorageJson('settings', null),
     inventoryItems: readStorageJson('inventoryItems', []),
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
+=======
 =======
     glossOptions: JSON.parse(localStorage.getItem('glossOptions') || '["PVA光","PVB光/油","耐磨","壓光"]'),
     customers: JSON.parse(localStorage.getItem('customers') || '[]'),
@@ -77,6 +88,7 @@ function loadLocalState() {
     systemEvents: JSON.parse(localStorage.getItem('systemEvents') || '[]'),
     settings: JSON.parse(localStorage.getItem('settings') || 'null'),
     inventoryItems: JSON.parse(localStorage.getItem('inventoryItems') || '[]'),
+>>>>>> main
 >>>>>> main
   });
 }
@@ -139,15 +151,20 @@ async function pushServerState(syncTick) {
       onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（偵測到新版本資料，已自動同步）`, ok: false });
       return;
     }
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
+=======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
 =======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
+>>>>>> main
 >>>>>> main
     await readJsonOrThrow(res);
     pendingSyncTick = 0;
     lastSyncAt = Math.max(lastSyncAt, syncTick);
     setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
   } catch (err) {
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
+=======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
 =======
 =======
@@ -156,6 +173,7 @@ async function pushServerState(syncTick) {
     lastSyncAt = Math.max(lastSyncAt, syncTick);
     setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
   } catch {
+>>>>>> main
 >>>>>> main
 >>>>>> main
     pendingSyncTick = 0;
