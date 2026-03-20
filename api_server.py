@@ -11,9 +11,13 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from flask import Flask, abort, jsonify, request, send_from_directory
 from psycopg import connect
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-1rr649
+from psycopg import Error as PsycopgError
+=======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
 from psycopg import Error as PsycopgError
 =======
+>>>>>> main
 >>>>>> main
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -221,7 +225,10 @@ def is_sensitive_path(path: str) -> bool:
     return any(normalized.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
 
 
+<<<<< codex/add-options-for-loading-and-delivery-in-tickets-1rr649
+=======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
+>>>>> main
 def json_error(message, status=500):
     return jsonify({"ok": False, "error": message}), status
 
@@ -247,6 +254,8 @@ def get_state():
 
 @app.post("/api/state")
 @app.post("/state")
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-1rr649
+=======
 =======
 @app.get("/api/health")
 def health():
@@ -261,6 +270,7 @@ def get_state():
 
 @app.post("/api/state")
 >>>>>> main
+>>>>>> main
 def post_state():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -271,13 +281,19 @@ def post_state():
         if key not in payload:
             return jsonify({"error": f"missing key: {key}"}), 400
 
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-1rr649
+=======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
+>>>>>> main
     try:
         ok, tick = write_state(payload)
     except (RuntimeError, PsycopgError) as err:
         return json_error(str(err), 500)
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-1rr649
+=======
 =======
     ok, tick = write_state(payload)
+>>>>>> main
 >>>>>> main
     if not ok:
         return jsonify({"error": "stale syncTick", "serverSyncTick": tick}), 409
@@ -285,9 +301,13 @@ def post_state():
 
 
 @app.post("/api/trips/optimize")
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-1rr649
+@app.post("/trips/optimize")
+=======
 <<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
 @app.post("/trips/optimize")
 =======
+>>>>>> main
 >>>>>> main
 def post_optimize_trip():
     payload = request.get_json(silent=True)
