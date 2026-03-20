@@ -279,14 +279,9 @@ function bindCoreEvents() {
     const account = ACCOUNTS.find((a) => a.username === username && a.password === password);
     if (!account && ACCOUNTS.some((a) => a.username === username)) return alert('帳號或密碼錯誤');
 
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
     const effectiveAccount = account || { role: 'admin', display: username };
     state.user = effectiveAccount.display;
     state.userRole = effectiveAccount.role;
-=======
-    state.user = account.display;
-    state.userRole = account.role;
->>>>>> main
     const prefix = state.settings?.welcomePrefix || '你好';
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
     appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
@@ -338,10 +333,6 @@ function bindCoreEvents() {
   });
 }
 
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
->>>>>> main
 function bootstrapFailed(err) {
   console.error(err);
   const message = `系統初始化失敗：${err?.message || err}`;
@@ -367,18 +358,11 @@ try {
   bindTripEvents(state, saveState, renderAll);
   bindInventoryEvents(state, saveState, renderAll);
   bindSettingsEvents(state, saveState, renderAll);
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-  window.__appBootstrapped = true;
-=======
->>>>>> main
   renderAll();
+  window.__appBootstrapped = true;
   showView('loginView');
   startStoreSync();
   pullServerState();
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-  window.__appBootstrapped = true;
->>>>>> main
 
   setInterval(() => {
     if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
@@ -386,28 +370,3 @@ try {
 } catch (err) {
   bootstrapFailed(err);
 }
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-=======
-configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
-setBuildVersion();
-initializeStore();
-clearOrderForm();
-bindCoreEvents();
-bindCustomerEvents(state, saveState, renderAll);
-bindOrderEvents(state, saveState, renderAll);
-bindFinanceEvents(state, saveState, renderAll);
-bindAuditEvents(state);
-bindTripEvents(state, saveState, renderAll);
-bindInventoryEvents(state, saveState, renderAll);
-bindSettingsEvents(state, saveState, renderAll);
-renderAll();
-showView('loginView');
-startStoreSync();
-pullServerState();
-
-setInterval(() => {
-  if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
-}, 60000);
->>>>>> main
->>>>>> main
