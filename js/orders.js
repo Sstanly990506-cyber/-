@@ -194,6 +194,23 @@ function renderOrderFilters(state) {
   wrap.innerHTML = items.map((status) => `<button class="btn filter-btn ${state.orderStatusFilter === status ? 'active' : ''}" data-status-filter="${status}" type="button">${status}</button>`).join('');
 }
 
+function getOrderSearchKeyword() {
+  return ($('orderSearch')?.value || '').trim().toLowerCase();
+}
+
+function matchesOrderSearch(order, keyword) {
+  if (!keyword) return true;
+  return [
+    order.orderNumber,
+    order.orderDate,
+    order.upstream,
+    order.downstream,
+    order.address,
+    order.status,
+    order.updatedAt,
+  ].some((value) => String(value || '').toLowerCase().includes(keyword));
+}
+
 function renderGlossOptions(state) {
   const select = $('glossType');
   select.innerHTML = '';
@@ -215,7 +232,11 @@ export function renderOrders(state, renderCustomerOptions) {
 
   const settings = getOrderModuleSettings(state);
   const visibleStatuses = new Set(getEnabledOrderStatuses(state));
-  const filtered = state.orders.filter((order) => visibleStatuses.has(order.status || '未完成')).filter((order) => (state.orderStatusFilter === '全部' ? true : order.status === state.orderStatusFilter));
+  const keyword = getOrderSearchKeyword();
+  const filtered = state.orders
+    .filter((order) => visibleStatuses.has(order.status || '未完成'))
+    .filter((order) => (state.orderStatusFilter === '全部' ? true : order.status === state.orderStatusFilter))
+    .filter((order) => matchesOrderSearch(order, keyword));
 
   filtered.forEach((order) => {
     const tr = document.createElement('tr');
@@ -377,4 +398,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       renderAll();
     });
   });
+
+  $('orderSearch')?.addEventListener('input', () => renderAll());
+  $('orderSearch')?.addEventListener('change', () => renderAll());
 }

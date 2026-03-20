@@ -85,6 +85,9 @@
 
           <article id="ordersListScreen" class="card">
             <h3>工單列表</h3>
+            <div class="filter-row">
+              <input id="orderSearch" placeholder="搜尋工單編號 / 客戶 / 地址 / 狀態" />
+            </div>
             <div class="filter-row" id="orderStatusFilters"></div>
             <div class="table-wrap">
               <table>
@@ -295,38 +298,7 @@
               <label>單位<input id="inventoryUnit" placeholder="kg / 箱 / 捲" /></label>
               <label>安全庫存<input id="inventorySafetyStock" type="number" min="0" step="0.01" /></label>
               <label>備註<input id="inventoryNote" /></label>
-
-          <article class="card">
-            <h3>模組內部細節設定</h3>
-            <div class="settings-internal-grid">
-              <div class="settings-subgroup">
-                <h4>工單系統</h4>
-                <label class="settings-switch"><input id="settingsOrderShowFilters" type="checkbox" /><span>顯示狀態篩選按鈕</span></label>
-                <label class="settings-switch"><input id="settingsOrderShowExport" type="checkbox" /><span>顯示工單匯出按鈕</span></label>
-                <label class="settings-switch"><input id="settingsOrderStatusPending" type="checkbox" /><span>顯示「未完成」狀態</span></label>
-                <label class="settings-switch"><input id="settingsOrderStatusSent" type="checkbox" /><span>顯示「已送出」狀態</span></label>
-                <label class="settings-switch"><input id="settingsOrderStatusDone" type="checkbox" /><span>顯示「已完成」狀態</span></label>
-                <label class="settings-switch"><input id="settingsOrderQuickSent" type="checkbox" /><span>顯示快速動作「已送出」</span></label>
-                <label class="settings-switch"><input id="settingsOrderQuickDone" type="checkbox" /><span>顯示快速動作「已完成」</span></label>
-              </div>
-              <div class="settings-subgroup">
-                <h4>客戶資料系統</h4>
-                <label class="settings-switch"><input id="settingsCustomerRoleUpstream" type="checkbox" /><span>顯示角色「上游」</span></label>
-                <label class="settings-switch"><input id="settingsCustomerRoleDownstream" type="checkbox" /><span>顯示角色「下游」</span></label>
-                <label class="settings-switch"><input id="settingsCustomerRoleBoth" type="checkbox" /><span>顯示角色「兩者」</span></label>
-              </div>
-              <div class="settings-subgroup">
-                <h4>車趟系統</h4>
-                <label class="settings-switch"><input id="settingsTripTypeDelivery" type="checkbox" /><span>顯示類型「送貨」</span></label>
-                <label class="settings-switch"><input id="settingsTripTypePickup" type="checkbox" /><span>顯示類型「載貨」</span></label>
-                <label class="settings-switch"><input id="settingsTripShowManualStopForm" type="checkbox" /><span>顯示手動新增站點區塊</span></label>
-                <label class="settings-switch"><input id="settingsTripShowOrderPool" type="checkbox" /><span>顯示工單勾選區塊</span></label>
-                <label class="settings-switch"><input id="settingsTripShowManualRoute" type="checkbox" /><span>顯示手動路線調整區塊</span></label>
-              </div>
-            </div>
-          </article>
-
-          <div class="actions">
+              <div class="actions">
                 <button class="btn primary" type="submit">儲存品項</button>
                 <button class="btn" type="button" id="inventoryClearBtn">清空</button>
               </div>
@@ -583,6 +555,37 @@
             <h3>功能模組設定</h3>
             <p class="sub">可以重新命名每個模組，並決定是否對全站顯示。</p>
             <div id="settingsModulesList" class="settings-modules-list"></div>
+          </article>
+
+          <article class="card">
+            <h3>模組內部細節設定</h3>
+            <p class="sub">工單、客戶與車趟的細項開關統一集中在設定頁管理。</p>
+            <div class="settings-internal-grid">
+              <div class="settings-subgroup">
+                <h4>工單系統</h4>
+                <label class="settings-switch"><input id="settingsOrderShowFilters" type="checkbox" /><span>顯示狀態篩選按鈕</span></label>
+                <label class="settings-switch"><input id="settingsOrderShowExport" type="checkbox" /><span>顯示工單匯出按鈕</span></label>
+                <label class="settings-switch"><input id="settingsOrderStatusPending" type="checkbox" /><span>顯示「未完成」狀態</span></label>
+                <label class="settings-switch"><input id="settingsOrderStatusSent" type="checkbox" /><span>顯示「已送出」狀態</span></label>
+                <label class="settings-switch"><input id="settingsOrderStatusDone" type="checkbox" /><span>顯示「已完成」狀態</span></label>
+                <label class="settings-switch"><input id="settingsOrderQuickSent" type="checkbox" /><span>顯示快速動作「已送出」</span></label>
+                <label class="settings-switch"><input id="settingsOrderQuickDone" type="checkbox" /><span>顯示快速動作「已完成」</span></label>
+              </div>
+              <div class="settings-subgroup">
+                <h4>客戶資料系統</h4>
+                <label class="settings-switch"><input id="settingsCustomerRoleUpstream" type="checkbox" /><span>顯示角色「上游」</span></label>
+                <label class="settings-switch"><input id="settingsCustomerRoleDownstream" type="checkbox" /><span>顯示角色「下游」</span></label>
+                <label class="settings-switch"><input id="settingsCustomerRoleBoth" type="checkbox" /><span>顯示角色「兩者」</span></label>
+              </div>
+              <div class="settings-subgroup">
+                <h4>車趟系統</h4>
+                <label class="settings-switch"><input id="settingsTripTypeDelivery" type="checkbox" /><span>顯示類型「送貨」</span></label>
+                <label class="settings-switch"><input id="settingsTripTypePickup" type="checkbox" /><span>顯示類型「載貨」</span></label>
+                <label class="settings-switch"><input id="settingsTripShowManualStopForm" type="checkbox" /><span>顯示手動新增站點區塊</span></label>
+                <label class="settings-switch"><input id="settingsTripShowOrderPool" type="checkbox" /><span>顯示工單勾選區塊</span></label>
+                <label class="settings-switch"><input id="settingsTripShowManualRoute" type="checkbox" /><span>顯示手動路線調整區塊</span></label>
+              </div>
+            </div>
           </article>
 
           <div class="actions">
