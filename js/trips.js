@@ -1,6 +1,6 @@
 import { $, money } from './shared.js';
 import { DEFAULT_FACTORY } from './trips/constants.js';
-import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, validateBusinessRoute, buildGoogleMapsUrl } from './trips/core.js';
+import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl } from './trips/core.js';
 import { formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js';
 
 let manualStops = [];
@@ -192,7 +192,6 @@ async function runOptimize(state) {
 
 function confirmManualRoute() {
   if (!manualRoute.length) return alert('請先點「最佳化車輛」產生路線');
-  if (!validateBusinessRoute(manualRoute)) return alert('目前路線不合法：pickup 不能排在 delivery 前面');
 
   const score = evaluateRoute(manualRoute);
   if (lastResult) {
@@ -306,10 +305,6 @@ export function bindTripEvents(state, saveState, renderAllApp) {
     const target = up ? idx - 1 : idx + 1;
     if (target <= 0 || target >= manualRoute.length - 1) return;
     [manualRoute[idx], manualRoute[target]] = [manualRoute[target], manualRoute[idx]];
-    if (!validateBusinessRoute(manualRoute)) {
-      [manualRoute[idx], manualRoute[target]] = [manualRoute[target], manualRoute[idx]];
-      return alert('不合法：pickup 不能排在 delivery 前面');
-    }
     manualRouteConfirmed = false;
     updateManualHint();
     renderManualRoute(manualRoute, manualRouteConfirmed);
