@@ -28,6 +28,7 @@ DEFAULT_APP_STATE = {
     "systemEvents": [],
     "settings": None,
     "inventoryItems": [],
+    "users": [],
     "syncTick": 0,
 }
 DB_INIT_LOCK = Lock()

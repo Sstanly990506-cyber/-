@@ -13,18 +13,31 @@
         <p id="appLoginAddress" class="sub">No. 53, Liyan St, Zhonghe District, New Taipei City, Taiwan 235</p>
         <p id="appLoginMessage" class="sub">請先登入系統</p>
         <p id="buildVersion" class="build-version"></p>
-        <form id="loginForm" class="form-grid compact" action="javascript:void(0)">
-          <label>帳號<input id="username" required /></label>
-          <label>密碼<input id="password" type="password" required /></label>
-          <button class="btn primary" type="submit">登入</button>
-        </form>
+        <div class="login-grid">
+          <form id="loginForm" class="form-grid compact" action="javascript:void(0)">
+            <h3>登入帳號</h3>
+            <label>帳號<input id="username" required /></label>
+            <label>密碼<input id="password" type="password" required /></label>
+            <button class="btn primary" type="submit">登入</button>
+          </form>
+          <form id="registerForm" class="form-grid compact login-register-card" action="javascript:void(0)">
+            <h3>註冊新帳號</h3>
+            <label>顯示名稱<input id="registerDisplay" placeholder="例如：王小明" required /></label>
+            <label>帳號<input id="registerUsername" placeholder="至少 3 碼" required /></label>
+            <label>密碼<input id="registerPassword" type="password" placeholder="至少 4 碼" required /></label>
+            <label>確認密碼<input id="registerConfirmPassword" type="password" required /></label>
+            <button class="btn" type="submit">註冊帳號</button>
+            <p class="sub">註冊成功後可直接用新帳號登入。</p>
+          </form>
+        </div>
       </section>
 
       <section id="dashboardView" class="panel hidden">
         <header class="topbar card">
           <div class="topbar-heading">
-            <h2>功能導航</h2>
+            <h2 id="dashboardHeroTitle">讓每個角色都能快速上手的營運控制台</h2>
             <p id="dashboardHeroSubtitle" class="sub">整合工單、客戶、車趟、財務與稽核的智慧中控台</p>
+            <p id="dashboardAnnouncement" class="sub">建議每日由營運中心追蹤待辦、由通知中心檢視異常提醒。</p>
           </div>
           <div>
             <span id="welcomeText"></span>
@@ -34,14 +47,6 @@
             <button id="logoutBtn" class="btn ghost" type="button">登出</button>
           </div>
         </header>
-
-        <article class="card dashboard-message-card">
-          <div>
-            <p class="sub">首頁訊息</p>
-            <h3 id="dashboardHeroTitle">讓每個角色都能快速上手的營運控制台</h3>
-          </div>
-          <p id="dashboardAnnouncement" class="sub dashboard-announcement">建議每日由營運中心追蹤待辦、由通知中心檢視異常提醒。</p>
-        </article>
 
         <div class="dashboard-summary-grid">
           <article class="card">

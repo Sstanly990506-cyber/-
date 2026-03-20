@@ -1,6 +1,6 @@
 import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js';
 
-const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents', 'settings', 'inventoryItems'];
+const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents', 'settings', 'inventoryItems', 'users'];
 const API_STATE_URL = '/api/state';
 
 export const state = {
@@ -16,6 +16,7 @@ export const state = {
   systemEvents: [],
   settings: getDefaultSettings(),
   inventoryItems: [],
+  users: [],
   reportRange: { start: '', end: '' },
   financeScreen: 'main',
   auditFilter: { start: '', end: '', keyword: '' },
@@ -40,6 +41,7 @@ function applyStatePayload(payload) {
   state.systemEvents = payload.systemEvents || [];
   state.settings = mergeSettings(payload.settings || state.settings || {});
   state.inventoryItems = payload.inventoryItems || [];
+  state.users = payload.users || [];
   state.financePassword = state.settings.financePassword;
 }
 
@@ -63,6 +65,10 @@ function loadLocalState() {
     systemEvents: readStorageJson('systemEvents', []),
     settings: readStorageJson('settings', null),
     inventoryItems: readStorageJson('inventoryItems', []),
+<<<<<< codex-d2sdch
+    users: readStorageJson('users', []),
+=======
+>>>>>> main
   });
 }
 
@@ -76,6 +82,7 @@ function saveLocalState(now) {
   localStorage.setItem('systemEvents', JSON.stringify(state.systemEvents));
   localStorage.setItem('settings', JSON.stringify(state.settings));
   localStorage.setItem('inventoryItems', JSON.stringify(state.inventoryItems));
+  localStorage.setItem('users', JSON.stringify(state.users));
   localStorage.setItem('syncTick', String(now));
 }
 
@@ -109,6 +116,7 @@ async function pushServerState(syncTick) {
     systemEvents: state.systemEvents.slice(0, 500),
     settings: state.settings,
     inventoryItems: state.inventoryItems,
+    users: state.users,
     syncTick,
   };
 
@@ -216,6 +224,13 @@ function normalizeStateData() {
     stock: normalizeMoney(item.stock),
     safetyStock: normalizeMoney(item.safetyStock),
   }));
+  state.users = uniqueById(state.users).map((user) => ({
+    ...user,
+    username: String(user.username || '').trim(),
+    password: String(user.password || ''),
+    display: String(user.display || user.username || '').trim(),
+    role: String(user.role || 'viewer').trim() || 'viewer',
+  })).filter((user) => user.username && user.password);
   state.settings = mergeSettings(state.settings || {});
   state.financePassword = state.settings.financePassword;
 }
