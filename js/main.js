@@ -331,6 +331,7 @@ function bindCoreEvents() {
   });
 }
 
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-1rr649
 function bootstrapFailed(err) {
   console.error(err);
   const message = `系統初始化失敗：${err?.message || err}`;
@@ -368,3 +369,25 @@ try {
 } catch (err) {
   bootstrapFailed(err);
 }
+=======
+configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
+setBuildVersion();
+initializeStore();
+clearOrderForm();
+bindCoreEvents();
+bindCustomerEvents(state, saveState, renderAll);
+bindOrderEvents(state, saveState, renderAll);
+bindFinanceEvents(state, saveState, renderAll);
+bindAuditEvents(state);
+bindTripEvents(state, saveState, renderAll);
+bindInventoryEvents(state, saveState, renderAll);
+bindSettingsEvents(state, saveState, renderAll);
+renderAll();
+showView('loginView');
+startStoreSync();
+pullServerState();
+
+setInterval(() => {
+  if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
+}, 60000);
+>>>>>> main
