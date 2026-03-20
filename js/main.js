@@ -331,6 +331,10 @@ function bindCoreEvents() {
   });
 }
 
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-azdi54
+=======
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
+>>>>>> main
 function bootstrapFailed(err) {
   console.error(err);
   const message = `系統初始化失敗：${err?.message || err}`;
@@ -356,11 +360,18 @@ try {
   bindTripEvents(state, saveState, renderAll);
   bindInventoryEvents(state, saveState, renderAll);
   bindSettingsEvents(state, saveState, renderAll);
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-azdi54
   window.__appBootstrapped = true;
+=======
+>>>>>> main
   renderAll();
   showView('loginView');
   startStoreSync();
   pullServerState();
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-azdi54
+=======
+  window.__appBootstrapped = true;
+>>>>>> main
 
   setInterval(() => {
     if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
@@ -368,3 +379,28 @@ try {
 } catch (err) {
   bootstrapFailed(err);
 }
+<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-azdi54
+=======
+=======
+configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
+setBuildVersion();
+initializeStore();
+clearOrderForm();
+bindCoreEvents();
+bindCustomerEvents(state, saveState, renderAll);
+bindOrderEvents(state, saveState, renderAll);
+bindFinanceEvents(state, saveState, renderAll);
+bindAuditEvents(state);
+bindTripEvents(state, saveState, renderAll);
+bindInventoryEvents(state, saveState, renderAll);
+bindSettingsEvents(state, saveState, renderAll);
+renderAll();
+showView('loginView');
+startStoreSync();
+pullServerState();
+
+setInterval(() => {
+  if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
+}, 60000);
+>>>>>> main
+>>>>>> main
