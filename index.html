@@ -630,6 +630,59 @@
       </form>
     </dialog>
 
+    <script>
+      (() => {
+        window.__appBootstrapped = false;
+        const fallbackAccounts = {
+          admin: 'admin123',
+          ops: 'ops123',
+          finance: 'finance123',
+          audit: 'audit123',
+        };
+
+        const allViews = () => Array.from(document.querySelectorAll('.panel')).map((panel) => panel.id);
+        const fallbackShowView = (id) => {
+          allViews().forEach((viewId) => document.getElementById(viewId)?.classList.add('hidden'));
+          document.getElementById(id)?.classList.remove('hidden');
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+          const loginForm = document.getElementById('loginForm');
+          loginForm?.addEventListener('submit', (e) => {
+            if (window.__appBootstrapped) return;
+            e.preventDefault();
+            const username = document.getElementById('username')?.value.trim() || '';
+            const password = document.getElementById('password')?.value || '';
+            if (fallbackAccounts[username] !== password) {
+              window.alert('帳號或密碼錯誤');
+              return;
+            }
+            const welcome = document.getElementById('welcomeText');
+            if (welcome) welcome.textContent = `你好，${username}`;
+            const build = document.getElementById('buildVersion');
+            if (build && !build.textContent) build.textContent = '版本：降級模式';
+            const loginMessage = document.getElementById('appLoginMessage');
+            if (loginMessage) loginMessage.textContent = '主腳本尚未完成啟動，已切換為降級模式。請稍後重新整理頁面。';
+            const syncDetail = document.getElementById('syncDetail');
+            if (syncDetail) syncDetail.textContent = '前端降級模式（主腳本未啟動）';
+            fallbackShowView('dashboardView');
+          });
+
+          document.querySelectorAll('[data-back]').forEach((btn) => btn.addEventListener('click', () => {
+            if (!window.__appBootstrapped) fallbackShowView('dashboardView');
+          }));
+          document.querySelectorAll('[data-open-view]').forEach((btn) => btn.addEventListener('click', () => {
+            if (!window.__appBootstrapped) fallbackShowView(btn.dataset.openView);
+          }));
+          document.querySelectorAll('.nav-card').forEach((card) => card.addEventListener('click', () => {
+            if (!window.__appBootstrapped) fallbackShowView(card.dataset.target);
+          }));
+          document.getElementById('logoutBtn')?.addEventListener('click', () => {
+            if (!window.__appBootstrapped) fallbackShowView('loginView');
+          });
+        });
+      })();
+    </script>
     <script type="module" src="js/main.js"></script>
   </body>
 </html>
