@@ -74,6 +74,18 @@ h1,h2,h3,h4 { margin: 0 0 10px; }
 }
 .form-grid { display: grid; gap: 12px; }
 .form-grid.compact { max-width: 420px; }
+.login-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.login-register-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.38);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
 .order-grid,
 .settings-form-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .span-2 { grid-column: span 2; }
@@ -404,28 +416,9 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   background: rgba(15, 23, 42, 0.4);
 }
 .settings-subgroup h4 { margin: 0; }
-.dashboard-message-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
-.dashboard-message-card h3 {
-  margin: 4px 0 0;
-}
 .dashboard-announcement {
-  margin: 0;
-  max-width: 480px;
-  text-align: right;
-}
-@media (max-width: 768px) {
-  .dashboard-message-card {
-    flex-direction: column;
-  }
-  .dashboard-announcement {
-    max-width: none;
-    text-align: left;
-  }
+  margin: 2px 0 0;
+  max-width: 720px;
 }
 .settings-module-card {
   display: grid;

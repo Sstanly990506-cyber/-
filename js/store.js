@@ -1,6 +1,6 @@
 import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js';
 
-const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents', 'settings', 'inventoryItems'];
+const STORAGE_KEYS = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables', 'systemEvents', 'settings', 'inventoryItems', 'users'];
 const API_STATE_URL = '/api/state';
 
 export const state = {
@@ -16,6 +16,7 @@ export const state = {
   systemEvents: [],
   settings: getDefaultSettings(),
   inventoryItems: [],
+  users: [],
   reportRange: { start: '', end: '' },
   financeScreen: 'main',
   auditFilter: { start: '', end: '', keyword: '' },
@@ -40,11 +41,8 @@ function applyStatePayload(payload) {
   state.systemEvents = payload.systemEvents || [];
   state.settings = mergeSettings(payload.settings || state.settings || {});
   state.inventoryItems = payload.inventoryItems || [];
+  state.users = payload.users || [];
   state.financePassword = state.settings.financePassword;
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
->>>>>> main
 }
 
 function readStorageJson(key, fallback) {
@@ -54,19 +52,10 @@ function readStorageJson(key, fallback) {
   } catch {
     return fallback;
   }
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-=======
->>>>>> main
->>>>>> main
 }
 
 function loadLocalState() {
   applyStatePayload({
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
->>>>>> main
     glossOptions: readStorageJson('glossOptions', ['PVA光', 'PVB光/油', '耐磨', '壓光']),
     customers: readStorageJson('customers', []),
     orders: readStorageJson('orders', []),
@@ -76,20 +65,7 @@ function loadLocalState() {
     systemEvents: readStorageJson('systemEvents', []),
     settings: readStorageJson('settings', null),
     inventoryItems: readStorageJson('inventoryItems', []),
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-=======
-    glossOptions: JSON.parse(localStorage.getItem('glossOptions') || '["PVA光","PVB光/油","耐磨","壓光"]'),
-    customers: JSON.parse(localStorage.getItem('customers') || '[]'),
-    orders: JSON.parse(localStorage.getItem('orders') || '[]'),
-    audits: JSON.parse(localStorage.getItem('audits') || '[]'),
-    receivables: JSON.parse(localStorage.getItem('receivables') || '[]'),
-    payables: JSON.parse(localStorage.getItem('payables') || '[]'),
-    systemEvents: JSON.parse(localStorage.getItem('systemEvents') || '[]'),
-    settings: JSON.parse(localStorage.getItem('settings') || 'null'),
-    inventoryItems: JSON.parse(localStorage.getItem('inventoryItems') || '[]'),
->>>>>> main
->>>>>> main
+    users: readStorageJson('users', []),
   });
 }
 
@@ -103,6 +79,7 @@ function saveLocalState(now) {
   localStorage.setItem('systemEvents', JSON.stringify(state.systemEvents));
   localStorage.setItem('settings', JSON.stringify(state.settings));
   localStorage.setItem('inventoryItems', JSON.stringify(state.inventoryItems));
+  localStorage.setItem('users', JSON.stringify(state.users));
   localStorage.setItem('syncTick', String(now));
 }
 
@@ -136,6 +113,7 @@ async function pushServerState(syncTick) {
     systemEvents: state.systemEvents.slice(0, 500),
     settings: state.settings,
     inventoryItems: state.inventoryItems,
+    users: state.users,
     syncTick,
   };
 
@@ -151,31 +129,11 @@ async function pushServerState(syncTick) {
       onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（偵測到新版本資料，已自動同步）`, ok: false });
       return;
     }
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
->>>>>> main
->>>>>> main
     await readJsonOrThrow(res);
     pendingSyncTick = 0;
     lastSyncAt = Math.max(lastSyncAt, syncTick);
     setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
   } catch (err) {
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
-=======
-=======
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    pendingSyncTick = 0;
-    lastSyncAt = Math.max(lastSyncAt, syncTick);
-    setSyncUi('已儲存', fileModeOnly ? '本機儲存' : '集中式資料庫', syncTick);
-  } catch {
->>>>>> main
->>>>>> main
->>>>>> main
     pendingSyncTick = 0;
     if (!fileModeOnly) {
       onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
@@ -263,6 +221,13 @@ function normalizeStateData() {
     stock: normalizeMoney(item.stock),
     safetyStock: normalizeMoney(item.safetyStock),
   }));
+  state.users = uniqueById(state.users).map((user) => ({
+    ...user,
+    username: String(user.username || '').trim(),
+    password: String(user.password || ''),
+    display: String(user.display || user.username || '').trim(),
+    role: String(user.role || 'viewer').trim() || 'viewer',
+  })).filter((user) => user.username && user.password);
   state.settings = mergeSettings(state.settings || {});
   state.financePassword = state.settings.financePassword;
 }

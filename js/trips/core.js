@@ -45,6 +45,36 @@ function segment(a, b) {
   return { distanceM, durationSec };
 }
 
+function normalizeLocationKey(stop) {
+  const address = String(stop.address || '').trim().toLowerCase();
+  if (address && address !== '-') return `address:${address}`;
+  return `latlng:${Number(stop.lat || 0).toFixed(5)},${Number(stop.lng || 0).toFixed(5)}`;
+}
+
+function groupStopsByLocation(stops) {
+  const groups = [];
+  const map = new Map();
+  stops.forEach((stop) => {
+    const key = normalizeLocationKey(stop);
+    const existing = map.get(key);
+    if (existing) {
+      existing.stops.push(stop);
+      return;
+    }
+    const group = {
+      key,
+      lat: Number(stop.lat || 0),
+      lng: Number(stop.lng || 0),
+      address: stop.address || '-',
+      label: stop.address || stop.name || '未命名站點',
+      stops: [stop],
+    };
+    map.set(key, group);
+    groups.push(group);
+  });
+  return groups;
+}
+
 export function evaluateRoute(route) {
   let totalDurationSec = 0;
   let totalDistanceM = 0;
@@ -57,47 +87,55 @@ export function evaluateRoute(route) {
 }
 
 export function buildGoogleMapsUrl(route) {
-  const origin = `${route[0].lat},${route[0].lng}`;
-  const destination = `${route[route.length - 1].lat},${route[route.length - 1].lng}`;
-  const waypoints = route.slice(1, -1).map((p) => `${p.lat},${p.lng}`).join('|');
+  const deduped = route.filter((point, idx) => idx === 0
+    || idx === route.length - 1
+    || normalizeLocationKey(point) !== normalizeLocationKey(route[idx - 1]));
+  const origin = `${deduped[0].lat},${deduped[0].lng}`;
+  const destination = `${deduped[deduped.length - 1].lat},${deduped[deduped.length - 1].lng}`;
+  const waypoints = deduped.slice(1, -1).map((p) => `${p.lat},${p.lng}`).join('|');
   return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=driving&waypoints=${encodeURIComponent(waypoints)}`;
 }
 
 export function validateBusinessRoute(route) {
-  const body = route.slice(1, -1);
-  let seenPickup = false;
-  for (const stop of body) {
-    if (stop.type === 'pickup') seenPickup = true;
-    if (seenPickup && stop.type === 'delivery') return false;
-  }
   return true;
 }
 
 export function optimizeTrip(factory, stops) {
   const deliveries = stops.filter((s) => s.type === 'delivery');
   const pickups = stops.filter((s) => s.type === 'pickup');
+  const groups = groupStopsByLocation(stops);
 
   let best = null;
   let candidateCount = 0;
 
-  permute(deliveries).forEach((d) => {
-    permute(pickups).forEach((p) => {
-      const route = [factory, ...d, ...p, factory];
-      const score = evaluateRoute(route);
-      candidateCount += 1;
-      if (!best || score.totalDurationSec < best.totalDurationSec) {
-        best = { ...score, orderedStops: route };
-      }
-    });
+  permute(groups).forEach((groupOrder) => {
+    const orderedStops = groupOrder.flatMap((group) => group.stops);
+    const route = [factory, ...orderedStops, factory];
+    const score = evaluateRoute(route);
+    candidateCount += 1;
+    if (!best || score.totalDurationSec < best.totalDurationSec) {
+      best = {
+        ...score,
+        orderedStops: route,
+        orderedGroups: groupOrder.map((group) => ({
+          key: group.key,
+          label: group.label,
+          address: group.address,
+          stopIds: group.stops.map((stop) => stop.id),
+          stops: group.stops,
+        })),
+      };
+    }
   });
 
   return {
     originalStops: stops,
-    grouped: { deliveries, pickups },
+    grouped: { deliveries, pickups, locations: groups.map((group) => ({ key: group.key, label: group.label, address: group.address, stopIds: group.stops.map((stop) => stop.id) })) },
     candidateCount,
     bestRoute: {
       pointIds: best.orderedStops.map((s) => s.id),
       orderedStops: best.orderedStops,
+      orderedGroups: best.orderedGroups,
       totalDurationSec: best.totalDurationSec,
       totalDistanceM: best.totalDistanceM,
     },
