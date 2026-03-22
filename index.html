@@ -641,13 +641,6 @@
     <script>
       (() => {
         window.__appBootstrapped = false;
-        const fallbackAccounts = {
-          admin: 'admin123',
-          ops: 'ops123',
-          finance: 'finance123',
-          audit: 'audit123',
-        };
-
         const allViews = () => Array.from(document.querySelectorAll('.panel')).map((panel) => panel.id);
         const fallbackShowView = (id) => {
           allViews().forEach((viewId) => document.getElementById(viewId)?.classList.add('hidden'));
@@ -659,25 +652,20 @@
           loginForm?.addEventListener('submit', (e) => {
             if (window.__appBootstrapped) return;
             e.preventDefault();
-            const username = document.getElementById('username')?.value.trim() || '';
-            const password = document.getElementById('password')?.value || '';
-            if (!username || !password) {
-              window.alert('請輸入帳號與密碼');
-              return;
-            }
-            if (fallbackAccounts[username] && fallbackAccounts[username] !== password) {
-              window.alert('帳號或密碼錯誤');
-              return;
-            }
-            const welcome = document.getElementById('welcomeText');
-            if (welcome) welcome.textContent = `你好，${username}`;
-            const build = document.getElementById('buildVersion');
-            if (build && !build.textContent) build.textContent = '版本：降級模式';
             const loginMessage = document.getElementById('appLoginMessage');
-            if (loginMessage) loginMessage.textContent = '主腳本尚未完成啟動，已切換為降級模式。請稍後重新整理頁面。';
+            if (loginMessage) loginMessage.textContent = '系統仍在啟動中，請稍候 1~2 秒後再登入；若持續無法登入，請重新整理頁面。';
             const syncDetail = document.getElementById('syncDetail');
-            if (syncDetail) syncDetail.textContent = '前端降級模式（主腳本未啟動）';
-            fallbackShowView('dashboardView');
+            if (syncDetail) syncDetail.textContent = '主腳本尚未完成啟動';
+            window.alert('系統尚未完成啟動，請稍候再試。');
+          });
+
+          const registerForm = document.getElementById('registerForm');
+          registerForm?.addEventListener('submit', (e) => {
+            if (window.__appBootstrapped) return;
+            e.preventDefault();
+            const loginMessage = document.getElementById('appLoginMessage');
+            if (loginMessage) loginMessage.textContent = '系統仍在啟動中，請等待主腳本載入完成後再註冊帳號。';
+            window.alert('系統尚未完成啟動，暫時無法註冊，請稍候再試。');
           });
 
           document.querySelectorAll('[data-back]').forEach((btn) => btn.addEventListener('click', () => {
