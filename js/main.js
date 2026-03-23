@@ -26,7 +26,7 @@ const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
 const REMINDER_LAST_SIGNATURE_KEY = 'smartReminderLastSignature';
 let lastCriticalSignature = '';
 
-const ACCOUNTS = [
+const BUILTIN_ACCOUNTS = [
   { username: 'admin', password: 'admin123', role: 'admin', display: '系統管理員' },
   { username: 'ops', password: 'ops123', role: 'ops', display: '作業主管' },
   { username: 'finance', password: 'finance123', role: 'finance', display: '財務主管' },
@@ -73,6 +73,46 @@ function hasViewPermission(viewId) {
   if (!isModuleEnabled(viewId)) return false;
   if (state.settings?.openAccess) return true;
   return getRolePerms().includes(viewId);
+}
+
+function getAllAccounts() {
+  return [...BUILTIN_ACCOUNTS, ...(state.users || [])];
+}
+
+function findAccountByUsername(username) {
+  const key = String(username || '').trim().toLowerCase();
+  if (!key) return null;
+  return getAllAccounts().find((account) => String(account.username || '').trim().toLowerCase() === key) || null;
+}
+
+function createViewerAccount({ username, password, display }) {
+  const normalizedUsername = String(username || '').trim();
+  const normalizedPassword = String(password || '');
+  const normalizedDisplay = String(display || normalizedUsername).trim() || normalizedUsername;
+  const account = {
+    id: crypto.randomUUID(),
+    username: normalizedUsername,
+    password: normalizedPassword,
+    display: normalizedDisplay,
+    role: 'viewer',
+    createdAt: new Date().toISOString(),
+    source: 'quick-login',
+  };
+  state.users.unshift(account);
+  appendSystemEvent(`快速建立登入帳號：${normalizedDisplay}`, 'info', { username: normalizedUsername, role: 'viewer' });
+  saveState();
+  return account;
+}
+
+function ensureLoginAccount(username, password) {
+  const normalizedUsername = String(username || '').trim();
+  const existing = findAccountByUsername(normalizedUsername);
+  if (!existing) return createViewerAccount({ username: normalizedUsername, password, display: normalizedUsername });
+  return existing.password === password ? existing : null;
+}
+
+function resetRegisterForm() {
+  $('registerForm')?.reset();
 }
 
 function applyRoleUi() {
@@ -276,23 +316,46 @@ function bindCoreEvents() {
     const username = $('username').value.trim();
     const password = $('password').value;
     if (!username || !password) return alert('請輸入帳號與密碼');
-    const account = ACCOUNTS.find((a) => a.username === username && a.password === password);
-    if (!account && ACCOUNTS.some((a) => a.username === username)) return alert('帳號或密碼錯誤');
+    const account = ensureLoginAccount(username, password);
+    if (!account) return alert('密碼錯誤，請確認登入資訊後再試一次');
 
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-    const effectiveAccount = account || { role: 'admin', display: username };
-    state.user = effectiveAccount.display;
-    state.userRole = effectiveAccount.role;
-=======
-    state.user = account.display;
-    state.userRole = account.role;
->>>>>> main
+    state.user = account.display || account.username;
+    state.userRole = account.role || 'viewer';
     const prefix = state.settings?.welcomePrefix || '你好';
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
     appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
     saveState();
     const landing = state.settings?.defaultLandingView || 'dashboardView';
     showView(hasViewPermission(landing) ? landing : 'dashboardView');
+  });
+
+  $('registerForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const display = $('registerDisplay')?.value.trim();
+    const username = $('registerUsername')?.value.trim();
+    const password = $('registerPassword')?.value || '';
+    const confirmPassword = $('registerConfirmPassword')?.value || '';
+
+    if (!display || !username || !password || !confirmPassword) return alert('請完整填寫註冊資料');
+    if (username.length < 3) return alert('帳號至少需要 3 碼');
+    if (password.length < 4) return alert('密碼至少需要 4 碼');
+    if (password !== confirmPassword) return alert('兩次輸入的密碼不一致');
+    if (findAccountByUsername(username)) return alert('此帳號已存在，請改用其他帳號名稱');
+
+    state.users.unshift({
+      id: crypto.randomUUID(),
+      username,
+      password,
+      display,
+      role: 'viewer',
+      createdAt: new Date().toISOString(),
+    });
+    appendSystemEvent(`新帳號註冊：${display}`, 'info', { username, role: 'viewer' });
+    saveState();
+    $('username').value = username;
+    $('password').value = password;
+    resetRegisterForm();
+    alert('註冊成功，現在可以直接登入。');
   });
 
   document.addEventListener('click', (e) => {
@@ -338,10 +401,6 @@ function bindCoreEvents() {
   });
 }
 
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
->>>>>> main
 function bootstrapFailed(err) {
   console.error(err);
   const message = `系統初始化失敗：${err?.message || err}`;
@@ -351,6 +410,10 @@ function bootstrapFailed(err) {
     if (window.__appBootstrapped) return;
     e.preventDefault();
     alert(`${message}\n請先按 Ctrl + F5 強制重新整理；若仍失敗，再檢查 /api/health。`);
+  });
+  $('registerForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    alert(`${message}\n目前無法註冊新帳號，請先恢復系統連線後再試。`);
   });
 }
 
@@ -367,47 +430,16 @@ try {
   bindTripEvents(state, saveState, renderAll);
   bindInventoryEvents(state, saveState, renderAll);
   bindSettingsEvents(state, saveState, renderAll);
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
   window.__appBootstrapped = true;
-=======
->>>>>> main
   renderAll();
   showView('loginView');
   startStoreSync();
   pullServerState();
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-  window.__appBootstrapped = true;
->>>>>> main
 
   setInterval(() => {
     if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
   }, 60000);
 } catch (err) {
+  window.__appBootstrapped = false;
   bootstrapFailed(err);
 }
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-=======
-configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
-setBuildVersion();
-initializeStore();
-clearOrderForm();
-bindCoreEvents();
-bindCustomerEvents(state, saveState, renderAll);
-bindOrderEvents(state, saveState, renderAll);
-bindFinanceEvents(state, saveState, renderAll);
-bindAuditEvents(state);
-bindTripEvents(state, saveState, renderAll);
-bindInventoryEvents(state, saveState, renderAll);
-bindSettingsEvents(state, saveState, renderAll);
-renderAll();
-showView('loginView');
-startStoreSync();
-pullServerState();
-
-setInterval(() => {
-  if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();
-}, 60000);
->>>>>> main
->>>>>> main

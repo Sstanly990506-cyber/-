@@ -28,6 +28,7 @@ DEFAULT_APP_STATE = {
     "systemEvents": [],
     "settings": None,
     "inventoryItems": [],
+    "users": [],
     "syncTick": 0,
 }
 DB_INIT_LOCK = Lock()
@@ -144,6 +145,37 @@ def infer_segment(a, b):
     return {"durationSec": duration_sec, "distanceM": meters}
 
 
+def normalize_location_key(stop):
+    address = str(stop.get("address") or "").strip().lower()
+    if address and address != "-":
+        return f"address:{address}"
+    lat = float(stop.get("lat") or 0)
+    lng = float(stop.get("lng") or 0)
+    return f"latlng:{lat:.5f},{lng:.5f}"
+
+
+def group_stops_by_location(stops):
+    groups = []
+    lookup = {}
+    for stop in stops:
+        key = normalize_location_key(stop)
+        group = lookup.get(key)
+        if group:
+            group["stops"].append(stop)
+            continue
+        group = {
+            "key": key,
+            "lat": float(stop.get("lat") or 0),
+            "lng": float(stop.get("lng") or 0),
+            "address": stop.get("address") or "-",
+            "label": stop.get("address") or stop.get("name") or "未命名站點",
+            "stops": [stop],
+        }
+        lookup[key] = group
+        groups.append(group)
+    return groups
+
+
 def evaluate_route(route):
     total_duration = 0
     total_distance = 0
@@ -155,9 +187,17 @@ def evaluate_route(route):
 
 
 def build_maps_url(route):
-    origin = f"{route[0]['lat']},{route[0]['lng']}"
-    destination = f"{route[-1]['lat']},{route[-1]['lng']}"
-    waypoints = "|".join([f"{r['lat']},{r['lng']}" for r in route[1:-1]])
+    deduped = []
+    for idx, stop in enumerate(route):
+        if idx in {0, len(route) - 1}:
+            deduped.append(stop)
+            continue
+        if normalize_location_key(stop) == normalize_location_key(route[idx - 1]):
+            continue
+        deduped.append(stop)
+    origin = f"{deduped[0]['lat']},{deduped[0]['lng']}"
+    destination = f"{deduped[-1]['lat']},{deduped[-1]['lng']}"
+    waypoints = "|".join([f"{r['lat']},{r['lng']}" for r in deduped[1:-1]])
     from urllib.parse import quote
 
     return (
@@ -177,6 +217,7 @@ def optimize_trip(payload):
 
     deliveries = [s for s in stops if s.get("type") == "delivery"]
     pickups = [s for s in stops if s.get("type") == "pickup"]
+    location_groups = group_stops_by_location(stops)
 
     if not stops:
         raise ValueError("stops required")
@@ -184,28 +225,49 @@ def optimize_trip(payload):
     best_route = None
     best_duration = None
     best_distance = None
+    best_groups = []
     candidate_count = 0
 
-    for d_perm in itertools.permutations(deliveries):
-        for p_perm in itertools.permutations(pickups):
-            route = [factory] + list(d_perm) + list(p_perm) + [factory]
-            duration, distance = evaluate_route(route)
-            candidate_count += 1
-            if best_duration is None or duration < best_duration:
-                best_route = route
-                best_duration = duration
-                best_distance = distance
+    for group_order in itertools.permutations(location_groups):
+        ordered_stops = [stop for group in group_order for stop in group["stops"]]
+        route = [factory] + ordered_stops + [factory]
+        duration, distance = evaluate_route(route)
+        candidate_count += 1
+        if best_duration is None or duration < best_duration:
+            best_route = route
+            best_duration = duration
+            best_distance = distance
+            best_groups = [
+                {
+                    "key": group["key"],
+                    "label": group["label"],
+                    "address": group["address"],
+                    "stopIds": [stop.get("id") for stop in group["stops"]],
+                    "stops": group["stops"],
+                }
+                for group in group_order
+            ]
 
     return {
         "originalStops": stops,
         "grouped": {
             "deliveries": deliveries,
             "pickups": pickups,
+            "locations": [
+                {
+                    "key": group["key"],
+                    "label": group["label"],
+                    "address": group["address"],
+                    "stopIds": [stop.get("id") for stop in group["stops"]],
+                }
+                for group in location_groups
+            ],
         },
         "candidateCount": candidate_count,
         "bestRoute": {
             "pointIds": [p.get("id") for p in best_route],
             "orderedStops": best_route,
+            "orderedGroups": best_groups,
             "totalDurationSec": best_duration,
             "totalDistanceM": best_distance,
         },
@@ -218,13 +280,6 @@ def is_sensitive_path(path: str) -> bool:
     return any(normalized.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
 
 
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
->>>>>> main
->>>>>> main
 def json_error(message, status=500):
     return jsonify({"ok": False, "error": message}), status
 
@@ -250,26 +305,6 @@ def get_state():
 
 @app.post("/api/state")
 @app.post("/state")
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
-=======
-=======
-@app.get("/api/health")
-def health():
-    ensure_db()
-    return jsonify({"ok": True, "database": "postgresql", "hasDatabaseUrl": bool(DATABASE_URL)})
-
-
-@app.get("/api/state")
-def get_state():
-    return jsonify(read_state())
-
-
-@app.post("/api/state")
->>>>>> main
->>>>>> main
->>>>>> main
 def post_state():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -280,44 +315,17 @@ def post_state():
         if key not in payload:
             return jsonify({"error": f"missing key: {key}"}), 400
 
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
->>>>>> main
->>>>>> main
     try:
         ok, tick = write_state(payload)
     except (RuntimeError, PsycopgError) as err:
         return json_error(str(err), 500)
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
-=======
-=======
-    ok, tick = write_state(payload)
->>>>>> main
->>>>>> main
->>>>>> main
     if not ok:
         return jsonify({"error": "stale syncTick", "serverSyncTick": tick}), 409
     return jsonify({"ok": True, "syncTick": tick})
 
 
 @app.post("/api/trips/optimize")
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-mdvqd1
 @app.post("/trips/optimize")
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-tw7q3y
-@app.post("/trips/optimize")
-=======
-<<<<<< codex/add-options-for-loading-and-delivery-in-tickets-hybuzu
-@app.post("/trips/optimize")
-=======
->>>>>> main
->>>>>> main
->>>>>> main
 def post_optimize_trip():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
