@@ -96,7 +96,20 @@ export function buildGoogleMapsUrl(route) {
   return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=driving&waypoints=${encodeURIComponent(waypoints)}`;
 }
 
+function sortGroupStops(group) {
+  const deliveries = group.stops.filter((stop) => stop.type === 'delivery');
+  const pickups = group.stops.filter((stop) => stop.type === 'pickup');
+  const others = group.stops.filter((stop) => !['delivery', 'pickup'].includes(stop.type));
+  return [...deliveries, ...pickups, ...others];
+}
+
 export function validateBusinessRoute(route) {
+  let pickupSeen = false;
+  for (const stop of route) {
+    if (!stop || !stop.type) continue;
+    if (stop.type === 'pickup') pickupSeen = true;
+    if (pickupSeen && stop.type === 'delivery') return false;
+  }
   return true;
 }
 
@@ -109,15 +122,20 @@ export function optimizeTrip(factory, stops) {
   let candidateCount = 0;
 
   permute(groups).forEach((groupOrder) => {
-    const orderedStops = groupOrder.flatMap((group) => group.stops);
+    const orderedGroups = groupOrder.map((group) => {
+      const orderedGroupStops = sortGroupStops(group);
+      return { ...group, stops: orderedGroupStops };
+    });
+    const orderedStops = orderedGroups.flatMap((group) => group.stops);
     const route = [factory, ...orderedStops, factory];
+    if (!validateBusinessRoute(route)) return;
     const score = evaluateRoute(route);
     candidateCount += 1;
     if (!best || score.totalDurationSec < best.totalDurationSec) {
       best = {
         ...score,
         orderedStops: route,
-        orderedGroups: groupOrder.map((group) => ({
+        orderedGroups: orderedGroups.map((group) => ({
           key: group.key,
           label: group.label,
           address: group.address,
@@ -127,6 +145,10 @@ export function optimizeTrip(factory, stops) {
       };
     }
   });
+
+  if (!best) {
+    throw new Error('No valid route satisfies delivery-before-pickup rules');
+  }
 
   return {
     originalStops: stops,

@@ -85,7 +85,6 @@ function findAccountByUsername(username) {
   return getAllAccounts().find((account) => String(account.username || '').trim().toLowerCase() === key) || null;
 }
 
-<<<<<< codex-69f070
 function createViewerAccount({ username, password, display }) {
   const normalizedUsername = String(username || '').trim();
   const normalizedPassword = String(password || '');
@@ -110,12 +109,6 @@ function ensureLoginAccount(username, password) {
   const existing = findAccountByUsername(normalizedUsername);
   if (!existing) return createViewerAccount({ username: normalizedUsername, password, display: normalizedUsername });
   return existing.password === password ? existing : null;
-=======
-function findAccountByCredentials(username, password) {
-  const account = findAccountByUsername(username);
-  if (!account) return null;
-  return account.password === password ? account : null;
->>>>>> main
 }
 
 function resetRegisterForm() {
@@ -323,34 +316,11 @@ function bindCoreEvents() {
     const username = $('username').value.trim();
     const password = $('password').value;
     if (!username || !password) return alert('請輸入帳號與密碼');
-<<<<<< codex-69f070
     const account = ensureLoginAccount(username, password);
     if (!account) return alert('密碼錯誤，請確認登入資訊後再試一次');
 
     state.user = account.display || account.username;
     state.userRole = account.role || 'viewer';
-=======
-<<<<<< codex-2r5nwt
-=======
-<<<<<< codex-d2sdch
->>>>>> main
-    const account = findAccountByCredentials(username, password);
-    if (!account) return alert('帳號不存在或密碼錯誤，請先註冊或確認登入資訊');
-
-    state.user = account.display || account.username;
-    state.userRole = account.role || 'viewer';
-<<<<<< codex-2r5nwt
-=======
-=======
-    const account = ACCOUNTS.find((a) => a.username === username && a.password === password);
-    if (!account && ACCOUNTS.some((a) => a.username === username)) return alert('帳號或密碼錯誤');
-
-    const effectiveAccount = account || { role: 'admin', display: username };
-    state.user = effectiveAccount.display;
-    state.userRole = effectiveAccount.role;
->>>>>> main
->>>>>> main
->>>>>> main
     const prefix = state.settings?.welcomePrefix || '你好';
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
     appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
@@ -460,13 +430,8 @@ try {
   bindTripEvents(state, saveState, renderAll);
   bindInventoryEvents(state, saveState, renderAll);
   bindSettingsEvents(state, saveState, renderAll);
-<<<<<< codex-69f070
-=======
-<<<<<< codex-2r5nwt
->>>>>> main
   window.__appBootstrapped = true;
   renderAll();
-  window.__appBootstrapped = true;
   showView('loginView');
   startStoreSync();
   pullServerState();

@@ -186,6 +186,25 @@ def evaluate_route(route):
     return total_duration, total_distance
 
 
+def sort_group_stops(group):
+    stops = list(group.get("stops") or [])
+    deliveries = [stop for stop in stops if stop.get("type") == "delivery"]
+    pickups = [stop for stop in stops if stop.get("type") == "pickup"]
+    others = [stop for stop in stops if stop.get("type") not in {"delivery", "pickup"}]
+    return deliveries + pickups + others
+
+
+def validate_business_route(route):
+    pickup_seen = False
+    for stop in route:
+        stop_type = stop.get("type") if isinstance(stop, dict) else None
+        if stop_type == "pickup":
+            pickup_seen = True
+        elif pickup_seen and stop_type == "delivery":
+            return False
+    return True
+
+
 def build_maps_url(route):
     deduped = []
     for idx, stop in enumerate(route):
@@ -229,8 +248,13 @@ def optimize_trip(payload):
     candidate_count = 0
 
     for group_order in itertools.permutations(location_groups):
-        ordered_stops = [stop for group in group_order for stop in group["stops"]]
+        ordered_groups = []
+        for group in group_order:
+            ordered_groups.append({**group, "stops": sort_group_stops(group)})
+        ordered_stops = [stop for group in ordered_groups for stop in group["stops"]]
         route = [factory] + ordered_stops + [factory]
+        if not validate_business_route(route):
+            continue
         duration, distance = evaluate_route(route)
         candidate_count += 1
         if best_duration is None or duration < best_duration:
@@ -245,8 +269,11 @@ def optimize_trip(payload):
                     "stopIds": [stop.get("id") for stop in group["stops"]],
                     "stops": group["stops"],
                 }
-                for group in group_order
+                for group in ordered_groups
             ]
+
+    if best_route is None:
+        raise ValueError("No valid route satisfies delivery-before-pickup rules")
 
     return {
         "originalStops": stops,
@@ -298,7 +325,9 @@ def health():
 @app.get("/state")
 def get_state():
     try:
-        return jsonify(read_state())
+        state = read_state()
+        state["users"] = []
+        return jsonify(state)
     except (RuntimeError, PsycopgError) as err:
         return json_error(str(err), 500)
 
@@ -314,6 +343,9 @@ def post_state():
     for key in required:
         if key not in payload:
             return jsonify({"error": f"missing key: {key}"}), 400
+
+    payload = dict(payload)
+    payload.pop("users", None)
 
     try:
         ok, tick = write_state(payload)
