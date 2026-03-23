@@ -9,6 +9,11 @@ from api.storage import BASE_DIR, DATABASE_URL, PsycopgError, ensure_storage, ge
 from api.trip_optimizer import optimize_trip
 
 SENSITIVE_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.py', '.bat', '.ps1', '.sh'}
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+BLOCKED_PATH_PARTS = {'data'}
+PUBLIC_ROOT = Path(BASE_DIR).resolve()
+=======
+>>>>>> main
 
 
 def is_sensitive_path(path: str) -> bool:
@@ -16,6 +21,34 @@ def is_sensitive_path(path: str) -> bool:
     return any(normalized.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
 
 
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+def is_blocked_static_path(path: str) -> bool:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return True
+
+    lowered_parts = [part.lower() for part in candidate.parts if part not in {'', '.'}]
+    if any(part == '..' for part in lowered_parts):
+        return True
+    if any(part in BLOCKED_PATH_PARTS for part in lowered_parts):
+        return True
+    return is_sensitive_path(path)
+
+
+def resolve_public_file(rel_path: str) -> Path | None:
+    if is_blocked_static_path(rel_path):
+        return None
+
+    file_path = (PUBLIC_ROOT / rel_path).resolve()
+    try:
+        file_path.relative_to(PUBLIC_ROOT)
+    except ValueError:
+        return None
+    return file_path
+
+
+=======
+>>>>>> main
 class AppRequestHandler(BaseHTTPRequestHandler):
     server_version = 'GlossApp/1.0'
 
@@ -37,7 +70,11 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         if rel_path.startswith('api/'):
             self.send_error(404)
             return
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+        if is_blocked_static_path(rel_path):
+=======
         if is_sensitive_path(rel_path):
+>>>>>> main
             self.send_error(403)
             return
         self.serve_file(rel_path)
@@ -60,7 +97,11 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         try:
             ensure_storage()
             json_response(self, 200, {'ok': True, 'database': get_storage_mode(), 'hasDatabaseUrl': bool(DATABASE_URL)})
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+        except Exception as err:
+=======
         except (RuntimeError, PsycopgError) as err:
+>>>>>> main
             json_response(self, 500, {'ok': False, 'error': str(err)})
 
     def handle_get_state(self):
@@ -68,7 +109,11 @@ class AppRequestHandler(BaseHTTPRequestHandler):
             state = read_state()
             state['users'] = []
             json_response(self, 200, state)
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+        except Exception as err:
+=======
         except (RuntimeError, PsycopgError) as err:
+>>>>>> main
             json_response(self, 500, {'ok': False, 'error': str(err)})
 
     def handle_post_state(self):
@@ -88,7 +133,11 @@ class AppRequestHandler(BaseHTTPRequestHandler):
 
         try:
             ok, tick = write_state(payload)
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+        except Exception as err:
+=======
         except (RuntimeError, PsycopgError) as err:
+>>>>>> main
             json_response(self, 500, {'ok': False, 'error': str(err)})
             return
         if not ok:
@@ -109,7 +158,14 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         json_response(self, 200, result)
 
     def serve_file(self, rel_path: str):
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+        file_path = resolve_public_file(rel_path)
+        if file_path is None:
+            self.send_error(403)
+            return
+=======
         file_path = Path(BASE_DIR) / rel_path
+>>>>>> main
         if not file_path.exists() or not file_path.is_file():
             self.send_error(404)
             return

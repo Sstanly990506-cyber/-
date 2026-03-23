@@ -5,7 +5,10 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+=======
 <<<<<< codex/fix-website-loading-issue-and-refactor-code-eckeq3
+>>>>>> main
 try:
     from psycopg import Error as PsycopgError
     from psycopg import connect
@@ -16,6 +19,12 @@ except ImportError:  # optional unless DATABASE_URL is configured
     connect = None
     dict_row = None
     Jsonb = None
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_DATA_DIR = (BASE_DIR.parent / '.gloss-app-data').resolve()
+DATA_DIR = Path(os.environ.get('APP_DATA_DIR') or DEFAULT_DATA_DIR).expanduser().resolve()
+=======
 =======
 from psycopg import Error as PsycopgError
 from psycopg import connect
@@ -25,6 +34,7 @@ from psycopg.types.json import Jsonb
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / 'data'
+>>>>>> main
 LOCAL_STATE_PATH = DATA_DIR / 'app_state.json'
 DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
 
@@ -61,7 +71,10 @@ def normalize_database_url(url: str) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+=======
 <<<<<< codex/fix-website-loading-issue-and-refactor-code-eckeq3
+>>>>>> main
 def ensure_psycopg_available():
     if connect is None or dict_row is None or Jsonb is None:
         raise RuntimeError('已設定 DATABASE_URL，但系統未安裝 psycopg；請先安裝 requirements.txt 內的套件。')
@@ -69,17 +82,24 @@ def ensure_psycopg_available():
 
 def get_db_connection():
     ensure_psycopg_available()
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+=======
 =======
 def get_db_connection():
+>>>>>> main
 >>>>>> main
     return connect(normalize_database_url(DATABASE_URL), row_factory=dict_row)
 
 
 def ensure_postgres_storage():
     global DB_INITIALIZED
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+    ensure_psycopg_available()
+=======
 <<<<<< codex/fix-website-loading-issue-and-refactor-code-eckeq3
     ensure_psycopg_available()
 =======
+>>>>>> main
 >>>>>> main
     if DB_INITIALIZED:
         return
@@ -109,13 +129,62 @@ def ensure_postgres_storage():
         DB_INITIALIZED = True
 
 
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+def build_default_local_state():
+    payload = dict(DEFAULT_APP_STATE)
+    payload['serverUpdatedAt'] = 0
+    return payload
+
+
+def write_local_state_file(payload):
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = LOCAL_STATE_PATH.with_suffix('.tmp')
+    temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    temp_path.replace(LOCAL_STATE_PATH)
+
+
+def load_local_state_file():
+    if not LOCAL_STATE_PATH.exists():
+        payload = build_default_local_state()
+        write_local_state_file(payload)
+        return payload
+
+    try:
+        payload = json.loads(LOCAL_STATE_PATH.read_text(encoding='utf-8-sig'))
+    except (OSError, json.JSONDecodeError):
+        broken_path = LOCAL_STATE_PATH.with_name(f"app_state.broken-{int(time.time())}.json")
+        try:
+            LOCAL_STATE_PATH.replace(broken_path)
+        except OSError:
+            pass
+        payload = build_default_local_state()
+        write_local_state_file(payload)
+        return payload
+
+    if not isinstance(payload, dict):
+        payload = build_default_local_state()
+        write_local_state_file(payload)
+        return payload
+
+    normalized = dict(DEFAULT_APP_STATE)
+    normalized.update(payload)
+    normalized['serverUpdatedAt'] = int(payload.get('serverUpdatedAt') or payload.get('syncTick') or 0)
+    return normalized
+
+
+=======
+>>>>>> main
 def ensure_local_storage():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if LOCAL_STATE_PATH.exists():
         return
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+    write_local_state_file(build_default_local_state())
+=======
     payload = dict(DEFAULT_APP_STATE)
     payload['serverUpdatedAt'] = 0
     LOCAL_STATE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+>>>>>> main
 
 
 def ensure_storage():
@@ -137,9 +206,13 @@ def read_state():
         return state
 
     with LOCAL_FILE_LOCK:
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+        return load_local_state_file()
+=======
         payload = json.loads(LOCAL_STATE_PATH.read_text(encoding='utf-8'))
     payload.setdefault('serverUpdatedAt', int(payload.get('syncTick') or 0))
     return payload
+>>>>>> main
 
 
 def write_state(new_state):
@@ -165,19 +238,37 @@ def write_state(new_state):
         return True, tick
 
     with LOCAL_FILE_LOCK:
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+        current = load_local_state_file()
+        current_tick = int(current.get('serverUpdatedAt') or current.get('syncTick') or 0)
+        if tick < current_tick:
+            return False, current_tick
+        next_payload = dict(DEFAULT_APP_STATE)
+        next_payload.update(payload)
+        next_payload['serverUpdatedAt'] = tick
+        write_local_state_file(next_payload)
+=======
         current = json.loads(LOCAL_STATE_PATH.read_text(encoding='utf-8'))
         current_tick = int(current.get('serverUpdatedAt') or current.get('syncTick') or 0)
         if tick < current_tick:
             return False, current_tick
         payload['serverUpdatedAt'] = tick
         LOCAL_STATE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+>>>>>> main
     return True, tick
 
 
 __all__ = [
     'BASE_DIR',
+<<<<<< codex/fix-high-priority-issues-from-codex-review
+    'DATA_DIR',
     'DATABASE_URL',
     'DEFAULT_APP_STATE',
+    'LOCAL_STATE_PATH',
+=======
+    'DATABASE_URL',
+    'DEFAULT_APP_STATE',
+>>>>>> main
     'PsycopgError',
     'ensure_storage',
     'get_storage_mode',
