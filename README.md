@@ -60,7 +60,10 @@ python3 api_server.py --port 4173 --host 127.0.0.1
 這個模式會啟動 Python API。
 - 如果有設定環境變數 `DATABASE_URL`，會使用 PostgreSQL（例如 Neon）。
 - 如果**沒有**設定 `DATABASE_URL`，現在會**自動改用本機 `data/app_state.json`**，網站仍可正常打開與儲存資料。
+<<<<<< codex/fix-website-loading-issue-and-refactor-code-eckeq3
 - 如果你的電腦**沒有安裝 Flask**，現在也會**自動改用 Python 內建伺服器**，不用先另外裝 Flask 才能開網站。
+=======
+>>>>>> main
 
 ---
 

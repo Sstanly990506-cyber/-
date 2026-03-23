@@ -5,6 +5,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+<<<<<< codex/fix-website-loading-issue-and-refactor-code-eckeq3
 try:
     from psycopg import Error as PsycopgError
     from psycopg import connect
@@ -15,6 +16,12 @@ except ImportError:  # optional unless DATABASE_URL is configured
     connect = None
     dict_row = None
     Jsonb = None
+=======
+from psycopg import Error as PsycopgError
+from psycopg import connect
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+>>>>>> main
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / 'data'
@@ -54,6 +61,7 @@ def normalize_database_url(url: str) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
+<<<<<< codex/fix-website-loading-issue-and-refactor-code-eckeq3
 def ensure_psycopg_available():
     if connect is None or dict_row is None or Jsonb is None:
         raise RuntimeError('已設定 DATABASE_URL，但系統未安裝 psycopg；請先安裝 requirements.txt 內的套件。')
@@ -61,12 +69,18 @@ def ensure_psycopg_available():
 
 def get_db_connection():
     ensure_psycopg_available()
+=======
+def get_db_connection():
+>>>>>> main
     return connect(normalize_database_url(DATABASE_URL), row_factory=dict_row)
 
 
 def ensure_postgres_storage():
     global DB_INITIALIZED
+<<<<<< codex/fix-website-loading-issue-and-refactor-code-eckeq3
     ensure_psycopg_available()
+=======
+>>>>>> main
     if DB_INITIALIZED:
         return
     with DB_INIT_LOCK:
