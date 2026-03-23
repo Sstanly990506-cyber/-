@@ -9,11 +9,38 @@ from api.storage import BASE_DIR, DATABASE_URL, PsycopgError, ensure_storage, ge
 from api.trip_optimizer import optimize_trip
 
 SENSITIVE_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.py', '.bat', '.ps1', '.sh'}
+BLOCKED_PATH_PARTS = {'data'}
+PUBLIC_ROOT = Path(BASE_DIR).resolve()
 
 
 def is_sensitive_path(path: str) -> bool:
     normalized = path.split('?', 1)[0].lower()
     return any(normalized.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
+
+
+def is_blocked_static_path(path: str) -> bool:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return True
+
+    lowered_parts = [part.lower() for part in candidate.parts if part not in {'', '.'}]
+    if any(part == '..' for part in lowered_parts):
+        return True
+    if any(part in BLOCKED_PATH_PARTS for part in lowered_parts):
+        return True
+    return is_sensitive_path(path)
+
+
+def resolve_public_file(rel_path: str) -> Path | None:
+    if is_blocked_static_path(rel_path):
+        return None
+
+    file_path = (PUBLIC_ROOT / rel_path).resolve()
+    try:
+        file_path.relative_to(PUBLIC_ROOT)
+    except ValueError:
+        return None
+    return file_path
 
 
 class AppRequestHandler(BaseHTTPRequestHandler):
@@ -37,7 +64,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         if rel_path.startswith('api/'):
             self.send_error(404)
             return
-        if is_sensitive_path(rel_path):
+        if is_blocked_static_path(rel_path):
             self.send_error(403)
             return
         self.serve_file(rel_path)
@@ -109,7 +136,10 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         json_response(self, 200, result)
 
     def serve_file(self, rel_path: str):
-        file_path = Path(BASE_DIR) / rel_path
+        file_path = resolve_public_file(rel_path)
+        if file_path is None:
+            self.send_error(403)
+            return
         if not file_path.exists() or not file_path.is_file():
             self.send_error(404)
             return

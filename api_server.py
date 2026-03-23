@@ -9,8 +9,8 @@ except ImportError:
     Flask = None
     abort = jsonify = request = send_from_directory = None
 
-from api.http_server import create_server, is_sensitive_path
-from api.storage import BASE_DIR, PsycopgError, read_state, write_state
+from api.http_server import create_server, is_blocked_static_path
+from api.storage import BASE_DIR, LOCAL_STATE_PATH, PsycopgError, read_state, write_state
 from api.trip_optimizer import optimize_trip
 
 app = None
@@ -113,7 +113,7 @@ if app is not None:
     def static_files(path):
         if path.startswith('api/'):
             abort(404)
-        if is_sensitive_path(path):
+        if is_blocked_static_path(path):
             abort(403)
         return send_from_directory(BASE_DIR, path)
 
@@ -122,7 +122,7 @@ def run_server(host: str, port: int):
     ensure_storage()
     print(f'[INFO] centralized storage: {get_storage_mode()}')
     if not DATABASE_URL:
-        print('[INFO] 未設定 DATABASE_URL，已自動改用本機 data/app_state.json 儲存。')
+        print(f'[INFO] 未設定 DATABASE_URL，已自動改用本機 {LOCAL_STATE_PATH} 儲存。')
     if app is None:
         print('[INFO] 未安裝 Flask，已自動改用 Python 內建伺服器。')
     print(f'[INFO] server running: http://{host}:{port}')

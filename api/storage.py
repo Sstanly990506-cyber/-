@@ -17,7 +17,8 @@ except ImportError:  # optional unless DATABASE_URL is configured
     Jsonb = None
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / 'data'
+DEFAULT_DATA_DIR = (BASE_DIR.parent / '.gloss-app-data').resolve()
+DATA_DIR = Path(os.environ.get('APP_DATA_DIR') or DEFAULT_DATA_DIR).expanduser().resolve()
 LOCAL_STATE_PATH = DATA_DIR / 'app_state.json'
 DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
 
@@ -202,8 +203,10 @@ def write_state(new_state):
 
 __all__ = [
     'BASE_DIR',
+    'DATA_DIR',
     'DATABASE_URL',
     'DEFAULT_APP_STATE',
+    'LOCAL_STATE_PATH',
     'PsycopgError',
     'ensure_storage',
     'get_storage_mode',
