@@ -57,8 +57,10 @@ python3 api_server.py --port 4173 --host 127.0.0.1
 
 （若你的系統是 `python` 指令，就把 `python3` 改成 `python`）
 
-這個模式會啟動 Python API，並透過環境變數 `DATABASE_URL` 連到 PostgreSQL（例如 Neon）。
-如果沒有設定 `DATABASE_URL`，API 會無法啟動。
+這個模式會啟動 Python API。
+- 如果有設定環境變數 `DATABASE_URL`，會使用 PostgreSQL（例如 Neon）。
+- 如果**沒有**設定 `DATABASE_URL`，現在會**自動改用本機 `data/app_state.json`**，網站仍可正常打開與儲存資料。
+- 如果你的電腦**沒有安裝 Flask**，現在也會**自動改用 Python 內建伺服器**，不用先另外裝 Flask 才能開網站。
 
 ---
 
@@ -67,6 +69,8 @@ python3 api_server.py --port 4173 --host 127.0.0.1
 ### 1) 看啟動視窗有沒有錯誤
 - 最常見：沒有 Python。
 - 或是 `4173` 埠被占用。
+- 如果以前看到 `No module named 'flask'`，新版會自動切到 Python 內建伺服器，不會再因為沒裝 Flask 而完全打不開。
+- 如果本機 `data/app_state.json` 損壞或內容不是合法 JSON，系統現在會自動備份壞檔並重建新的狀態檔，避免前端一直顯示 HTTP 500。
 
 ### 2) 改埠再試（Mac/Linux）
 
@@ -136,8 +140,10 @@ curl -I http://127.0.0.1:4173
 
 ## 資料現在存在哪裡？（白話）
 
-- 目前已支援「集中式資料庫模式」：`start.bat` / `start.sh` / `start-lan.bat` / `start-lan.sh` 會用 `api_server.py + PostgreSQL(DATABASE_URL)`。
-- 在這個模式下，手機和電腦都連同一台主機網址時，會看到同一份資料。
+- 目前已支援兩種 Python 啟動模式：
+  - 有 `DATABASE_URL`：使用 `api_server.py + PostgreSQL`。
+  - 沒有 `DATABASE_URL`：自動改用本機 `data/app_state.json`。
+- 在這兩種模式下，只要手機和電腦都連同一台主機網址，就會看到同一份資料（差別只在資料是存在雲端 PostgreSQL 還是這台電腦本機 JSON）。
 - 如果你用 `start-no-python.bat`（PowerShell 靜態模式），資料會回到各裝置瀏覽器本機，不共用。
 
 

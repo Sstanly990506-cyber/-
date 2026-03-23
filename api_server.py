@@ -1,117 +1,21 @@
 #!/usr/bin/env python3
-import itertools
-import json
-import math
-import os
 import socket
-import time
-from pathlib import Path
-from threading import Lock
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from flask import Flask, abort, jsonify, request, send_from_directory
-from psycopg import connect
-from psycopg import Error as PsycopgError
-from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
+from api.storage import DATABASE_URL, ensure_storage, get_storage_mode
 
-BASE_DIR = Path(__file__).resolve().parent
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-SENSITIVE_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".py", ".bat", ".ps1", ".sh"}
-DEFAULT_APP_STATE = {
-    "glossOptions": ["PVA光", "PVB光/油", "耐磨", "壓光"],
-    "customers": [],
-    "orders": [],
-    "audits": [],
-    "receivables": [],
-    "payables": [],
-    "systemEvents": [],
-    "settings": None,
-    "inventoryItems": [],
-    "users": [],
-    "syncTick": 0,
-}
-DB_INIT_LOCK = Lock()
-DB_INITIALIZED = False
+try:
+    from flask import Flask, abort, jsonify, request, send_from_directory
+except ImportError:
+    Flask = None
+    abort = jsonify = request = send_from_directory = None
 
-app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
+from api.http_server import create_server, is_sensitive_path
+from api.storage import BASE_DIR, PsycopgError, read_state, write_state
+from api.trip_optimizer import optimize_trip
 
-
-def normalize_database_url(url: str) -> str:
-    if not url:
-        raise RuntimeError("DATABASE_URL 未設定，無法連線到 PostgreSQL")
-    parsed = urlparse(url)
-    if parsed.scheme not in {"postgres", "postgresql"}:
-        raise RuntimeError("DATABASE_URL 必須是 PostgreSQL 連線字串")
-    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-    query.setdefault("sslmode", "require")
-    return urlunparse(parsed._replace(query=urlencode(query)))
-
-
-def get_db_connection():
-    return connect(normalize_database_url(DATABASE_URL), row_factory=dict_row)
-
-
-def ensure_db():
-    global DB_INITIALIZED
-    if DB_INITIALIZED:
-        return
-    with DB_INIT_LOCK:
-        if DB_INITIALIZED:
-            return
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS app_state (
-                        id SMALLINT PRIMARY KEY CHECK (id = 1),
-                        state_json JSONB NOT NULL,
-                        updated_at BIGINT NOT NULL
-                    )
-                    """
-                )
-                cur.execute(
-                    """
-                    INSERT INTO app_state (id, state_json, updated_at)
-                    VALUES (1, %s, %s)
-                    ON CONFLICT (id) DO NOTHING
-                    """,
-                    (Jsonb(DEFAULT_APP_STATE), 0),
-                )
-            conn.commit()
-        DB_INITIALIZED = True
-
-
-def read_state():
-    ensure_db()
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT state_json, updated_at FROM app_state WHERE id = 1")
-            row = cur.fetchone()
-    state = row["state_json"] if isinstance(row["state_json"], dict) else json.loads(row["state_json"])
-    state["serverUpdatedAt"] = int(row["updated_at"] or 0)
-    return state
-
-
-def write_state(new_state):
-    ensure_db()
-    tick = int(new_state.get("syncTick") or int(time.time() * 1000))
-    payload = dict(new_state)
-    payload["syncTick"] = tick
-    with get_db_connection() as conn:
-        with conn.transaction():
-            with conn.cursor() as cur:
-                cur.execute("SELECT updated_at FROM app_state WHERE id = 1 FOR UPDATE")
-                row = cur.fetchone()
-                current_tick = int((row or {}).get("updated_at") or 0)
-                if tick < current_tick:
-                    return False, current_tick
-                cur.execute(
-                    "UPDATE app_state SET state_json = %s, updated_at = %s WHERE id = 1",
-                    (Jsonb(payload), tick),
-                )
-        conn.commit()
-    return True, tick
+app = None
+if Flask is not None:
+    app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path='')
 
 
 def get_lan_ips():
@@ -120,16 +24,16 @@ def get_lan_ips():
         host = socket.gethostname()
         for info in socket.getaddrinfo(host, None, family=socket.AF_INET):
             ip = info[4][0]
-            if not ip.startswith("127."):
+            if not ip.startswith('127.'):
                 ips.add(ip)
     except OSError:
         pass
 
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.connect(("8.8.8.8", 80))
+            sock.connect(('8.8.8.8', 80))
             ip = sock.getsockname()[0]
-            if ip and not ip.startswith("127."):
+            if ip and not ip.startswith('127.'):
                 ips.add(ip)
     except OSError:
         pass
@@ -137,272 +41,116 @@ def get_lan_ips():
     return sorted(ips)
 
 
-def infer_segment(a, b):
-    dx = (float(a.get("lat", 0)) - float(b.get("lat", 0))) * 111000
-    dy = (float(a.get("lng", 0)) - float(b.get("lng", 0))) * 101000
-    meters = int(math.sqrt(dx * dx + dy * dy))
-    duration_sec = max(60, int((meters / 1000) * 180))
-    return {"durationSec": duration_sec, "distanceM": meters}
+if app is not None:
+    def json_error(message, status=500):
+        return jsonify({'ok': False, 'error': message}), status
 
 
-def normalize_location_key(stop):
-    address = str(stop.get("address") or "").strip().lower()
-    if address and address != "-":
-        return f"address:{address}"
-    lat = float(stop.get("lat") or 0)
-    lng = float(stop.get("lng") or 0)
-    return f"latlng:{lat:.5f},{lng:.5f}"
+    @app.get('/api/health')
+    @app.get('/health')
+    def health():
+        try:
+            ensure_storage()
+            return jsonify({'ok': True, 'database': get_storage_mode(), 'hasDatabaseUrl': bool(DATABASE_URL)})
+        except Exception as err:
+            return json_error(str(err), 500)
 
 
-def group_stops_by_location(stops):
-    groups = []
-    lookup = {}
-    for stop in stops:
-        key = normalize_location_key(stop)
-        group = lookup.get(key)
-        if group:
-            group["stops"].append(stop)
-            continue
-        group = {
-            "key": key,
-            "lat": float(stop.get("lat") or 0),
-            "lng": float(stop.get("lng") or 0),
-            "address": stop.get("address") or "-",
-            "label": stop.get("address") or stop.get("name") or "未命名站點",
-            "stops": [stop],
-        }
-        lookup[key] = group
-        groups.append(group)
-    return groups
+    @app.get('/api/state')
+    @app.get('/state')
+    def get_state():
+        try:
+            state = read_state()
+            state['users'] = []
+            return jsonify(state)
+        except Exception as err:
+            return json_error(str(err), 500)
 
 
-def evaluate_route(route):
-    total_duration = 0
-    total_distance = 0
-    for i in range(len(route) - 1):
-        seg = infer_segment(route[i], route[i + 1])
-        total_duration += seg["durationSec"]
-        total_distance += seg["distanceM"]
-    return total_duration, total_distance
+    @app.post('/api/state')
+    @app.post('/state')
+    def post_state():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({'error': 'invalid json'}), 400
+
+        required = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables']
+        for key in required:
+            if key not in payload:
+                return jsonify({'error': f'missing key: {key}'}), 400
+
+        payload = dict(payload)
+        payload.pop('users', None)
+
+        try:
+            ok, tick = write_state(payload)
+        except Exception as err:
+            return json_error(str(err), 500)
+        if not ok:
+            return jsonify({'error': 'stale syncTick', 'serverSyncTick': tick}), 409
+        return jsonify({'ok': True, 'syncTick': tick})
 
 
-def sort_group_stops(group):
-    stops = list(group.get("stops") or [])
-    deliveries = [stop for stop in stops if stop.get("type") == "delivery"]
-    pickups = [stop for stop in stops if stop.get("type") == "pickup"]
-    others = [stop for stop in stops if stop.get("type") not in {"delivery", "pickup"}]
-    return deliveries + pickups + others
+    @app.post('/api/trips/optimize')
+    @app.post('/trips/optimize')
+    def post_optimize_trip():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({'error': 'invalid json'}), 400
+        try:
+            result = optimize_trip(payload)
+        except ValueError as err:
+            return jsonify({'error': str(err)}), 400
+        return jsonify(result)
 
 
-def validate_business_route(route):
-    pickup_seen = False
-    for stop in route:
-        stop_type = stop.get("type") if isinstance(stop, dict) else None
-        if stop_type == "pickup":
-            pickup_seen = True
-        elif pickup_seen and stop_type == "delivery":
-            return False
-    return True
+    @app.get('/')
+    def index():
+        return send_from_directory(BASE_DIR, 'index.html')
 
 
-def build_maps_url(route):
-    deduped = []
-    for idx, stop in enumerate(route):
-        if idx in {0, len(route) - 1}:
-            deduped.append(stop)
-            continue
-        if normalize_location_key(stop) == normalize_location_key(route[idx - 1]):
-            continue
-        deduped.append(stop)
-    origin = f"{deduped[0]['lat']},{deduped[0]['lng']}"
-    destination = f"{deduped[-1]['lat']},{deduped[-1]['lng']}"
-    waypoints = "|".join([f"{r['lat']},{r['lng']}" for r in deduped[1:-1]])
-    from urllib.parse import quote
-
-    return (
-        "https://www.google.com/maps/dir/?api=1"
-        f"&origin={quote(origin)}"
-        f"&destination={quote(destination)}"
-        "&travelmode=driving"
-        f"&waypoints={quote(waypoints)}"
-    )
+    @app.get('/<path:path>')
+    def static_files(path):
+        if path.startswith('api/'):
+            abort(404)
+        if is_sensitive_path(path):
+            abort(403)
+        return send_from_directory(BASE_DIR, path)
 
 
-def optimize_trip(payload):
-    factory = payload.get("factory")
-    stops = payload.get("stops", [])
-    if not factory or not isinstance(stops, list):
-        raise ValueError("factory/stops invalid")
+def run_server(host: str, port: int):
+    ensure_storage()
+    print(f'[INFO] centralized storage: {get_storage_mode()}')
+    if not DATABASE_URL:
+        print('[INFO] 未設定 DATABASE_URL，已自動改用本機 data/app_state.json 儲存。')
+    if app is None:
+        print('[INFO] 未安裝 Flask，已自動改用 Python 內建伺服器。')
+    print(f'[INFO] server running: http://{host}:{port}')
+    if host == '0.0.0.0':
+        lan_ips = get_lan_ips()
+        if lan_ips:
+            print('[INFO] LAN 可用網址：')
+            for ip in lan_ips:
+                print(f'       http://{ip}:{port}')
+        else:
+            print('[WARN] 無法自動偵測區網 IP，請手動查詢電腦 IP 後讓手機連線。')
 
-    deliveries = [s for s in stops if s.get("type") == "delivery"]
-    pickups = [s for s in stops if s.get("type") == "pickup"]
-    location_groups = group_stops_by_location(stops)
+    if app is not None:
+        app.run(host=host, port=port)
+        return
 
-    if not stops:
-        raise ValueError("stops required")
-
-    best_route = None
-    best_duration = None
-    best_distance = None
-    best_groups = []
-    candidate_count = 0
-
-    for group_order in itertools.permutations(location_groups):
-        ordered_groups = []
-        for group in group_order:
-            ordered_groups.append({**group, "stops": sort_group_stops(group)})
-        ordered_stops = [stop for group in ordered_groups for stop in group["stops"]]
-        route = [factory] + ordered_stops + [factory]
-        if not validate_business_route(route):
-            continue
-        duration, distance = evaluate_route(route)
-        candidate_count += 1
-        if best_duration is None or duration < best_duration:
-            best_route = route
-            best_duration = duration
-            best_distance = distance
-            best_groups = [
-                {
-                    "key": group["key"],
-                    "label": group["label"],
-                    "address": group["address"],
-                    "stopIds": [stop.get("id") for stop in group["stops"]],
-                    "stops": group["stops"],
-                }
-                for group in ordered_groups
-            ]
-
-    if best_route is None:
-        raise ValueError("No valid route satisfies delivery-before-pickup rules")
-
-    return {
-        "originalStops": stops,
-        "grouped": {
-            "deliveries": deliveries,
-            "pickups": pickups,
-            "locations": [
-                {
-                    "key": group["key"],
-                    "label": group["label"],
-                    "address": group["address"],
-                    "stopIds": [stop.get("id") for stop in group["stops"]],
-                }
-                for group in location_groups
-            ],
-        },
-        "candidateCount": candidate_count,
-        "bestRoute": {
-            "pointIds": [p.get("id") for p in best_route],
-            "orderedStops": best_route,
-            "orderedGroups": best_groups,
-            "totalDurationSec": best_duration,
-            "totalDistanceM": best_distance,
-        },
-        "googleMapsUrl": build_maps_url(best_route),
-    }
-
-
-def is_sensitive_path(path: str) -> bool:
-    normalized = path.split("?", 1)[0].lower()
-    return any(normalized.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
-
-
-def json_error(message, status=500):
-    return jsonify({"ok": False, "error": message}), status
-
-
-@app.get("/api/health")
-@app.get("/health")
-def health():
+    server = create_server(host, port)
     try:
-        ensure_db()
-        return jsonify({"ok": True, "database": "postgresql", "hasDatabaseUrl": bool(DATABASE_URL)})
-    except (RuntimeError, PsycopgError) as err:
-        return json_error(str(err), 500)
+        server.serve_forever()
+    finally:
+        server.server_close()
 
 
-@app.get("/api/state")
-@app.get("/state")
-def get_state():
-    try:
-        state = read_state()
-        state["users"] = []
-        return jsonify(state)
-    except (RuntimeError, PsycopgError) as err:
-        return json_error(str(err), 500)
-
-
-@app.post("/api/state")
-@app.post("/state")
-def post_state():
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return jsonify({"error": "invalid json"}), 400
-
-    required = ["glossOptions", "customers", "orders", "audits", "receivables", "payables"]
-    for key in required:
-        if key not in payload:
-            return jsonify({"error": f"missing key: {key}"}), 400
-
-    payload = dict(payload)
-    payload.pop("users", None)
-
-    try:
-        ok, tick = write_state(payload)
-    except (RuntimeError, PsycopgError) as err:
-        return json_error(str(err), 500)
-    if not ok:
-        return jsonify({"error": "stale syncTick", "serverSyncTick": tick}), 409
-    return jsonify({"ok": True, "syncTick": tick})
-
-
-@app.post("/api/trips/optimize")
-@app.post("/trips/optimize")
-def post_optimize_trip():
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return jsonify({"error": "invalid json"}), 400
-    try:
-        result = optimize_trip(payload)
-    except ValueError as err:
-        return jsonify({"error": str(err)}), 400
-    return jsonify(result)
-
-
-@app.get("/")
-def index():
-    return send_from_directory(BASE_DIR, "index.html")
-
-
-@app.get("/<path:path>")
-def static_files(path):
-    if path.startswith("api/"):
-        abort(404)
-    if is_sensitive_path(path):
-        abort(403)
-    file_path = BASE_DIR / path
-    if not file_path.exists() or not file_path.is_file():
-        abort(404)
-    return send_from_directory(BASE_DIR, path)
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=4173)
+    parser.add_argument('--host', default='127.0.0.1')
+    parser.add_argument('--port', type=int, default=4173)
     args = parser.parse_args()
-
-    ensure_db()
-    print("[INFO] centralized DB: PostgreSQL via DATABASE_URL")
-    print(f"[INFO] server running: http://{args.host}:{args.port}")
-    if args.host == "0.0.0.0":
-        lan_ips = get_lan_ips()
-        if lan_ips:
-            print("[INFO] LAN 可用網址：")
-            for ip in lan_ips:
-                print(f"       http://{ip}:{args.port}")
-        else:
-            print("[WARN] 無法自動偵測區網 IP，請手動查詢電腦 IP 後讓手機連線。")
-    app.run(host=args.host, port=args.port)
+    run_server(args.host, args.port)
