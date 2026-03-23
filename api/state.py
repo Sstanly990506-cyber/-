@@ -9,7 +9,9 @@ from api._common import json_response, read_json_body
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            json_response(self, 200, read_state())
+            state = read_state()
+            state["users"] = []
+            json_response(self, 200, state)
         except (RuntimeError, PsycopgError) as err:
             json_response(self, 500, {"ok": False, "error": str(err)})
 
@@ -24,6 +26,9 @@ class handler(BaseHTTPRequestHandler):
             if key not in payload:
                 json_response(self, 400, {"error": f"missing key: {key}"})
                 return
+
+        payload = dict(payload)
+        payload.pop("users", None)
 
         try:
             ok, tick = write_state(payload)

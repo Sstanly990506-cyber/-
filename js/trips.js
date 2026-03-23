@@ -1,6 +1,6 @@
 import { $, money } from './shared.js';
 import { DEFAULT_FACTORY } from './trips/constants.js';
-import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl } from './trips/core.js';
+import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js';
 import { formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js';
 
 let manualStops = [];
@@ -192,6 +192,7 @@ async function runOptimize(state) {
 
 function confirmManualRoute() {
   if (!manualRoute.length) return alert('請先點「最佳化車輛」產生路線');
+  if (!validateBusinessRoute(manualRoute)) return alert('路線需先完成所有送貨，再安排取貨。');
 
   const score = evaluateRoute(manualRoute);
   if (lastResult) {
