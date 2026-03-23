@@ -85,10 +85,37 @@ function findAccountByUsername(username) {
   return getAllAccounts().find((account) => String(account.username || '').trim().toLowerCase() === key) || null;
 }
 
+<<<<<< codex-69f070
+function createViewerAccount({ username, password, display }) {
+  const normalizedUsername = String(username || '').trim();
+  const normalizedPassword = String(password || '');
+  const normalizedDisplay = String(display || normalizedUsername).trim() || normalizedUsername;
+  const account = {
+    id: crypto.randomUUID(),
+    username: normalizedUsername,
+    password: normalizedPassword,
+    display: normalizedDisplay,
+    role: 'viewer',
+    createdAt: new Date().toISOString(),
+    source: 'quick-login',
+  };
+  state.users.unshift(account);
+  appendSystemEvent(`快速建立登入帳號：${normalizedDisplay}`, 'info', { username: normalizedUsername, role: 'viewer' });
+  saveState();
+  return account;
+}
+
+function ensureLoginAccount(username, password) {
+  const normalizedUsername = String(username || '').trim();
+  const existing = findAccountByUsername(normalizedUsername);
+  if (!existing) return createViewerAccount({ username: normalizedUsername, password, display: normalizedUsername });
+  return existing.password === password ? existing : null;
+=======
 function findAccountByCredentials(username, password) {
   const account = findAccountByUsername(username);
   if (!account) return null;
   return account.password === password ? account : null;
+>>>>>> main
 }
 
 function resetRegisterForm() {
@@ -296,6 +323,13 @@ function bindCoreEvents() {
     const username = $('username').value.trim();
     const password = $('password').value;
     if (!username || !password) return alert('請輸入帳號與密碼');
+<<<<<< codex-69f070
+    const account = ensureLoginAccount(username, password);
+    if (!account) return alert('密碼錯誤，請確認登入資訊後再試一次');
+
+    state.user = account.display || account.username;
+    state.userRole = account.role || 'viewer';
+=======
 <<<<<< codex-2r5nwt
 =======
 <<<<<< codex-d2sdch
@@ -314,6 +348,7 @@ function bindCoreEvents() {
     const effectiveAccount = account || { role: 'admin', display: username };
     state.user = effectiveAccount.display;
     state.userRole = effectiveAccount.role;
+>>>>>> main
 >>>>>> main
 >>>>>> main
     const prefix = state.settings?.welcomePrefix || '你好';
@@ -425,10 +460,11 @@ try {
   bindTripEvents(state, saveState, renderAll);
   bindInventoryEvents(state, saveState, renderAll);
   bindSettingsEvents(state, saveState, renderAll);
-<<<<<< codex-2r5nwt
-  window.__appBootstrapped = true;
+<<<<<< codex-69f070
 =======
+<<<<<< codex-2r5nwt
 >>>>>> main
+  window.__appBootstrapped = true;
   renderAll();
   window.__appBootstrapped = true;
   showView('loginView');
