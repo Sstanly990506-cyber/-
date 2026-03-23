@@ -31,7 +31,8 @@ let fileModeOnly = false;
 let onRefresh = () => {};
 let onSyncUi = () => {};
 
-function applyStatePayload(payload) {
+function applyStatePayload(payload, options = {}) {
+  const { includeUsers = false } = options;
   state.glossOptions = payload.glossOptions || ['PVA光', 'PVB光/油', '耐磨', '壓光'];
   state.customers = payload.customers || [];
   state.orders = payload.orders || [];
@@ -41,7 +42,7 @@ function applyStatePayload(payload) {
   state.systemEvents = payload.systemEvents || [];
   state.settings = mergeSettings(payload.settings || state.settings || {});
   state.inventoryItems = payload.inventoryItems || [];
-  state.users = payload.users || [];
+  if (includeUsers) state.users = payload.users || [];
   state.financePassword = state.settings.financePassword;
 }
 
@@ -65,19 +66,8 @@ function loadLocalState() {
     systemEvents: readStorageJson('systemEvents', []),
     settings: readStorageJson('settings', null),
     inventoryItems: readStorageJson('inventoryItems', []),
-<<<<<< codex-69f070
     users: readStorageJson('users', []),
-=======
-<<<<<< codex-2r5nwt
-    users: readStorageJson('users', []),
-=======
-<<<<<< codex-d2sdch
-    users: readStorageJson('users', []),
-=======
->>>>>> main
->>>>>> main
->>>>>> main
-  });
+  }, { includeUsers: true });
 }
 
 function saveLocalState(now) {
@@ -124,7 +114,6 @@ async function pushServerState(syncTick) {
     systemEvents: state.systemEvents.slice(0, 500),
     settings: state.settings,
     inventoryItems: state.inventoryItems,
-    users: state.users,
     syncTick,
   };
 
