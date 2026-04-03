@@ -15,6 +15,14 @@ function renderCustomerRoleOptions(state) {
   select.value = roles.includes(current) ? current : roles[0];
 }
 
+function fillCustomerForm(customer) {
+  if (!customer) return;
+  $('customerName').value = customer.name || '';
+  $('customerPhone').value = customer.phone || '';
+  $('customerAddress').value = customer.address || '';
+  $('customerRole').value = customer.role || $('customerRole').value;
+}
+
 function normalizePhone(phone = '') {
   return phone.replace(/[^\d+]/g, '');
 }
@@ -92,7 +100,10 @@ export function renderCustomers(state) {
       <td>${c.address || '-'}</td>
       <td>${c.role}</td>
       <td><span class="tag ${c.active === false ? 'off' : ''}">${c.active === false ? '停用' : '啟用'}</span></td>
-      <td><button class="btn" data-toggle-customer="${c.id}">${c.active === false ? '啟用' : '停用'}</button></td>`;
+      <td class="actions">
+        <button class="btn" data-edit-customer="${c.id}">編輯</button>
+        <button class="btn" data-toggle-customer="${c.id}">${c.active === false ? '啟用' : '停用'}</button>
+      </td>`;
       body.append(tr);
     });
 
@@ -102,12 +113,13 @@ export function renderCustomers(state) {
 export function bindCustomerEvents(state, saveState, renderAll) {
   $('customerForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
+    const editingId = e.target.dataset.editingCustomerId || '';
     const name = $('customerName').value.trim() || '未命名客戶';
     const role = $('customerRole').value || getCustomerRoles(state)[0];
     const phone = normalizePhone($('customerPhone').value.trim());
     const address = $('customerAddress').value.trim();
 
-    const duplicate = state.customers.find((c) => (c.name || '').trim().toLowerCase() === name.toLowerCase());
+    const duplicate = state.customers.find((c) => c.id !== editingId && (c.name || '').trim().toLowerCase() === name.toLowerCase());
     if (duplicate) {
       if (duplicate.active === false) {
         duplicate.active = true;
@@ -123,7 +135,17 @@ export function bindCustomerEvents(state, saveState, renderAll) {
       return alert(`客戶已存在：${name}`);
     }
 
-    state.customers.push({ id: crypto.randomUUID(), name, role, phone, address, active: true });
+    if (editingId) {
+      const target = state.customers.find((c) => c.id === editingId);
+      if (!target) return;
+      target.name = name;
+      target.role = role;
+      target.phone = phone;
+      target.address = address;
+      delete e.target.dataset.editingCustomerId;
+    } else {
+      state.customers.push({ id: crypto.randomUUID(), name, role, phone, address, active: true });
+    }
     saveState();
     e.target.reset();
     updateCustomerSmartHint(state);
@@ -134,6 +156,16 @@ export function bindCustomerEvents(state, saveState, renderAll) {
   $('customerSearch')?.addEventListener('input', () => renderCustomers(state));
 
   $('customersTbody')?.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('button[data-edit-customer]');
+    if (editBtn) {
+      const customer = state.customers.find((c) => c.id === editBtn.dataset.editCustomer);
+      if (!customer) return;
+      $('customerForm').dataset.editingCustomerId = customer.id;
+      fillCustomerForm(customer);
+      updateCustomerSmartHint(state);
+      return;
+    }
+
     const btn = e.target.closest('button[data-toggle-customer]');
     if (!btn) return;
     const customer = state.customers.find((c) => c.id === btn.dataset.toggleCustomer);

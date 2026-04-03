@@ -286,6 +286,40 @@ th {
 }
 .tag.off { background: var(--muted); }
 .tag.warn { background: rgba(239, 68, 68, 0.22); color: #fecaca; }
+.tag.danger { background: rgba(239, 68, 68, 0.38); color: #fee2e2; }
+.stock-warning { color: #fcd34d; font-weight: 700; }
+.stock-danger { color: #fca5a5; font-weight: 700; }
+.ops-link-btn {
+  width: 100%;
+  text-align: left;
+  background: rgba(15, 23, 42, 0.68);
+}
+.notice-read { opacity: 0.72; }
+.notice-unread { border-left: 3px solid var(--primary); padding-left: 8px; }
+.chart-bars {
+  display: grid;
+  gap: 8px;
+}
+.chart-bar-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 90px;
+  gap: 10px;
+  align-items: center;
+}
+.chart-bar-track {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+}
+.chart-bar-fill {
+  height: 100%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+}
+.chart-bar-fill.neg {
+  background: linear-gradient(135deg, #fb7185, #ef4444);
+}
 dialog {
   border: none;
   border-radius: 16px;

@@ -230,6 +230,35 @@ function renderFinanceInsights(state, reportA) {
     : '<li>7 日內無快到期帳款</li>';
 }
 
+function renderFinanceChartAndAnalysis(reportC, reportA) {
+  const wrap = $('financeChartBars');
+  const analysis = $('financeAnalysisList');
+  if (!wrap || !analysis) return;
+  const recent = [...reportC].sort((a, b) => a.month.localeCompare(b.month)).slice(-6);
+  const maxNet = Math.max(1, ...recent.map((row) => Math.abs(Number(row.net || 0))));
+  wrap.innerHTML = recent.length
+    ? recent.map((row) => {
+      const net = Number(row.net || 0);
+      const width = Math.round((Math.abs(net) / maxNet) * 100);
+      return `<div class="chart-bar-row"><span>${row.month}</span><div class="chart-bar-track"><div class="chart-bar-fill ${net < 0 ? 'neg' : ''}" style="width:${width}%"></div></div><strong>${money(net)}</strong></div>`;
+    }).join('')
+    : '<p class="sub">目前沒有月報資料</p>';
+
+  const totalRecv = reportA.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const totalReceived = reportA.reduce((sum, row) => sum + Number(row.received || 0), 0);
+  const collectionRate = totalRecv > 0 ? (totalReceived / totalRecv) * 100 : 0;
+  const avgNet = recent.length ? recent.reduce((sum, row) => sum + Number(row.net || 0), 0) / recent.length : 0;
+  $('financeCollectionRate').textContent = `${collectionRate.toFixed(1)}%`;
+  $('financeAvgNet6m').textContent = money(Math.round(avgNet));
+
+  const insights = [];
+  if (avgNet < 0) insights.push('近 6 月平均淨額為負，建議優先檢視高成本工單與應付付款節奏。');
+  if (collectionRate < 70) insights.push(`收款率 ${collectionRate.toFixed(1)}% 偏低，建議啟動催收流程。`);
+  const topOverdue = [...reportA].filter((r) => r.remain > 0).sort((a, b) => b.remain - a.remain).slice(0, 3);
+  if (topOverdue.length) insights.push(`未收風險前 3 名：${topOverdue.map((r) => `${r.customer}/${money(r.remain)}`).join('、')}`);
+  analysis.innerHTML = (insights.length ? insights : ['財務結構穩定，請持續追蹤帳齡與月報。']).map((line) => `<li>${line}</li>`).join('');
+}
+
 
 function buildTodayAlerts(state, reportA) {
   const today = new Date().toISOString().slice(0, 10);
@@ -320,6 +349,7 @@ export function renderFinance(state) {
   if ($('invoiceDate') && !$('invoiceDate').value) $('invoiceDate').value = getTodayText();
   renderFinanceInsights(state, reportA);
   renderTodayAlerts(state, reportA);
+  renderFinanceChartAndAnalysis(reportC, reportA);
 
   const isMain = state.financeScreen === 'main';
   $('financeMainScreen').classList.toggle('hidden', !isMain);
