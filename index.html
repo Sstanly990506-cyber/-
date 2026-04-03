@@ -183,7 +183,7 @@
             <input id="customerSearch" placeholder="搜尋名稱/電話/地址" />
             <div class="table-wrap">
               <table>
-                <thead><tr><th>名稱</th><th>電話</th><th>地址</th><th>角色</th><th>狀態</th><th></th></tr></thead>
+                <thead><tr><th>名稱</th><th>電話</th><th>地址</th><th>角色</th><th>狀態</th><th>操作</th></tr></thead>
                 <tbody id="customersTbody"></tbody>
               </table>
             </div>
@@ -274,10 +274,12 @@
         <div class="split">
           <article class="card">
             <h3>逾期待處理工單</h3>
+            <p class="sub">點擊工單可直接開啟詳細頁面。</p>
             <ul id="opsDelayedList" class="list"></ul>
           </article>
           <article class="card">
             <h3>資料待補工單</h3>
+            <p class="sub">點擊工單可直接開啟詳細頁面。</p>
             <ul id="opsMissingDataList" class="list"></ul>
           </article>
         </div>
@@ -311,6 +313,19 @@
           </article>
           <article class="card">
             <h3>庫存總覽</h3>
+            <div class="filter-row">
+              <input id="inventorySearch" placeholder="搜尋品項 / 分類 / 備註" />
+              <select id="inventorySort">
+                <option value="updatedAt-desc">更新時間（新到舊）</option>
+                <option value="material-asc">品項名稱（A→Z）</option>
+                <option value="stock-asc">庫存量（低→高）</option>
+                <option value="stock-desc">庫存量（高→低）</option>
+                <option value="safety-asc">安全庫存差（最危險優先）</option>
+              </select>
+              <button class="btn" type="button" id="inventoryExportBtn">匯出 CSV</button>
+              <label class="btn" for="inventoryImportFile">匯入 CSV</label>
+              <input id="inventoryImportFile" type="file" accept=".csv" class="hidden" />
+            </div>
             <div class="kpi-grid kpi-grid-2">
               <div class="kpi"><span>品項數</span><strong id="inventoryItemsCount">0</strong></div>
               <div class="kpi"><span>低庫存</span><strong id="inventoryLowCount">0</strong></div>
@@ -343,6 +358,19 @@
         </div>
         <article class="card">
           <h3>最新通知與系統事件</h3>
+          <div class="filter-row">
+            <select id="noticeTypeFilter">
+              <option value="all">全部類型</option>
+              <option value="critical">關鍵</option>
+              <option value="warning">警告</option>
+              <option value="info">資訊</option>
+            </select>
+            <input id="noticeDateFrom" type="date" />
+            <input id="noticeDateTo" type="date" />
+            <input id="noticeKeyword" placeholder="搜尋關鍵字" />
+            <button class="btn" type="button" id="markNoticeReadBtn">標記已讀</button>
+            <button class="btn" type="button" id="exportNoticeBtn">匯出日誌 CSV</button>
+          </div>
           <ul id="notificationsList" class="list"></ul>
         </article>
       </section>
@@ -387,6 +415,15 @@
               <ul id="financeDueSoonList" class="list"></ul>
             </article>
           </div>
+          <article class="card">
+            <h3>財務報表圖表與分析</h3>
+            <div class="kpi-grid kpi-grid-2">
+              <div class="kpi"><span>近 6 月平均淨額</span><strong id="financeAvgNet6m">0</strong></div>
+              <div class="kpi"><span>收款率</span><strong id="financeCollectionRate">0%</strong></div>
+            </div>
+            <div id="financeChartBars" class="chart-bars"></div>
+            <ul id="financeAnalysisList" class="list"></ul>
+          </article>
         </article>
 
           <div class="split finance-split">
@@ -614,8 +651,23 @@
           <div class="filter-row">
             <input id="auditStart" type="date" />
             <input id="auditEnd" type="date" />
+            <select id="auditFieldFilter"><option value="">全部欄位</option></select>
+            <input id="auditUserFilter" placeholder="操作者" />
+            <select id="auditAnomalyOnly"><option value="all">全部紀錄</option><option value="only">僅顯示異常</option></select>
             <input id="auditKeyword" placeholder="搜尋工單、操作者、欄位" />
             <button class="btn" type="button" id="applyAuditFilterBtn">套用搜尋</button>
+            <label class="btn" for="auditImportFile">匯入外部稽核 CSV</label>
+            <input id="auditImportFile" type="file" accept=".csv" class="hidden" />
+          </div>
+          <div class="split">
+            <article class="card">
+              <h3>稽核趨勢圖</h3>
+              <div id="auditTrendBars" class="chart-bars"></div>
+            </article>
+            <article class="card">
+              <h3>異常偵測</h3>
+              <ul id="auditAnomalyList" class="list"></ul>
+            </article>
           </div>
           <div class="table-wrap">
             <table>

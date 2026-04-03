@@ -264,6 +264,29 @@ export function clearOrderForm() {
   $('sizeTaiInch').value = '';
 }
 
+export function openOrderForEdit(state, orderId) {
+  const order = state.orders.find((o) => o.id === orderId);
+  if (!order) return false;
+  $('orderId').value = order.id;
+  $('orderNumber').value = order.orderNumber || '';
+  $('orderDate').value = order.orderDate || '';
+  $('upstreamInput').value = order.upstream || '';
+  $('downstreamInput').value = order.downstream || '';
+  $('orderAddress').value = order.address || '';
+  $('sheetCount').value = order.sheetCount || '';
+  $('sizeLength').value = order.sizeLength || '';
+  $('sizeWidth').value = order.sizeWidth || '';
+  $('sizeUnit').value = order.sizeUnit || 'mm';
+  $('glossType').value = order.glossType || '';
+  $('totalPrice').value = order.totalPrice || '';
+  $('orderStatus').value = order.status || '未完成';
+  state.orderScreen = 'form';
+  renderOrderScreen(state);
+  updateOrderSmartHint(state);
+  $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
+  return true;
+}
+
 export function bindOrderEvents(state, saveState, renderAll) {
   $('addGlossBtn')?.addEventListener('click', () => {
     const input = $('newGlossType');
@@ -339,26 +362,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
 
     const btn = e.target.closest('button[data-edit]');
     if (!btn) return;
-    const order = state.orders.find((o) => o.id === btn.dataset.edit);
-    if (!order) return;
-
-    $('orderId').value = order.id;
-    $('orderNumber').value = order.orderNumber || '';
-    $('orderDate').value = order.orderDate || '';
-    $('upstreamInput').value = order.upstream || '';
-    $('downstreamInput').value = order.downstream || '';
-    $('orderAddress').value = order.address || '';
-    $('sheetCount').value = order.sheetCount || '';
-    $('sizeLength').value = order.sizeLength || '';
-    $('sizeWidth').value = order.sizeWidth || '';
-    $('sizeUnit').value = order.sizeUnit || 'mm';
-    $('glossType').value = order.glossType || '';
-    $('totalPrice').value = order.totalPrice || '';
-    $('orderStatus').value = order.status || '未完成';
-    state.orderScreen = 'form';
-    renderOrderScreen(state);
-    updateOrderSmartHint(state);
-  $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
+    openOrderForEdit(state, btn.dataset.edit);
   });
 
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });

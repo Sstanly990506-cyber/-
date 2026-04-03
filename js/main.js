@@ -11,13 +11,13 @@ import {
   appendSystemEvent,
 } from './store.js';
 import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents } from './orders.js';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js';
 import { renderFinance, bindFinanceEvents } from './finance.js';
 import { renderAudits, bindAuditEvents } from './audit.js';
 import { renderTrips, bindTripEvents } from './trips.js';
-import { renderOpsCenter } from './ops-center.js';
+import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js';
 import { renderInventory, bindInventoryEvents } from './inventory.js';
-import { renderNotifications } from './notifications.js';
+import { renderNotifications, bindNotificationEvents } from './notifications.js';
 
 const APP_BUILD = '2026-03-18-enterprise-core-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
@@ -426,10 +426,18 @@ try {
   bindCustomerEvents(state, saveState, renderAll);
   bindOrderEvents(state, saveState, renderAll);
   bindFinanceEvents(state, saveState, renderAll);
-  bindAuditEvents(state);
+  bindAuditEvents(state, saveState, renderAll);
   bindTripEvents(state, saveState, renderAll);
   bindInventoryEvents(state, saveState, renderAll);
+  bindNotificationEvents(state, saveState, renderAll);
+  bindOpsCenterEvents();
   bindSettingsEvents(state, saveState, renderAll);
+  window.addEventListener('app:open-order-detail', (e) => {
+    const orderId = e.detail?.orderId;
+    if (!orderId) return;
+    showView('ordersView');
+    openOrderForEdit(state, orderId);
+  });
   window.__appBootstrapped = true;
   renderAll();
   showView('loginView');

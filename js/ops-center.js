@@ -24,13 +24,23 @@ export function renderOpsCenter(state) {
 
   if ($('opsDelayedList')) {
     $('opsDelayedList').innerHTML = delayedOrders.length
-      ? delayedOrders.slice(0, 8).map((order) => `<li>${order.orderNumber || '-'}｜${order.downstream || order.upstream || '-'}｜${order.orderDate || '-'}｜${order.status || '未完成'}</li>`).join('')
+      ? delayedOrders.slice(0, 8).map((order) => `<li><button class="btn ops-link-btn" data-open-order="${order.id}">${order.orderNumber || '-'}｜${order.downstream || order.upstream || '-'}｜${order.orderDate || '-'}｜${order.status || '未完成'}</button></li>`).join('')
       : '<li>目前沒有逾期待處理工單。</li>';
   }
 
   if ($('opsMissingDataList')) {
     $('opsMissingDataList').innerHTML = missingDataOrders.length
-      ? missingDataOrders.slice(0, 8).map((order) => `<li>${order.orderNumber || '-'}｜缺少${!order.address ? '地址' : ''}${!order.address && Number(order.totalPrice || 0) <= 0 ? '、' : ''}${Number(order.totalPrice || 0) <= 0 ? '總價' : ''}</li>`).join('')
+      ? missingDataOrders.slice(0, 8).map((order) => `<li><button class="btn ops-link-btn" data-open-order="${order.id}">${order.orderNumber || '-'}｜缺少${!order.address ? '地址' : ''}${!order.address && Number(order.totalPrice || 0) <= 0 ? '、' : ''}${Number(order.totalPrice || 0) <= 0 ? '總價' : ''}</button></li>`).join('')
       : '<li>目前沒有資料不完整的工單。</li>';
   }
+}
+
+export function bindOpsCenterEvents() {
+  ['opsDelayedList', 'opsMissingDataList'].forEach((id) => {
+    $(id)?.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-open-order]');
+      if (!btn) return;
+      window.dispatchEvent(new CustomEvent('app:open-order-detail', { detail: { orderId: btn.dataset.openOrder } }));
+    });
+  });
 }

@@ -19,7 +19,7 @@ export const state = {
   users: [],
   reportRange: { start: '', end: '' },
   financeScreen: 'main',
-  auditFilter: { start: '', end: '', keyword: '' },
+  auditFilter: { start: '', end: '', keyword: '', user: '', field: '', anomalyOnly: false },
   orderStatusFilter: '全部',
   orderScreen: 'list',
 };
