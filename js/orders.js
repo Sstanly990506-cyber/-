@@ -393,14 +393,11 @@ export function bindOrderEvents(state, saveState, renderAll) {
     });
   });
 
-  document.querySelectorAll('[data-status-filter]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.orderStatusFilter = btn.dataset.statusFilter;
-      document.querySelectorAll('[data-status-filter]').forEach((filterBtn) => {
-        filterBtn.classList.toggle('active', filterBtn.dataset.statusFilter === state.orderStatusFilter);
-      });
-      renderAll();
-    });
+  $('orderStatusFilters')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-status-filter]');
+    if (!btn) return;
+    state.orderStatusFilter = btn.dataset.statusFilter;
+    renderAll();
   });
 
   $('orderSearch')?.addEventListener('input', () => renderAll());
