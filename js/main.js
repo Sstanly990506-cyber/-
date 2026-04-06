@@ -1,4 +1,4 @@
-import { $, COMPANY_INFO } from './shared.js';
+import { $, COMPANY_INFO, MODULE_DEFINITIONS } from './shared.js';
 import { applyUiSettings, bindSettingsEvents, renderSettings } from './settings.js';
 import {
   state,
@@ -94,8 +94,9 @@ function resetRegisterForm() {
 
 function applyRoleUi() {
   document.querySelectorAll('.nav-card').forEach((card) => {
-    const enabled = isModuleEnabled(card.dataset.target);
-    const allowed = hasViewPermission(card.dataset.target);
+    const targetView = card.dataset.target;
+    const enabled = isModuleEnabled(targetView);
+    const allowed = hasViewPermission(targetView);
     card.hidden = !enabled;
     card.disabled = !allowed;
     card.classList.toggle('is-locked', !allowed);
@@ -103,6 +104,14 @@ function applyRoleUi() {
     card.title = !enabled ? '此模組已在設定中停用' : allowed ? '' : '目前帳號沒有此模組權限';
     card.style.opacity = allowed ? '1' : '0.5';
     card.style.cursor = allowed ? 'pointer' : 'not-allowed';
+  });
+
+  MODULE_DEFINITIONS.forEach((module) => {
+    const enabled = isModuleEnabled(module.id);
+    document.querySelectorAll(`[data-open-view="${module.id}"]`).forEach((btn) => {
+      btn.classList.toggle('hidden', !enabled);
+      if ('disabled' in btn) btn.disabled = !enabled;
+    });
   });
 }
 
@@ -254,6 +263,11 @@ function renderAll() {
   renderInventory(state);
   renderNotifications(state);
   renderSettings(state);
+  const activeView = views.find((viewId) => !$(viewId)?.classList.contains('hidden'));
+  if (activeView && activeView !== 'loginView' && !hasViewPermission(activeView)) {
+    views.forEach((viewId) => $(viewId)?.classList.add('hidden'));
+    $('dashboardView')?.classList.remove('hidden');
+  }
 }
 
 function showView(id) {
