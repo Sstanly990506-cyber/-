@@ -19,19 +19,12 @@ import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js';
 import { renderInventory, bindInventoryEvents } from './inventory.js';
 import { renderNotifications, bindNotificationEvents } from './notifications.js';
 
-const APP_BUILD = '2026-03-18-enterprise-core-1';
+const APP_BUILD = '2026-04-06-account-api-separation-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
 const REMINDER_LAST_SIGNATURE_KEY = 'smartReminderLastSignature';
 let lastCriticalSignature = '';
-
-const BUILTIN_ACCOUNTS = [
-  { username: 'admin', password: 'admin123', role: 'admin', display: '系統管理員' },
-  { username: 'ops', password: 'ops123', role: 'ops', display: '作業主管' },
-  { username: 'finance', password: 'finance123', role: 'finance', display: '財務主管' },
-  { username: 'audit', password: 'audit123', role: 'audit', display: '稽核主管' },
-];
 
 const ROLE_PERMS = {
   admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView'],
@@ -75,40 +68,20 @@ function hasViewPermission(viewId) {
   return getRolePerms().includes(viewId);
 }
 
-function getAllAccounts() {
-  return [...BUILTIN_ACCOUNTS, ...(state.users || [])];
-}
-
-function findAccountByUsername(username) {
-  const key = String(username || '').trim().toLowerCase();
-  if (!key) return null;
-  return getAllAccounts().find((account) => String(account.username || '').trim().toLowerCase() === key) || null;
-}
-
-function createViewerAccount({ username, password, display }) {
-  const normalizedUsername = String(username || '').trim();
-  const normalizedPassword = String(password || '');
-  const normalizedDisplay = String(display || normalizedUsername).trim() || normalizedUsername;
-  const account = {
-    id: crypto.randomUUID(),
-    username: normalizedUsername,
-    password: normalizedPassword,
-    display: normalizedDisplay,
-    role: 'viewer',
-    createdAt: new Date().toISOString(),
-    source: 'quick-login',
-  };
-  state.users.unshift(account);
-  appendSystemEvent(`快速建立登入帳號：${normalizedDisplay}`, 'info', { username: normalizedUsername, role: 'viewer' });
-  saveState();
-  return account;
-}
-
-function ensureLoginAccount(username, password) {
-  const normalizedUsername = String(username || '').trim();
-  const existing = findAccountByUsername(normalizedUsername);
-  if (!existing) return createViewerAccount({ username: normalizedUsername, password, display: normalizedUsername });
-  return existing.password === password ? existing : null;
+async function callUserApi(payload) {
+  const res = await fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data.account;
 }
 
 function resetRegisterForm() {
@@ -311,13 +284,18 @@ function openFinanceGate() {
 }
 
 function bindCoreEvents() {
-  $('loginForm')?.addEventListener('submit', (e) => {
+  $('loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = $('username').value.trim();
     const password = $('password').value;
     if (!username || !password) return alert('請輸入帳號與密碼');
-    const account = ensureLoginAccount(username, password);
-    if (!account) return alert('密碼錯誤，請確認登入資訊後再試一次');
+
+    let account = null;
+    try {
+      account = await callUserApi({ action: 'login', username, password });
+    } catch (err) {
+      return alert(err?.message || '登入失敗，請確認帳號密碼');
+    }
 
     state.user = account.display || account.username;
     state.userRole = account.role || 'viewer';
@@ -329,7 +307,7 @@ function bindCoreEvents() {
     showView(hasViewPermission(landing) ? landing : 'dashboardView');
   });
 
-  $('registerForm')?.addEventListener('submit', (e) => {
+  $('registerForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const display = $('registerDisplay')?.value.trim();
     const username = $('registerUsername')?.value.trim();
@@ -340,16 +318,13 @@ function bindCoreEvents() {
     if (username.length < 3) return alert('帳號至少需要 3 碼');
     if (password.length < 4) return alert('密碼至少需要 4 碼');
     if (password !== confirmPassword) return alert('兩次輸入的密碼不一致');
-    if (findAccountByUsername(username)) return alert('此帳號已存在，請改用其他帳號名稱');
 
-    state.users.unshift({
-      id: crypto.randomUUID(),
-      username,
-      password,
-      display,
-      role: 'viewer',
-      createdAt: new Date().toISOString(),
-    });
+    try {
+      await callUserApi({ action: 'register', display, username, password });
+    } catch (err) {
+      return alert(err?.message || '註冊失敗，請稍後再試');
+    }
+
     appendSystemEvent(`新帳號註冊：${display}`, 'info', { username, role: 'viewer' });
     saveState();
     $('username').value = username;
