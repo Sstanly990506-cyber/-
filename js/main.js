@@ -112,6 +112,10 @@ function applyRoleUi() {
       btn.classList.toggle('hidden', !enabled);
       if ('disabled' in btn) btn.disabled = !enabled;
     });
+<<<<<< codex/hide-module-when-disabled-vqwzr1
+=======
+    if (!enabled) $(module.id)?.classList.add('hidden');
+>>>>>> main
   });
 }
 
