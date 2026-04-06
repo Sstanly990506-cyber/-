@@ -80,7 +80,11 @@ async function callUserApi(payload) {
   } catch {
     data = null;
   }
-  if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  if (!res.ok || !data?.ok) {
+    const err = new Error(data?.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
   return data.account;
 }
 
@@ -274,12 +278,6 @@ function showView(id) {
 
 function openFinanceGate() {
   if (!hasViewPermission('financeView')) return alert(isModuleEnabled('financeView') ? '此帳號沒有財經模組權限。' : '財經模組目前已停用。');
-  if (state.settings?.openAccess || !state.settings?.financeGateEnabled) return showView('financeView');
-  const dialog = $('financeDialog');
-  if (dialog && typeof dialog.showModal === 'function') return dialog.showModal();
-  const input = window.prompt('請輸入財經系統密碼');
-  if (input === null) return;
-  if (input !== state.financePassword) return alert('密碼錯誤');
   showView('financeView');
 }
 
@@ -294,6 +292,7 @@ function bindCoreEvents() {
     try {
       account = await callUserApi({ action: 'login', username, password });
     } catch (err) {
+      if (err?.status === 401 || err?.status === 403) return alert('伺服器拒絕登入或權限不足，請確認帳號權限設定。');
       return alert(err?.message || '登入失敗，請確認帳號密碼');
     }
 
@@ -359,7 +358,6 @@ function bindCoreEvents() {
 
   $('financeForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
-    if ($('financePassword').value !== state.financePassword) return alert('密碼錯誤');
     $('financePassword').value = '';
     $('financeDialog').close();
     showView('financeView');

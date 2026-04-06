@@ -161,21 +161,34 @@ curl -I http://127.0.0.1:4173
 - 所有電腦都連這台主機網址
 - 這樣大家看到的就是同一份資料
 
-## 登入與測試資料
+## 登入與初始化帳密
 
-- 登入頁改為「帳號 API 驗證」：
+- 登入頁使用「帳號 API 驗證」：
   - 登入只接受既有帳號（不存在或密碼錯誤會被拒絕）。
   - 註冊會呼叫 `/api/users` 建立 `viewer` 帳號。
-- 內建測試帳號：
-  - `admin / admin123`
-  - `ops / ops123`
-  - `finance / finance123`
-  - `audit / audit123`
-- 若帳號已存在，就必須輸入原本密碼；輸錯時系統會拒絕登入。
-- 財經系統二次密碼（預設）：
+- 內建帳號會在**首次啟動初始化**時建立（`admin` / `ops` / `finance` / `audit`）。
+- 建議在啟動前設定以下環境變數，以指定初始化密碼：
+  - `INIT_ADMIN_PASSWORD`（至少應設定此值）
+  - `INIT_OPS_PASSWORD`
+  - `INIT_FINANCE_PASSWORD`
+  - `INIT_AUDIT_PASSWORD`
+- 若未設定對應環境變數，系統會在啟動時為該帳號產生一次性隨機密碼，並輸出在 server log。
+- 內建帳號只會在「帳號尚不存在」時初始化建立；若已存在，不會覆蓋既有密碼。
 
-```text
-finance123
+### 範例（Mac/Linux）
+
+```bash
+INIT_ADMIN_PASSWORD='請改成強密碼' \
+INIT_FINANCE_PASSWORD='請改成強密碼' \
+python3 api_server.py --port 4173 --host 127.0.0.1
+```
+
+### 範例（Windows PowerShell）
+
+```powershell
+$env:INIT_ADMIN_PASSWORD = "請改成強密碼"
+$env:INIT_FINANCE_PASSWORD = "請改成強密碼"
+python api_server.py --port 4173 --host 127.0.0.1
 ```
 
 ---

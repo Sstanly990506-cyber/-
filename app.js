@@ -1,6 +1,5 @@
 const state = {
   user: null,
-  financePassword: "finance123",
   glossOptions: JSON.parse(localStorage.getItem("glossOptions") || '["A光","B光"]'),
   customers: JSON.parse(localStorage.getItem("customers") || "[]"),
   orders: JSON.parse(localStorage.getItem("orders") || "[]"),
@@ -12,18 +11,6 @@ const API_STATE_URL = "/api/state";
 const $ = (id) => document.getElementById(id);
 
 function openFinanceGate() {
-  const dialog = $("financeDialog");
-  if (dialog && typeof dialog.showModal === "function") {
-    dialog.showModal();
-    return;
-  }
-
-  const input = window.prompt("請輸入財經系統密碼");
-  if (input === null) return;
-  if (input !== state.financePassword) {
-    alert("密碼錯誤");
-    return;
-  }
   showView("financeView");
 }
 
@@ -183,16 +170,10 @@ document.querySelectorAll(".nav-card").forEach((card) => {
   });
 });
 
-$("financeForm").addEventListener("submit", (e) => {
+$("financeForm")?.addEventListener("submit", (e) => {
   e.preventDefault();
-  const value = $("financePassword").value;
-  if (value !== state.financePassword) {
-    e.preventDefault();
-    alert("密碼錯誤");
-    return;
-  }
   $("financePassword").value = "";
-  $("financeDialog").close();
+  $("financeDialog")?.close();
   showView("financeView");
 });
 
