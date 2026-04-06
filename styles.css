@@ -213,8 +213,8 @@ input[type="checkbox"] { width: auto; }
 .nav-card {
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 18px;
-  min-height: 132px;
-  padding: 16px;
+  min-height: 96px;
+  padding: 14px;
   color: var(--text);
   background:
     radial-gradient(circle at top right, rgba(139, 92, 246, 0.18), transparent 28%),
@@ -223,13 +223,13 @@ input[type="checkbox"] { width: auto; }
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22);
   cursor: pointer;
   display: grid;
-  gap: 10px;
+  gap: 6px;
   text-align: left;
 }
 .nav-card:hover { transform: translateY(-4px); }
 .nav-card:active { transform: translateY(-1px); }
 .nav-card-icon { font-size: 30px; }
-.nav-card strong { font-size: 20px; line-height: 1.25; }
+.nav-card strong { font-size: 18px; line-height: 1.25; }
 .nav-card small { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .nav-card.is-hidden-module {
   opacity: 0.38 !important;
