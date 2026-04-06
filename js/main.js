@@ -98,12 +98,20 @@ function applyRoleUi() {
     const enabled = isModuleEnabled(targetView);
     const allowed = hasViewPermission(targetView);
     card.hidden = !enabled;
-    card.disabled = !allowed;
+    card.disabled = !enabled;
     card.classList.toggle('is-locked', !allowed);
     card.classList.toggle('is-hidden-module', !enabled);
     card.title = !enabled ? '此模組已在設定中停用' : allowed ? '' : '目前帳號沒有此模組權限';
-    card.style.opacity = allowed ? '1' : '0.5';
-    card.style.cursor = allowed ? 'pointer' : 'not-allowed';
+    card.style.opacity = enabled ? (allowed ? '1' : '0.5') : '0';
+    card.style.cursor = enabled ? 'pointer' : 'not-allowed';
+  });
+
+  MODULE_DEFINITIONS.forEach((module) => {
+    const enabled = isModuleEnabled(module.id);
+    document.querySelectorAll(`[data-open-view="${module.id}"]`).forEach((btn) => {
+      btn.classList.toggle('hidden', !enabled);
+      if ('disabled' in btn) btn.disabled = !enabled;
+    });
   });
 
   MODULE_DEFINITIONS.forEach((module) => {
