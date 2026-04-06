@@ -10,7 +10,6 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             state = read_state()
-            state["users"] = []
             json_response(self, 200, state)
         except (RuntimeError, PsycopgError) as err:
             json_response(self, 500, {"ok": False, "error": str(err)})
@@ -28,7 +27,6 @@ class handler(BaseHTTPRequestHandler):
                 return
 
         payload = dict(payload)
-        payload.pop("users", None)
 
         try:
             ok, tick = write_state(payload)

@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from api._common import json_response, read_json_body
-from api.storage import BASE_DIR, DATABASE_URL, ensure_storage, get_storage_mode, read_state, write_state
+from api.storage import BASE_DIR, DATABASE_URL, authenticate_user, ensure_storage, get_storage_mode, read_state, register_user, write_state
 from api.trip_optimizer import optimize_trip
 
 SENSITIVE_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.py', '.bat', '.ps1', '.sh'}
@@ -75,6 +75,9 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         if path in {'/api/state', '/state'}:
             self.handle_post_state()
             return
+        if path in {'/api/users', '/users'}:
+            self.handle_post_users()
+            return
         if path in {'/api/trips/optimize', '/trips/optimize'}:
             self.handle_post_optimize_trip()
             return
@@ -93,7 +96,6 @@ class AppRequestHandler(BaseHTTPRequestHandler):
     def handle_get_state(self):
         try:
             state = read_state()
-            state['users'] = []
             json_response(self, 200, state)
         except Exception as err:
             json_response(self, 500, {'ok': False, 'error': str(err)})
@@ -111,7 +113,6 @@ class AppRequestHandler(BaseHTTPRequestHandler):
                 return
 
         payload = dict(payload)
-        payload.pop('users', None)
 
         try:
             ok, tick = write_state(payload)
@@ -122,6 +123,50 @@ class AppRequestHandler(BaseHTTPRequestHandler):
             json_response(self, 409, {'error': 'stale syncTick', 'serverSyncTick': tick})
             return
         json_response(self, 200, {'ok': True, 'syncTick': tick})
+
+
+    def handle_post_users(self):
+        payload = read_json_body(self)
+        if not isinstance(payload, dict):
+            json_response(self, 400, {'error': 'invalid json'})
+            return
+
+        action = str(payload.get('action') or '').strip().lower()
+        if action == 'register':
+            username = str(payload.get('username') or '').strip()
+            password = str(payload.get('password') or '')
+            display = str(payload.get('display') or '').strip()
+            if not username or not password or not display:
+                json_response(self, 400, {'error': 'missing register fields'})
+                return
+            if len(username) < 3:
+                json_response(self, 400, {'error': 'username too short'})
+                return
+            if len(password) < 4:
+                json_response(self, 400, {'error': 'password too short'})
+                return
+            try:
+                account = register_user(username=username, password=password, display=display, role='viewer', source='self-register')
+            except ValueError as err:
+                json_response(self, 409, {'error': str(err)})
+                return
+            json_response(self, 200, {'ok': True, 'account': account})
+            return
+
+        if action == 'login':
+            username = str(payload.get('username') or '').strip()
+            password = str(payload.get('password') or '')
+            if not username or not password:
+                json_response(self, 400, {'error': 'missing login fields'})
+                return
+            account = authenticate_user(username, password)
+            if not account:
+                json_response(self, 401, {'error': 'invalid credentials'})
+                return
+            json_response(self, 200, {'ok': True, 'account': account})
+            return
+
+        json_response(self, 400, {'error': 'unsupported action'})
 
     def handle_post_optimize_trip(self):
         payload = read_json_body(self)

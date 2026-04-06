@@ -10,7 +10,7 @@ except ImportError:
     abort = jsonify = request = send_from_directory = None
 
 from api.http_server import create_server, is_blocked_static_path
-from api.storage import BASE_DIR, read_state, write_state
+from api.storage import BASE_DIR, authenticate_user, read_state, register_user, write_state
 from api.trip_optimizer import optimize_trip
 
 app = None
@@ -61,7 +61,6 @@ if app is not None:
     def get_state():
         try:
             state = read_state()
-            state['users'] = []
             return jsonify(state)
         except Exception as err:
             return json_error(str(err), 500)
@@ -80,7 +79,6 @@ if app is not None:
                 return jsonify({'error': f'missing key: {key}'}), 400
 
         payload = dict(payload)
-        payload.pop('users', None)
 
         try:
             ok, tick = write_state(payload)
@@ -89,6 +87,43 @@ if app is not None:
         if not ok:
             return jsonify({'error': 'stale syncTick', 'serverSyncTick': tick}), 409
         return jsonify({'ok': True, 'syncTick': tick})
+
+
+    @app.post('/api/users')
+    @app.post('/users')
+    def post_users():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({'error': 'invalid json'}), 400
+
+        action = str(payload.get('action') or '').strip().lower()
+        if action == 'register':
+            username = str(payload.get('username') or '').strip()
+            password = str(payload.get('password') or '')
+            display = str(payload.get('display') or '').strip()
+            if not username or not password or not display:
+                return jsonify({'error': 'missing register fields'}), 400
+            if len(username) < 3:
+                return jsonify({'error': 'username too short'}), 400
+            if len(password) < 4:
+                return jsonify({'error': 'password too short'}), 400
+            try:
+                account = register_user(username=username, password=password, display=display, role='viewer', source='self-register')
+            except ValueError as err:
+                return jsonify({'error': str(err)}), 409
+            return jsonify({'ok': True, 'account': account})
+
+        if action == 'login':
+            username = str(payload.get('username') or '').strip()
+            password = str(payload.get('password') or '')
+            if not username or not password:
+                return jsonify({'error': 'missing login fields'}), 400
+            account = authenticate_user(username, password)
+            if not account:
+                return jsonify({'error': 'invalid credentials'}), 401
+            return jsonify({'ok': True, 'account': account})
+
+        return jsonify({'error': 'unsupported action'}), 400
 
 
     @app.post('/api/trips/optimize')
