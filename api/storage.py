@@ -4,6 +4,7 @@ import time
 import uuid
 import hashlib
 import hmac
+import secrets
 from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -40,10 +41,10 @@ DEFAULT_APP_STATE = {
 }
 
 BUILTIN_ACCOUNTS = [
-    {'username': 'admin', 'password': 'admin123', 'role': 'admin', 'display': '系統管理員'},
-    {'username': 'ops', 'password': 'ops123', 'role': 'ops', 'display': '作業主管'},
-    {'username': 'finance', 'password': 'finance123', 'role': 'finance', 'display': '財務主管'},
-    {'username': 'audit', 'password': 'audit123', 'role': 'audit', 'display': '稽核主管'},
+    {'username': 'admin', 'password_env': 'INIT_ADMIN_PASSWORD', 'role': 'admin', 'display': '系統管理員'},
+    {'username': 'ops', 'password_env': 'INIT_OPS_PASSWORD', 'role': 'ops', 'display': '作業主管'},
+    {'username': 'finance', 'password_env': 'INIT_FINANCE_PASSWORD', 'role': 'finance', 'display': '財務主管'},
+    {'username': 'audit', 'password_env': 'INIT_AUDIT_PASSWORD', 'role': 'audit', 'display': '稽核主管'},
 ]
 
 DB_INIT_LOCK = Lock()
@@ -52,6 +53,7 @@ STORAGE_READY = False
 STORAGE_INITIALIZING = False
 LOCAL_FILE_LOCK = Lock()
 USERS_FILE_LOCK = Lock()
+RUNTIME_BOOTSTRAP_PASSWORDS = {}
 
 
 def get_storage_mode() -> str:
@@ -318,6 +320,22 @@ def write_users(users):
         write_users_local_file(users)
 
 
+
+def get_bootstrap_password(account: dict) -> str:
+    env_key = str(account.get('password_env') or '').strip()
+    if env_key:
+        configured = os.environ.get(env_key, '').strip()
+        if configured:
+            return configured
+    username = str(account.get('username') or 'user')
+    cached = RUNTIME_BOOTSTRAP_PASSWORDS.get(username)
+    if cached:
+        return cached
+    generated = secrets.token_urlsafe(12)
+    RUNTIME_BOOTSTRAP_PASSWORDS[username] = generated
+    print(f"[WARN] 未設定 {env_key or '初始化密碼環境變數'}，已為內建帳號 '{username}' 產生一次性啟動密碼：{generated}")
+    return generated
+
 def ensure_builtin_users():
     existing = read_users()
     existing_keys = {u['usernameKey'] for u in existing}
@@ -329,7 +347,7 @@ def ensure_builtin_users():
         existing.append(normalize_user_record({
             'id': str(uuid.uuid4()),
             'username': builtin['username'],
-            'password': builtin['password'],
+            'password': get_bootstrap_password(builtin),
             'display': builtin['display'],
             'role': builtin['role'],
             'createdAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),

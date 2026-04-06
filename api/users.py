@@ -1,7 +1,6 @@
 from http.server import BaseHTTPRequestHandler
 
-from api.storage import authenticate_user, register_user
-from psycopg import Error as PsycopgError
+from api.storage import PsycopgError, authenticate_user, register_user
 
 from api._common import json_response, read_json_body
 

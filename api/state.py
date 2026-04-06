@@ -1,7 +1,6 @@
 from http.server import BaseHTTPRequestHandler
 
-from api_server import read_state, write_state
-from psycopg import Error as PsycopgError
+from api.storage import PsycopgError, read_state, write_state
 
 from api._common import json_response, read_json_body
 
