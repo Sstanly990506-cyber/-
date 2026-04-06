@@ -112,7 +112,10 @@ function applyRoleUi() {
       btn.classList.toggle('hidden', !enabled);
       if ('disabled' in btn) btn.disabled = !enabled;
     });
+<<<<<< codex/hide-module-when-disabled-vqwzr1
+=======
     if (!enabled) $(module.id)?.classList.add('hidden');
+>>>>>> main
   });
 }
 
@@ -264,6 +267,11 @@ function renderAll() {
   renderInventory(state);
   renderNotifications(state);
   renderSettings(state);
+  const activeView = views.find((viewId) => !$(viewId)?.classList.contains('hidden'));
+  if (activeView && activeView !== 'loginView' && !hasViewPermission(activeView)) {
+    views.forEach((viewId) => $(viewId)?.classList.add('hidden'));
+    $('dashboardView')?.classList.remove('hidden');
+  }
 }
 
 function showView(id) {
