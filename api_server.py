@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import errno
 import socket
 
 from api.storage import DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
@@ -154,6 +155,18 @@ if app is not None:
 
 
 def run_server(host: str, port: int):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            probe.bind((host, port))
+        except OSError as err:
+            if err.errno == errno.EADDRINUSE:
+                raise SystemExit(
+                    f'[ERROR] 連接埠 {port} 已被占用，請改用其他埠，例如：\n'
+                    f'        python3 api_server.py --host {host} --port {port + 1}'
+                ) from err
+            raise
+
     ensure_storage()
     print(f'[INFO] centralized storage: {get_storage_mode()}')
     if not DATABASE_URL:
@@ -171,10 +184,11 @@ def run_server(host: str, port: int):
             print('[WARN] 無法自動偵測區網 IP，請手動查詢電腦 IP 後讓手機連線。')
 
     if app is not None:
-        app.run(host=host, port=port)
+        app.run(host=host, port=port, use_reloader=False)
         return
 
     server = create_server(host, port)
+
     try:
         server.serve_forever()
     finally:
