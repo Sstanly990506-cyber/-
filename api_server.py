@@ -154,7 +154,25 @@ if app is not None:
         return send_from_directory(BASE_DIR, path)
 
 
+def _resolve_port(host: str, preferred_port: int, max_tries: int = 20) -> int:
+    for candidate in range(preferred_port, preferred_port + max_tries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind((host, candidate))
+                return candidate
+            except OSError as err:
+                if err.errno != errno.EADDRINUSE:
+                    raise
+    raise SystemExit(
+        f'[ERROR] 找不到可用連接埠（起始埠 {preferred_port}，共嘗試 {max_tries} 個）。\n'
+        f'        請先關閉占用中的程式，或改用其他埠。'
+    )
+
+
 def run_server(host: str, port: int):
+<<<<<< codex/fix-application-startup-issue-b1jwmg
+    actual_port = _resolve_port(host, port)
+=======
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -166,6 +184,7 @@ def run_server(host: str, port: int):
                     f'        python3 api_server.py --host {host} --port {port + 1}'
                 ) from err
             raise
+>>>>>> main
 
     ensure_storage()
     print(f'[INFO] centralized storage: {get_storage_mode()}')
@@ -173,21 +192,30 @@ def run_server(host: str, port: int):
         print(f'[INFO] 未設定 DATABASE_URL，已自動改用本機 {LOCAL_STATE_PATH} 儲存。')
     if app is None:
         print('[INFO] 未安裝 Flask，已自動改用 Python 內建伺服器。')
-    print(f'[INFO] server running: http://{host}:{port}')
+    if actual_port != port:
+        print(f'[WARN] 連接埠 {port} 已被占用，已自動改用 {actual_port}。')
+    print(f'[INFO] server running: http://{host}:{actual_port}')
     if host == '0.0.0.0':
         lan_ips = get_lan_ips()
         if lan_ips:
             print('[INFO] LAN 可用網址：')
             for ip in lan_ips:
-                print(f'       http://{ip}:{port}')
+                print(f'       http://{ip}:{actual_port}')
         else:
             print('[WARN] 無法自動偵測區網 IP，請手動查詢電腦 IP 後讓手機連線。')
 
     if app is not None:
+<<<<<< codex/fix-application-startup-issue-b1jwmg
+        app.run(host=host, port=actual_port, use_reloader=False)
+        return
+
+    server = create_server(host, actual_port)
+=======
         app.run(host=host, port=port, use_reloader=False)
         return
 
     server = create_server(host, port)
+>>>>>> main
 
     try:
         server.serve_forever()
