@@ -151,10 +151,13 @@ export function applyRuntimeBranding(settingsLike = {}) {
 
 
 export function isModuleSettingEnabled(value) {
-  if (value === false) return false;
+  if (value === false || value === 0 || value === 'false') return false;
   if (!value || typeof value !== 'object') return true;
   const disabledKeys = ['enabled', 'isEnabled', 'visible', 'active'];
-  return disabledKeys.every((key) => value[key] !== false);
+  return disabledKeys.every((key) => {
+    const flag = value[key];
+    return flag !== false && flag !== 0 && flag !== 'false';
+  });
 }
 
 export function isModuleEnabledInSettings(settingsLike = {}, viewId) {
