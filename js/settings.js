@@ -1,4 +1,4 @@
-import { $, MODULE_DEFINITIONS, applyRuntimeBranding, getDefaultSettings, getModuleMeta, mergeSettings } from './shared.js';
+import { $, MODULE_DEFINITIONS, applyRuntimeBranding, getDefaultSettings, getModuleMeta, mergeSettings, isModuleEnabledInSettings } from './shared.js';
 
 function ensureSettings(state) {
   state.settings = mergeSettings(state.settings || {});
@@ -12,7 +12,7 @@ function moduleSettingsHtml(settings) {
     const description = settings.moduleDescriptions[module.id] || module.description;
     const icon = settings.moduleIcons[module.id] || module.icon;
     const pageNote = settings.modulePageNotes[module.id] || `${label} 的頁面說明`;
-    const enabled = settings.moduleEnabled[module.id] !== false;
+    const enabled = isModuleEnabledInSettings(settings, module.id);
     return `
       <label class="settings-module-card">
         <div class="settings-module-head">
@@ -191,12 +191,12 @@ function normalizeLandingView(settingsLike) {
   const settings = mergeSettings(settingsLike);
   const landing = settings.defaultLandingView || 'dashboardView';
   if (landing === 'dashboardView') return landing;
-  return settings.moduleEnabled?.[landing] === false ? 'dashboardView' : landing;
+  return isModuleEnabledInSettings(settings, landing) ? landing : 'dashboardView';
 }
 
 function updateSettingsPreview(settingsLike) {
   const settings = mergeSettings(settingsLike);
-  const enabledCount = MODULE_DEFINITIONS.filter((module) => settings.moduleEnabled[module.id] !== false).length;
+  const enabledCount = MODULE_DEFINITIONS.filter((module) => isModuleEnabledInSettings(settings, module.id)).length;
   const landingView = normalizeLandingView(settings);
   if ($('settingsPreviewTitle')) $('settingsPreviewTitle').textContent = settings.appTitle;
   if ($('settingsPreviewCompany')) $('settingsPreviewCompany').textContent = `${settings.companyName}｜${settings.companyIndustry}｜${settings.companyPhone}`;
