@@ -92,7 +92,23 @@ function resetRegisterForm() {
   $('registerForm')?.reset();
 }
 
+
+function renderDashboardNavCards() {
+  const grid = $('dashboardNavGrid');
+  if (!grid) return;
+  const visibleModules = MODULE_DEFINITIONS
+    .filter((module) => module.id !== 'settingsView' && module.id !== 'dashboardView' && module.id !== 'loginView')
+    .filter((module) => isModuleEnabled(module.id));
+
+  grid.innerHTML = visibleModules.map((module) => {
+    const label = state.settings?.moduleLabels?.[module.id] || module.label;
+    const icon = state.settings?.moduleIcons?.[module.id] || module.icon || '⚙️';
+    return `<button class="nav-card" type="button" data-target="${module.id}"><span class="nav-card-icon">${icon}</span><strong>${label}</strong></button>`;
+  }).join('');
+}
+
 function applyRoleUi() {
+  renderDashboardNavCards();
   document.querySelectorAll('.nav-card').forEach((card) => {
     const targetView = card.dataset.target;
     const enabled = isModuleEnabled(targetView);
@@ -363,12 +379,12 @@ function bindCoreEvents() {
 
   document.querySelectorAll('[data-back]').forEach((btn) => btn.addEventListener('click', () => showView('dashboardView')));
 
-  document.querySelectorAll('.nav-card').forEach((card) => {
-    card.addEventListener('click', () => {
-      const target = card.dataset.target;
-      if (target === 'financeView') return openFinanceGate();
-      showView(target);
-    });
+  document.addEventListener('click', (e) => {
+    const card = e.target.closest('.nav-card');
+    if (!card) return;
+    const target = card.dataset.target;
+    if (target === 'financeView') return openFinanceGate();
+    showView(target);
   });
 
   $('financeForm')?.addEventListener('submit', (e) => {
