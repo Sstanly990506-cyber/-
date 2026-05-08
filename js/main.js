@@ -1,4 +1,4 @@
-import { $, COMPANY_INFO, MODULE_DEFINITIONS } from './shared.js';
+import { $, COMPANY_INFO, MODULE_DEFINITIONS, isModuleEnabledInSettings } from './shared.js';
 import { applyUiSettings, bindSettingsEvents, renderSettings } from './settings.js';
 import {
   state,
@@ -58,7 +58,7 @@ function getRolePerms() {
 
 function isModuleEnabled(viewId) {
   if (!viewId || !viewId.endsWith('View') || viewId === 'settingsView' || viewId === 'dashboardView' || viewId === 'loginView') return true;
-  return state.settings?.moduleEnabled?.[viewId] !== false;
+  return isModuleEnabledInSettings(state.settings, viewId);
 }
 
 function hasViewPermission(viewId) {

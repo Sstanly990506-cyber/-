@@ -149,6 +149,19 @@ export function applyRuntimeBranding(settingsLike = {}) {
   return settings;
 }
 
+
+export function isModuleSettingEnabled(value) {
+  if (value === false) return false;
+  if (!value || typeof value !== 'object') return true;
+  const disabledKeys = ['enabled', 'isEnabled', 'visible', 'active'];
+  return disabledKeys.every((key) => value[key] !== false);
+}
+
+export function isModuleEnabledInSettings(settingsLike = {}, viewId) {
+  const value = settingsLike?.moduleEnabled?.[viewId];
+  return isModuleSettingEnabled(value);
+}
+
 export function getModuleMeta(viewId) {
   return MODULE_DEFINITIONS.find((module) => module.id === viewId) || null;
 }
