@@ -180,7 +180,7 @@ async function runOptimize(state) {
   if (!stops.length) return alert('請先勾選工單或新增站點');
   const payload = { factory: DEFAULT_FACTORY, stops };
   try {
-    const res = await fetch('/api/trips/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const res = await fetch('/api/trips/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) }, body: JSON.stringify(payload) });
     if (!res.ok) throw new Error();
     lastResult = await res.json();
   } catch {

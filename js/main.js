@@ -20,7 +20,7 @@ import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js';
 import { renderInventory, bindInventoryEvents } from './inventory.js';
 import { renderNotifications, bindNotificationEvents } from './notifications.js';
 
-const APP_BUILD = '2026-06-04-auth-gated-ui-1';
+const APP_BUILD = '2026-06-04-secure-sync-finance-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
@@ -29,6 +29,7 @@ let lastCriticalSignature = '';
 let internalViewsFragment = null;
 let internalViewsMounted = true;
 let storeSyncStarted = false;
+let financeUnlockedUntil = 0;
 
 const ROLE_PERMS = {
   admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView'],
@@ -152,12 +153,12 @@ function mountInternalViews() {
   internalViewsMounted = true;
 }
 
-function startAuthenticatedSync() {
+async function startAuthenticatedSync() {
   if (!storeSyncStarted) {
     startStoreSync();
     storeSyncStarted = true;
   }
-  pullServerState();
+  await pullServerState();
 }
 
 function daysFrom(dateText) {
@@ -300,16 +301,18 @@ function renderAll() {
   mountInternalViews();
   applyUiSettings(state);
   renderDashboard();
-  renderCustomers(state);
-  renderOrders(state, renderCustomerOptions);
-  renderAudits(state);
-  renderFinance(state);
-  renderOrderScreen(state);
-  renderTrips(state);
-  renderOpsCenter(state);
-  renderInventory(state);
-  renderNotifications(state);
-  renderSettings(state);
+  if (isModuleEnabled('customersView')) renderCustomers(state);
+  if (isModuleEnabled('ordersView')) {
+    renderOrders(state, renderCustomerOptions);
+    renderOrderScreen(state);
+  }
+  if (isModuleEnabled('auditView')) renderAudits(state);
+  if (isModuleEnabled('financeView') && Date.now() < financeUnlockedUntil) renderFinance(state);
+  if (isModuleEnabled('tripsView')) renderTrips(state);
+  if (isModuleEnabled('opsCenterView')) renderOpsCenter(state);
+  if (isModuleEnabled('inventoryView')) renderInventory(state);
+  if (isModuleEnabled('notificationsView')) renderNotifications(state);
+  if (state.userRole === 'admin') renderSettings(state);
   const activeView = views.find((viewId) => !$(viewId)?.classList.contains('hidden'));
   if (activeView && activeView !== 'loginView' && !hasViewPermission(activeView)) {
     views.forEach((viewId) => $(viewId)?.classList.add('hidden'));
@@ -338,8 +341,37 @@ function showView(id) {
   renderAll();
 }
 
-function openFinanceGate() {
+async function verifyFinancePassword(password) {
+  const res = await fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) },
+    body: JSON.stringify({ action: 'verify_finance_password', password }),
+  });
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+}
+
+async function openFinanceGate() {
   if (!hasViewPermission('financeView')) return alert(isModuleEnabled('financeView') ? '此帳號沒有財經模組權限。' : '財經模組目前已停用。');
+  if (Date.now() >= financeUnlockedUntil) {
+    const password = window.prompt('請輸入財經系統額外密碼');
+    if (!password) return;
+    try {
+      await verifyFinancePassword(password);
+      financeUnlockedUntil = Date.now() + 15 * 60 * 1000;
+      appendSystemEvent('財經系統額外密碼驗證成功', 'info', { role: state.userRole || 'viewer' });
+      saveState();
+    } catch (err) {
+      appendSystemEvent('財經系統額外密碼驗證失敗', 'warning', { role: state.userRole || 'viewer' });
+      saveState();
+      return alert(err?.message === 'finance role required' ? '此帳號沒有財經模組權限。' : '財經系統密碼錯誤或尚未設定。');
+    }
+  }
   showView('financeView');
 }
 
@@ -367,9 +399,9 @@ function bindCoreEvents() {
     mountInternalViews();
     const prefix = state.settings?.welcomePrefix || '你好';
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
+    await startAuthenticatedSync();
     appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
     saveState();
-    startAuthenticatedSync();
     const landing = state.settings?.defaultLandingView || 'dashboardView';
     showView(hasViewPermission(landing) ? landing : 'dashboardView');
   });
@@ -385,6 +417,7 @@ function bindCoreEvents() {
     saveState();
     state.user = null;
     state.userRole = 'viewer';
+    financeUnlockedUntil = 0;
     setAuthToken(null);
     showView('loginView');
     unmountInternalViews();
@@ -396,7 +429,10 @@ function bindCoreEvents() {
     const card = e.target.closest('.nav-card');
     if (!card) return;
     const target = card.dataset.target;
-    if (target === 'financeView') return openFinanceGate();
+    if (target === 'financeView') {
+      openFinanceGate();
+      return;
+    }
     showView(target);
   });
 

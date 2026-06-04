@@ -55,7 +55,19 @@ STORAGE_INITIALIZING = False
 LOCAL_FILE_LOCK = Lock()
 USERS_FILE_LOCK = Lock()
 RUNTIME_BOOTSTRAP_PASSWORDS = {}
-SESSION_SECRET = os.environ.get('APP_SESSION_SECRET') or os.environ.get('SESSION_SECRET') or secrets.token_urlsafe(32)
+
+
+def resolve_session_secret() -> tuple[str, str]:
+    configured = os.environ.get('APP_SESSION_SECRET') or os.environ.get('SESSION_SECRET')
+    if configured:
+        return configured, 'environment'
+    if DATABASE_URL:
+        digest = hashlib.sha256(DATABASE_URL.encode('utf-8')).hexdigest()
+        return digest, 'database-derived'
+    return secrets.token_urlsafe(32), 'runtime-random'
+
+
+SESSION_SECRET, SESSION_SECRET_SOURCE = resolve_session_secret()
 SESSION_TTL_SECONDS = int(os.environ.get('APP_SESSION_TTL_SECONDS') or 12 * 60 * 60)
 
 
@@ -414,6 +426,26 @@ def merge_state_for_role(current: dict, incoming: dict, role: str) -> dict:
     return merged
 
 
+
+def get_environment_status() -> dict:
+    return {
+        'hasDatabaseUrl': bool(DATABASE_URL),
+        'hasStableSessionSecret': SESSION_SECRET_SOURCE != 'runtime-random',
+        'sessionSecretSource': SESSION_SECRET_SOURCE,
+        'hasFinanceModulePassword': bool(os.environ.get('FINANCE_MODULE_PASSWORD') or os.environ.get('INIT_FINANCE_PASSWORD')),
+        'hasInitialAdminPassword': bool(os.environ.get('INIT_ADMIN_PASSWORD')),
+        'hasInitialOpsPassword': bool(os.environ.get('INIT_OPS_PASSWORD')),
+        'hasInitialFinancePassword': bool(os.environ.get('INIT_FINANCE_PASSWORD')),
+        'hasInitialAuditPassword': bool(os.environ.get('INIT_AUDIT_PASSWORD')),
+    }
+
+
+def verify_finance_module_password(password: str) -> bool:
+    configured = os.environ.get('FINANCE_MODULE_PASSWORD') or os.environ.get('INIT_FINANCE_PASSWORD') or ''
+    if not configured:
+        return False
+    return hmac.compare_digest(str(password or ''), configured)
+
 def get_bootstrap_password(account: dict) -> str:
     env_key = str(account.get('password_env') or '').strip()
     if env_key:
@@ -647,5 +679,7 @@ __all__ = [
     'create_session_token',
     'verify_session_token',
     'filter_state_for_role',
+    'get_environment_status',
     'merge_state_for_role',
+    'verify_finance_module_password',
 ]
