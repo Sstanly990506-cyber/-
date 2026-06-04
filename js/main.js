@@ -7,6 +7,7 @@ import {
   startStoreSync,
   saveState,
   pullServerState,
+  setAuthToken,
   getIntegrityReport,
   appendSystemEvent,
 } from './store.js';
@@ -19,12 +20,15 @@ import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js';
 import { renderInventory, bindInventoryEvents } from './inventory.js';
 import { renderNotifications, bindNotificationEvents } from './notifications.js';
 
-const APP_BUILD = '2026-04-06-account-api-separation-1';
+const APP_BUILD = '2026-06-04-auth-gated-ui-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
 const REMINDER_LAST_SIGNATURE_KEY = 'smartReminderLastSignature';
 let lastCriticalSignature = '';
+let internalViewsFragment = null;
+let internalViewsMounted = true;
+let storeSyncStarted = false;
 
 const ROLE_PERMS = {
   admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView'],
@@ -62,7 +66,8 @@ function isModuleEnabled(viewId) {
 }
 
 function hasViewPermission(viewId) {
-  if (viewId === 'loginView' || viewId === 'dashboardView' || viewId === 'settingsView') return true;
+  if (viewId === 'loginView' || viewId === 'dashboardView') return true;
+  if (viewId === 'settingsView') return state.userRole === 'admin';
   if (!isModuleEnabled(viewId)) return false;
   if (state.settings?.openAccess) return true;
   return getRolePerms().includes(viewId);
@@ -85,13 +90,8 @@ async function callUserApi(payload) {
     err.status = res.status;
     throw err;
   }
-  return data.account;
+  return { account: data.account, token: data.token || '' };
 }
-
-function resetRegisterForm() {
-  $('registerForm')?.reset();
-}
-
 
 function renderDashboardNavCards() {
   const grid = $('dashboardNavGrid');
@@ -125,11 +125,39 @@ function applyRoleUi() {
   MODULE_DEFINITIONS.forEach((module) => {
     const enabled = isModuleEnabled(module.id);
     document.querySelectorAll(`[data-open-view="${module.id}"]`).forEach((btn) => {
-      btn.classList.toggle('hidden', !enabled);
-      if ('disabled' in btn) btn.disabled = !enabled;
+      const allowed = hasViewPermission(module.id);
+      btn.classList.toggle('hidden', !enabled || !allowed);
+      if ('disabled' in btn) btn.disabled = !enabled || !allowed;
     });
     if (!enabled) $(module.id)?.classList.add('hidden');
   });
+}
+
+
+function unmountInternalViews() {
+  if (!internalViewsMounted) return;
+  internalViewsFragment = document.createDocumentFragment();
+  views.filter((viewId) => viewId !== 'loginView').forEach((viewId) => {
+    const el = $(viewId);
+    if (el) internalViewsFragment.appendChild(el);
+  });
+  internalViewsMounted = false;
+}
+
+function mountInternalViews() {
+  if (internalViewsMounted || !internalViewsFragment) return;
+  const main = document.querySelector('main');
+  if (!main) return;
+  main.appendChild(internalViewsFragment);
+  internalViewsMounted = true;
+}
+
+function startAuthenticatedSync() {
+  if (!storeSyncStarted) {
+    startStoreSync();
+    storeSyncStarted = true;
+  }
+  pullServerState();
 }
 
 function daysFrom(dateText) {
@@ -268,6 +296,8 @@ function renderDashboard() {
 }
 
 function renderAll() {
+  if (!state.user) return;
+  mountInternalViews();
   applyUiSettings(state);
   renderDashboard();
   renderCustomers(state);
@@ -298,8 +328,9 @@ function showView(id) {
     alert('此帳號沒有此模組權限。');
     return;
   }
-  views.forEach((v) => $(v).classList.add('hidden'));
-  $(id).classList.remove('hidden');
+  if (id !== 'loginView') mountInternalViews();
+  views.forEach((v) => $(v)?.classList.add('hidden'));
+  $(id)?.classList.remove('hidden');
   if (id === 'ordersView') {
     state.orderScreen = 'list';
     renderOrderScreen(state);
@@ -320,47 +351,27 @@ function bindCoreEvents() {
     if (!username || !password) return alert('請輸入帳號與密碼');
 
     let account = null;
+    let token = '';
     try {
-      account = await callUserApi({ action: 'login', username, password });
+      const session = await callUserApi({ action: 'login', username, password });
+      account = session.account;
+      token = session.token;
     } catch (err) {
       if (err?.status === 401 || err?.status === 403) return alert('伺服器拒絕登入或權限不足，請確認帳號權限設定。');
       return alert(err?.message || '登入失敗，請確認帳號密碼');
     }
 
+    setAuthToken(token);
     state.user = account.display || account.username;
     state.userRole = account.role || 'viewer';
+    mountInternalViews();
     const prefix = state.settings?.welcomePrefix || '你好';
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
     appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
     saveState();
+    startAuthenticatedSync();
     const landing = state.settings?.defaultLandingView || 'dashboardView';
     showView(hasViewPermission(landing) ? landing : 'dashboardView');
-  });
-
-  $('registerForm')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const display = $('registerDisplay')?.value.trim();
-    const username = $('registerUsername')?.value.trim();
-    const password = $('registerPassword')?.value || '';
-    const confirmPassword = $('registerConfirmPassword')?.value || '';
-
-    if (!display || !username || !password || !confirmPassword) return alert('請完整填寫註冊資料');
-    if (username.length < 3) return alert('帳號至少需要 3 碼');
-    if (password.length < 4) return alert('密碼至少需要 4 碼');
-    if (password !== confirmPassword) return alert('兩次輸入的密碼不一致');
-
-    try {
-      await callUserApi({ action: 'register', display, username, password });
-    } catch (err) {
-      return alert(err?.message || '註冊失敗，請稍後再試');
-    }
-
-    appendSystemEvent(`新帳號註冊：${display}`, 'info', { username, role: 'viewer' });
-    saveState();
-    $('username').value = username;
-    $('password').value = password;
-    resetRegisterForm();
-    alert('註冊成功，現在可以直接登入。');
   });
 
   document.addEventListener('click', (e) => {
@@ -374,7 +385,9 @@ function bindCoreEvents() {
     saveState();
     state.user = null;
     state.userRole = 'viewer';
+    setAuthToken(null);
     showView('loginView');
+    unmountInternalViews();
   });
 
   document.querySelectorAll('[data-back]').forEach((btn) => btn.addEventListener('click', () => showView('dashboardView')));
@@ -387,18 +400,6 @@ function bindCoreEvents() {
     showView(target);
   });
 
-  $('financeForm')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    $('financePassword').value = '';
-    $('financeDialog').close();
-    showView('financeView');
-  });
-
-  $('cancelFinanceBtn')?.addEventListener('click', () => {
-    $('financePassword').value = '';
-    $('financeDialog').close();
-  });
-
   window.addEventListener('keydown', (e) => {
     if (!state.settings?.enableKeyboardShortcut) return;
     if (e.key.toLowerCase() === 'a' && !$('dashboardView').classList.contains('hidden')) showView('auditView');
@@ -408,16 +409,11 @@ function bindCoreEvents() {
 function bootstrapFailed(err) {
   console.error(err);
   const message = `系統初始化失敗：${err?.message || err}`;
-  if ($('appLoginMessage')) $('appLoginMessage').textContent = message;
-  if ($('buildVersion')) $('buildVersion').textContent = '版本：初始化失敗';
+  console.error(message);
   $('loginForm')?.addEventListener('submit', (e) => {
     if (window.__appBootstrapped) return;
     e.preventDefault();
     alert(`${message}\n請先按 Ctrl + F5 強制重新整理；若仍失敗，再檢查 /api/health。`);
-  });
-  $('registerForm')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    alert(`${message}\n目前無法註冊新帳號，請先恢復系統連線後再試。`);
   });
 }
 
@@ -443,10 +439,8 @@ try {
     openOrderForEdit(state, orderId);
   });
   window.__appBootstrapped = true;
-  renderAll();
+  unmountInternalViews();
   showView('loginView');
-  startStoreSync();
-  pullServerState();
 
   setInterval(() => {
     if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();

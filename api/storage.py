@@ -5,6 +5,7 @@ import uuid
 import hashlib
 import hmac
 import secrets
+import base64
 from pathlib import Path
 from threading import Lock
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -54,6 +55,8 @@ STORAGE_INITIALIZING = False
 LOCAL_FILE_LOCK = Lock()
 USERS_FILE_LOCK = Lock()
 RUNTIME_BOOTSTRAP_PASSWORDS = {}
+SESSION_SECRET = os.environ.get('APP_SESSION_SECRET') or os.environ.get('SESSION_SECRET') or secrets.token_urlsafe(32)
+SESSION_TTL_SECONDS = int(os.environ.get('APP_SESSION_TTL_SECONDS') or 12 * 60 * 60)
 
 
 def get_storage_mode() -> str:
@@ -321,6 +324,96 @@ def write_users(users):
 
 
 
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode('ascii').rstrip('=')
+
+
+def _b64url_decode(value: str) -> bytes:
+    padding = '=' * (-len(value) % 4)
+    return base64.urlsafe_b64decode((value + padding).encode('ascii'))
+
+
+def create_session_token(account: dict) -> str:
+    now = int(time.time())
+    payload = {
+        'sub': account.get('username') or '',
+        'display': account.get('display') or account.get('username') or '',
+        'role': account.get('role') or 'viewer',
+        'iat': now,
+        'exp': now + SESSION_TTL_SECONDS,
+    }
+    body = _b64url_encode(json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+    signature = hmac.new(SESSION_SECRET.encode('utf-8'), body.encode('ascii'), hashlib.sha256).digest()
+    return f'{body}.{_b64url_encode(signature)}'
+
+
+def verify_session_token(token: str) -> dict | None:
+    value = str(token or '').strip()
+    if not value or '.' not in value:
+        return None
+    body, signature = value.rsplit('.', 1)
+    expected = _b64url_encode(hmac.new(SESSION_SECRET.encode('utf-8'), body.encode('ascii'), hashlib.sha256).digest())
+    if not hmac.compare_digest(signature, expected):
+        return None
+    try:
+        payload = json.loads(_b64url_decode(body).decode('utf-8'))
+    except Exception:
+        return None
+    if int(payload.get('exp') or 0) < int(time.time()):
+        return None
+    username = normalize_username(payload.get('sub') or '')
+    if not username:
+        return None
+    for user in read_users():
+        if user.get('usernameKey') == username:
+            return sanitize_account_public(user)
+    return None
+
+
+def can_access_field(role: str, field: str) -> bool:
+    role = role or 'viewer'
+    base_fields = {'glossOptions', 'customers', 'orders', 'systemEvents', 'inventoryItems', 'syncTick', 'serverUpdatedAt'}
+    if role == 'admin':
+        return True
+    if field in base_fields:
+        return True
+    if role == 'finance' and field in {'receivables', 'payables'}:
+        return True
+    if role == 'audit' and field == 'audits':
+        return True
+    return False
+
+
+def filter_state_for_role(state: dict, role: str) -> dict:
+    payload = dict(DEFAULT_APP_STATE)
+    for field in DEFAULT_APP_STATE:
+        if field == 'settings':
+            payload[field] = state.get(field) if role == 'admin' else None
+        elif can_access_field(role, field):
+            payload[field] = state.get(field, payload[field])
+        else:
+            payload[field] = [] if isinstance(payload[field], list) else payload[field]
+    payload['syncTick'] = state.get('syncTick') or state.get('serverUpdatedAt') or 0
+    payload['serverUpdatedAt'] = state.get('serverUpdatedAt') or payload['syncTick']
+    return payload
+
+
+def merge_state_for_role(current: dict, incoming: dict, role: str) -> dict:
+    merged = dict(current)
+    for field in DEFAULT_APP_STATE:
+        if field in {'syncTick'}:
+            continue
+        if field == 'settings':
+            if role == 'admin' and field in incoming:
+                merged[field] = incoming[field]
+            continue
+        if field in incoming and can_access_field(role, field):
+            merged[field] = incoming[field]
+    if 'syncTick' in incoming:
+        merged['syncTick'] = incoming['syncTick']
+    return merged
+
+
 def get_bootstrap_password(account: dict) -> str:
     env_key = str(account.get('password_env') or '').strip()
     if env_key:
@@ -551,4 +644,8 @@ __all__ = [
     'register_user',
     'sanitize_account_public',
     'write_state',
+    'create_session_token',
+    'verify_session_token',
+    'filter_state_for_role',
+    'merge_state_for_role',
 ]

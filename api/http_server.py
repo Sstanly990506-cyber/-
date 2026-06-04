@@ -4,8 +4,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from api._common import json_response, read_json_body
-from api.storage import BASE_DIR, DATABASE_URL, authenticate_user, ensure_storage, get_storage_mode, read_state, register_user, write_state
+from api._common import get_bearer_token, json_response, read_json_body
+from api.storage import BASE_DIR, DATABASE_URL, authenticate_user, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
 
 SENSITIVE_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.py', '.bat', '.ps1', '.sh'}
@@ -93,14 +93,25 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         except Exception as err:
             json_response(self, 500, {'ok': False, 'error': str(err)})
 
+    def current_account(self):
+        return verify_session_token(get_bearer_token(self))
+
     def handle_get_state(self):
+        account = self.current_account()
+        if not account:
+            json_response(self, 401, {'ok': False, 'error': 'login required'})
+            return
         try:
-            state = read_state()
+            state = filter_state_for_role(read_state(), account.get('role') or 'viewer')
             json_response(self, 200, state)
         except Exception as err:
             json_response(self, 500, {'ok': False, 'error': str(err)})
 
     def handle_post_state(self):
+        account = self.current_account()
+        if not account:
+            json_response(self, 401, {'ok': False, 'error': 'login required'})
+            return
         payload = read_json_body(self)
         if not isinstance(payload, dict):
             json_response(self, 400, {'error': 'invalid json'})
@@ -112,9 +123,9 @@ class AppRequestHandler(BaseHTTPRequestHandler):
                 json_response(self, 400, {'error': f'missing key: {key}'})
                 return
 
-        payload = dict(payload)
-
         try:
+            current = read_state()
+            payload = merge_state_for_role(current, dict(payload), account.get('role') or 'viewer')
             ok, tick = write_state(payload)
         except Exception as err:
             json_response(self, 500, {'ok': False, 'error': str(err)})
@@ -133,24 +144,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
 
         action = str(payload.get('action') or '').strip().lower()
         if action == 'register':
-            username = str(payload.get('username') or '').strip()
-            password = str(payload.get('password') or '')
-            display = str(payload.get('display') or '').strip()
-            if not username or not password or not display:
-                json_response(self, 400, {'error': 'missing register fields'})
-                return
-            if len(username) < 3:
-                json_response(self, 400, {'error': 'username too short'})
-                return
-            if len(password) < 4:
-                json_response(self, 400, {'error': 'password too short'})
-                return
-            try:
-                account = register_user(username=username, password=password, display=display, role='viewer', source='self-register')
-            except ValueError as err:
-                json_response(self, 409, {'error': str(err)})
-                return
-            json_response(self, 200, {'ok': True, 'account': account})
+            json_response(self, 403, {'ok': False, 'error': 'public registration disabled'})
             return
 
         if action == 'login':
@@ -163,7 +157,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
             if not account:
                 json_response(self, 401, {'error': 'invalid credentials'})
                 return
-            json_response(self, 200, {'ok': True, 'account': account})
+            json_response(self, 200, {'ok': True, 'account': account, 'token': create_session_token(account)})
             return
 
         json_response(self, 400, {'error': 'unsupported action'})

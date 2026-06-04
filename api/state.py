@@ -1,19 +1,30 @@
 from http.server import BaseHTTPRequestHandler
 
-from api.storage import PsycopgError, read_state, write_state
+from api.storage import PsycopgError, filter_state_for_role, merge_state_for_role, read_state, verify_session_token, write_state
 
-from api._common import json_response, read_json_body
+from api._common import get_bearer_token, json_response, read_json_body
 
 
 class handler(BaseHTTPRequestHandler):
+    def _current_account(self):
+        return verify_session_token(get_bearer_token(self))
+
     def do_GET(self):
+        account = self._current_account()
+        if not account:
+            json_response(self, 401, {"ok": False, "error": "login required"})
+            return
         try:
-            state = read_state()
+            state = filter_state_for_role(read_state(), account.get('role') or 'viewer')
             json_response(self, 200, state)
         except (RuntimeError, PsycopgError) as err:
             json_response(self, 500, {"ok": False, "error": str(err)})
 
     def do_POST(self):
+        account = self._current_account()
+        if not account:
+            json_response(self, 401, {"ok": False, "error": "login required"})
+            return
         payload = read_json_body(self)
         if not isinstance(payload, dict):
             json_response(self, 400, {"error": "invalid json"})
@@ -25,9 +36,9 @@ class handler(BaseHTTPRequestHandler):
                 json_response(self, 400, {"error": f"missing key: {key}"})
                 return
 
-        payload = dict(payload)
-
         try:
+            current = read_state()
+            payload = merge_state_for_role(current, dict(payload), account.get('role') or 'viewer')
             ok, tick = write_state(payload)
         except (RuntimeError, PsycopgError) as err:
             json_response(self, 500, {"ok": False, "error": str(err)})

@@ -6,7 +6,6 @@ const API_STATE_URL = '/api/state';
 export const state = {
   user: null,
   userRole: 'viewer',
-  financePassword: '123',
   glossOptions: [],
   customers: [],
   orders: [],
@@ -21,6 +20,7 @@ export const state = {
   auditFilter: { start: '', end: '', keyword: '', user: '', field: '', anomalyOnly: false },
   orderStatusFilter: '全部',
   orderScreen: 'list',
+  authToken: null,
 };
 
 let lastSyncAt = 0;
@@ -40,7 +40,6 @@ function applyStatePayload(payload) {
   state.systemEvents = payload.systemEvents || [];
   state.settings = mergeSettings(payload.settings || state.settings || {});
   state.inventoryItems = payload.inventoryItems || [];
-  state.financePassword = state.settings.financePassword;
 }
 
 function readStorageJson(key, fallback) {
@@ -80,7 +79,15 @@ function saveLocalState(now) {
 }
 
 function setSyncUi(badgeText, source, ts = Date.now()) {
-  onSyncUi({ badgeText, detailText: `最後更新：${formatTs(ts)}（${source}）`, ok: true });
+  onSyncUi({ badgeText, detailText: `${badgeText}：${formatTs(ts)}（${source}）`, ok: badgeText === '已儲存' });
+}
+
+function getAuthHeaders() {
+  return state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {};
+}
+
+export function setAuthToken(token) {
+  state.authToken = token || null;
 }
 
 async function readJsonOrThrow(res) {
@@ -115,13 +122,13 @@ async function pushServerState(syncTick) {
   try {
     const res = await fetch(API_STATE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
     });
     if (res.status === 409) {
       pendingSyncTick = 0;
       await pullServerState();
-      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（偵測到新版本資料，已自動同步）`, ok: false });
+      onSyncUi({ badgeText: '儲存中', detailText: `儲存中：${formatTs(Date.now())}（偵測到新版本資料，已自動同步）`, ok: false });
       return;
     }
     await readJsonOrThrow(res);
@@ -131,7 +138,7 @@ async function pushServerState(syncTick) {
   } catch (err) {
     pendingSyncTick = 0;
     if (!fileModeOnly) {
-      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
+      onSyncUi({ badgeText: '儲存失敗，請重試', detailText: `儲存失敗，請重試：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
     }
   }
 }
@@ -139,7 +146,7 @@ async function pushServerState(syncTick) {
 export async function pullServerState() {
   if (!serverSyncEnabled) return;
   try {
-    const res = await fetch(API_STATE_URL, { cache: 'no-store' });
+    const res = await fetch(API_STATE_URL, { cache: 'no-store', headers: getAuthHeaders() });
     const payload = await readJsonOrThrow(res);
     const tick = Number(payload.syncTick || payload.serverUpdatedAt || Date.now());
     if (pendingSyncTick && tick < pendingSyncTick) return;
@@ -149,10 +156,10 @@ export async function pullServerState() {
     localStorage.setItem('syncTick', String(tick));
     lastSyncAt = tick;
     onRefresh();
-    setSyncUi('已收到伺服器資料', '集中式資料庫', tick);
+    setSyncUi('已儲存', '集中式資料庫', tick);
   } catch (err) {
     if (!fileModeOnly) {
-      onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
+      onSyncUi({ badgeText: '儲存失敗，請重試', detailText: `儲存失敗，請重試：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
     }
   }
 }
@@ -217,7 +224,6 @@ function normalizeStateData() {
     safetyStock: normalizeMoney(item.safetyStock),
   }));
   state.settings = mergeSettings(state.settings || {});
-  state.financePassword = state.settings.financePassword;
 }
 
 export function getIntegrityReport() {
@@ -269,7 +275,7 @@ export function saveState() {
     return;
   }
   pendingSyncTick = now;
-  onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(now)}（資料送出中）`, ok: false });
+  onSyncUi({ badgeText: '儲存中', detailText: `儲存中：${formatTs(now)}（資料送出中）`, ok: false });
   pushServerState(now);
 }
 
@@ -287,9 +293,9 @@ export function initializeStore() {
   if (location.protocol === 'file:') {
     fileModeOnly = true;
     serverSyncEnabled = false;
-    onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Date.now())}（本機檔案模式（請改用 start-lan.bat））`, ok: false });
+    onSyncUi({ badgeText: '儲存失敗，請重試', detailText: `儲存失敗，請重試：${formatTs(Date.now())}（本機檔案模式（請改用 start-lan.bat））`, ok: false });
   } else {
-    onSyncUi({ badgeText: '同步中', detailText: `最後更新：${formatTs(Number(localStorage.getItem('syncTick') || 0))}（頁面載入）`, ok: false });
+    onSyncUi({ badgeText: '已儲存', detailText: `已儲存：${formatTs(Number(localStorage.getItem('syncTick') || 0))}（頁面載入）`, ok: true });
   }
 }
 
@@ -300,7 +306,7 @@ export function startStoreSync() {
       onRefresh();
       const tick = Number(localStorage.getItem('syncTick') || Date.now());
       lastSyncAt = tick;
-      setSyncUi('已收到最新資料', '跨分頁同步', tick);
+      setSyncUi('已儲存', '跨分頁同步', tick);
     }
   });
 
@@ -310,7 +316,7 @@ export function startStoreSync() {
       loadLocalState();
       onRefresh();
       lastSyncAt = tick;
-      setSyncUi('已收到最新資料', '跨分頁同步', tick);
+      setSyncUi('已儲存', '跨分頁同步', tick);
     }
     pullServerState();
   }, 1500);
