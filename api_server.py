@@ -2,7 +2,7 @@
 import errno
 import socket
 
-from api.storage import DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
+from api.storage import DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_environment_status, get_storage_mode
 
 try:
     from flask import Flask, abort, jsonify, request, send_from_directory
@@ -11,7 +11,7 @@ except ImportError:
     abort = jsonify = request = send_from_directory = None
 
 from api.http_server import create_server, is_blocked_static_path
-from api.storage import BASE_DIR, authenticate_user, create_session_token, filter_state_for_role, merge_state_for_role, read_state, verify_session_token, write_state
+from api.storage import BASE_DIR, authenticate_user, create_session_token, filter_state_for_role, merge_state_for_role, read_state, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
 
 app = None
@@ -60,7 +60,7 @@ if app is not None:
     def health():
         try:
             ensure_storage()
-            return jsonify({'ok': True, 'database': get_storage_mode(), 'hasDatabaseUrl': bool(DATABASE_URL)})
+            return jsonify({'ok': True, 'database': get_storage_mode(), 'environment': get_environment_status()})
         except Exception as err:
             return json_error(str(err), 500)
 
@@ -115,6 +115,19 @@ if app is not None:
         if action == 'register':
             return jsonify({'ok': False, 'error': 'public registration disabled'}), 403
 
+        if action == 'verify_finance_password':
+            account = current_account()
+            if not account:
+                return jsonify({'ok': False, 'error': 'login required'}), 401
+            if account.get('role') not in {'admin', 'finance'}:
+                return jsonify({'ok': False, 'error': 'finance role required'}), 403
+            password = str(payload.get('password') or '')
+            if not password:
+                return jsonify({'ok': False, 'error': 'missing finance password'}), 400
+            if not verify_finance_module_password(password):
+                return jsonify({'ok': False, 'error': 'invalid finance password'}), 401
+            return jsonify({'ok': True})
+
         if action == 'login':
             username = str(payload.get('username') or '').strip()
             password = str(payload.get('password') or '')
@@ -131,6 +144,8 @@ if app is not None:
     @app.post('/api/trips/optimize')
     @app.post('/trips/optimize')
     def post_optimize_trip():
+        if not current_account():
+            return jsonify({'ok': False, 'error': 'login required'}), 401
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({'error': 'invalid json'}), 400

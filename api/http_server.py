@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from api._common import get_bearer_token, json_response, read_json_body
-from api.storage import BASE_DIR, DATABASE_URL, authenticate_user, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, verify_session_token, write_state
+from api.storage import BASE_DIR, authenticate_user, create_session_token, ensure_storage, filter_state_for_role, get_environment_status, get_storage_mode, merge_state_for_role, read_state, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
 
 SENSITIVE_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.py', '.bat', '.ps1', '.sh'}
@@ -89,7 +89,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
     def handle_health(self):
         try:
             ensure_storage()
-            json_response(self, 200, {'ok': True, 'database': get_storage_mode(), 'hasDatabaseUrl': bool(DATABASE_URL)})
+            json_response(self, 200, {'ok': True, 'database': get_storage_mode(), 'environment': get_environment_status()})
         except Exception as err:
             json_response(self, 500, {'ok': False, 'error': str(err)})
 
@@ -147,6 +147,24 @@ class AppRequestHandler(BaseHTTPRequestHandler):
             json_response(self, 403, {'ok': False, 'error': 'public registration disabled'})
             return
 
+        if action == 'verify_finance_password':
+            account = self.current_account()
+            if not account:
+                json_response(self, 401, {'ok': False, 'error': 'login required'})
+                return
+            if account.get('role') not in {'admin', 'finance'}:
+                json_response(self, 403, {'ok': False, 'error': 'finance role required'})
+                return
+            password = str(payload.get('password') or '')
+            if not password:
+                json_response(self, 400, {'ok': False, 'error': 'missing finance password'})
+                return
+            if not verify_finance_module_password(password):
+                json_response(self, 401, {'ok': False, 'error': 'invalid finance password'})
+                return
+            json_response(self, 200, {'ok': True})
+            return
+
         if action == 'login':
             username = str(payload.get('username') or '').strip()
             password = str(payload.get('password') or '')
@@ -163,6 +181,9 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         json_response(self, 400, {'error': 'unsupported action'})
 
     def handle_post_optimize_trip(self):
+        if not self.current_account():
+            json_response(self, 401, {'ok': False, 'error': 'login required'})
+            return
         payload = read_json_body(self)
         if not isinstance(payload, dict):
             json_response(self, 400, {'error': 'invalid json'})
