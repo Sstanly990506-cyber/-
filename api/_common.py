@@ -23,3 +23,11 @@ def json_response(handler, status, payload):
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
     handler.wfile.write(body)
+
+
+def get_bearer_token(handler):
+    value = handler.headers.get("Authorization", "")
+    scheme, _, token = value.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return ""
+    return token.strip()

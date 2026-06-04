@@ -11,7 +11,7 @@ except ImportError:
     abort = jsonify = request = send_from_directory = None
 
 from api.http_server import create_server, is_blocked_static_path
-from api.storage import BASE_DIR, authenticate_user, read_state, register_user, write_state
+from api.storage import BASE_DIR, authenticate_user, create_session_token, filter_state_for_role, merge_state_for_role, read_state, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
 
 app = None
@@ -47,6 +47,14 @@ if app is not None:
         return jsonify({'ok': False, 'error': message}), status
 
 
+    def current_account():
+        value = request.headers.get('Authorization', '')
+        scheme, _, token = value.partition(' ')
+        if scheme.lower() != 'bearer' or not token.strip():
+            return None
+        return verify_session_token(token.strip())
+
+
     @app.get('/api/health')
     @app.get('/health')
     def health():
@@ -60,8 +68,11 @@ if app is not None:
     @app.get('/api/state')
     @app.get('/state')
     def get_state():
+        account = current_account()
+        if not account:
+            return jsonify({'ok': False, 'error': 'login required'}), 401
         try:
-            state = read_state()
+            state = filter_state_for_role(read_state(), account.get('role') or 'viewer')
             return jsonify(state)
         except Exception as err:
             return json_error(str(err), 500)
@@ -70,6 +81,9 @@ if app is not None:
     @app.post('/api/state')
     @app.post('/state')
     def post_state():
+        account = current_account()
+        if not account:
+            return jsonify({'ok': False, 'error': 'login required'}), 401
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({'error': 'invalid json'}), 400
@@ -79,9 +93,9 @@ if app is not None:
             if key not in payload:
                 return jsonify({'error': f'missing key: {key}'}), 400
 
-        payload = dict(payload)
-
         try:
+            current = read_state()
+            payload = merge_state_for_role(current, dict(payload), account.get('role') or 'viewer')
             ok, tick = write_state(payload)
         except Exception as err:
             return json_error(str(err), 500)
@@ -99,20 +113,7 @@ if app is not None:
 
         action = str(payload.get('action') or '').strip().lower()
         if action == 'register':
-            username = str(payload.get('username') or '').strip()
-            password = str(payload.get('password') or '')
-            display = str(payload.get('display') or '').strip()
-            if not username or not password or not display:
-                return jsonify({'error': 'missing register fields'}), 400
-            if len(username) < 3:
-                return jsonify({'error': 'username too short'}), 400
-            if len(password) < 4:
-                return jsonify({'error': 'password too short'}), 400
-            try:
-                account = register_user(username=username, password=password, display=display, role='viewer', source='self-register')
-            except ValueError as err:
-                return jsonify({'error': str(err)}), 409
-            return jsonify({'ok': True, 'account': account})
+            return jsonify({'ok': False, 'error': 'public registration disabled'}), 403
 
         if action == 'login':
             username = str(payload.get('username') or '').strip()
@@ -122,7 +123,7 @@ if app is not None:
             account = authenticate_user(username, password)
             if not account:
                 return jsonify({'error': 'invalid credentials'}), 401
-            return jsonify({'ok': True, 'account': account})
+            return jsonify({'ok': True, 'account': account, 'token': create_session_token(account)})
 
         return jsonify({'error': 'unsupported action'}), 400
 

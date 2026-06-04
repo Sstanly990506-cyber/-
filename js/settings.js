@@ -2,7 +2,6 @@ import { $, MODULE_DEFINITIONS, applyRuntimeBranding, getDefaultSettings, getMod
 
 function ensureSettings(state) {
   state.settings = mergeSettings(state.settings || {});
-  state.financePassword = state.settings.financePassword;
   return state.settings;
 }
 
@@ -55,7 +54,6 @@ function fillForm(settings) {
     settingsThemePrimary: settings.themePrimary,
     settingsThemeAccent: settings.themeAccent,
     settingsThemePanel: settings.themePanel,
-    settingsFinancePassword: settings.financePassword,
     settingsOrderWarningDays: settings.orderWarningDays,
     settingsReceivableOverdueDays: settings.receivableOverdueDays,
     settingsPayableWarningDays: settings.payableWarningDays,
@@ -82,7 +80,6 @@ function fillForm(settings) {
   if ($('settingsTripShowManualStopForm')) $('settingsTripShowManualStopForm').checked = !!settings.moduleInternals.trips.showManualStopForm;
   if ($('settingsTripShowOrderPool')) $('settingsTripShowOrderPool').checked = !!settings.moduleInternals.trips.showOrderPool;
   if ($('settingsTripShowManualRoute')) $('settingsTripShowManualRoute').checked = !!settings.moduleInternals.trips.showManualRoute;
-  if ($('settingsFinanceGateEnabled')) $('settingsFinanceGateEnabled').checked = !!settings.financeGateEnabled;
   if ($('settingsEnableKeyboardShortcut')) $('settingsEnableKeyboardShortcut').checked = !!settings.enableKeyboardShortcut;
   if ($('settingsModulesList')) $('settingsModulesList').innerHTML = moduleSettingsHtml(settings);
   updateSettingsPreview(settings);
@@ -115,8 +112,6 @@ function collectSettings() {
     themeAccent: $('settingsThemeAccent')?.value || defaults.themeAccent,
     themePanel: $('settingsThemePanel')?.value || defaults.themePanel,
     openAccess: !!$('settingsOpenAccess')?.checked,
-    financeGateEnabled: !!$('settingsFinanceGateEnabled')?.checked,
-    financePassword: $('settingsFinancePassword')?.value.trim() || defaults.financePassword,
     enableKeyboardShortcut: !!$('settingsEnableKeyboardShortcut')?.checked,
     orderWarningDays: toPositiveInt($('settingsOrderWarningDays')?.value, defaults.orderWarningDays),
     receivableOverdueDays: toPositiveInt($('settingsReceivableOverdueDays')?.value, defaults.receivableOverdueDays),
@@ -250,16 +245,14 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     e.preventDefault();
     state.settings = collectSettings();
     state.settings.defaultLandingView = normalizeLandingView(state.settings);
-    state.financePassword = state.settings.financePassword;
-    saveState();
+      saveState();
     renderAll();
     alert('設定已儲存，畫面、模組與警示門檻已立即更新。');
   });
 
   $('resetSettingsBtn')?.addEventListener('click', () => {
     state.settings = getDefaultSettings();
-    state.financePassword = state.settings.financePassword;
-    saveState();
+      saveState();
     renderAll();
     alert('已恢復預設設定。');
   });

@@ -21,7 +21,7 @@ export function renderNotifications(state) {
   const filtered = getFilteredEvents(state);
   const warningCount = events.filter((event) => event.level === 'warning').length;
   const infoCount = events.filter((event) => event.level === 'info').length;
-  const latest = events[0]?.at ? formatTs(new Date(events[0].at).getTime()) : '尚未同步';
+  const latest = events[0]?.at ? formatTs(new Date(events[0].at).getTime()) : '已儲存';
 
   if ($('noticeTotalCount')) $('noticeTotalCount').textContent = String(events.length);
   if ($('noticeWarningCount')) $('noticeWarningCount').textContent = String(warningCount);

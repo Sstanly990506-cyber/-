@@ -34,8 +34,6 @@ const DEFAULT_SETTINGS = {
   themeAccent: '#8b5cf6',
   themePanel: '#1f2937',
   openAccess: true,
-  financeGateEnabled: false,
-  financePassword: '123',
   enableKeyboardShortcut: true,
   orderWarningDays: 3,
   receivableOverdueDays: 30,
@@ -87,7 +85,7 @@ export function downloadCsv(filename, rows) {
 }
 
 export function formatTs(ts) {
-  if (!ts) return '尚未同步';
+  if (!ts) return '已儲存';
   return new Date(ts).toLocaleTimeString();
 }
 
