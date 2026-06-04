@@ -430,8 +430,12 @@ def merge_state_for_role(current: dict, incoming: dict, role: str) -> dict:
 def get_environment_status() -> dict:
     return {
         'hasDatabaseUrl': bool(DATABASE_URL),
+<<<<<< codex/improve-security-for-login-and-module-visibility-1j66lv
         'hasStableSessionSecret': SESSION_SECRET_SOURCE != 'runtime-random',
         'sessionSecretSource': SESSION_SECRET_SOURCE,
+=======
+        'hasStableSessionSecret': bool(os.environ.get('APP_SESSION_SECRET') or os.environ.get('SESSION_SECRET')),
+>>>>>> main
         'hasFinanceModulePassword': bool(os.environ.get('FINANCE_MODULE_PASSWORD') or os.environ.get('INIT_FINANCE_PASSWORD')),
         'hasInitialAdminPassword': bool(os.environ.get('INIT_ADMIN_PASSWORD')),
         'hasInitialOpsPassword': bool(os.environ.get('INIT_OPS_PASSWORD')),
