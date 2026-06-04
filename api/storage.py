@@ -414,6 +414,25 @@ def merge_state_for_role(current: dict, incoming: dict, role: str) -> dict:
     return merged
 
 
+
+def get_environment_status() -> dict:
+    return {
+        'hasDatabaseUrl': bool(DATABASE_URL),
+        'hasStableSessionSecret': bool(os.environ.get('APP_SESSION_SECRET') or os.environ.get('SESSION_SECRET')),
+        'hasFinanceModulePassword': bool(os.environ.get('FINANCE_MODULE_PASSWORD') or os.environ.get('INIT_FINANCE_PASSWORD')),
+        'hasInitialAdminPassword': bool(os.environ.get('INIT_ADMIN_PASSWORD')),
+        'hasInitialOpsPassword': bool(os.environ.get('INIT_OPS_PASSWORD')),
+        'hasInitialFinancePassword': bool(os.environ.get('INIT_FINANCE_PASSWORD')),
+        'hasInitialAuditPassword': bool(os.environ.get('INIT_AUDIT_PASSWORD')),
+    }
+
+
+def verify_finance_module_password(password: str) -> bool:
+    configured = os.environ.get('FINANCE_MODULE_PASSWORD') or os.environ.get('INIT_FINANCE_PASSWORD') or ''
+    if not configured:
+        return False
+    return hmac.compare_digest(str(password or ''), configured)
+
 def get_bootstrap_password(account: dict) -> str:
     env_key = str(account.get('password_env') or '').strip()
     if env_key:
@@ -647,5 +666,7 @@ __all__ = [
     'create_session_token',
     'verify_session_token',
     'filter_state_for_role',
+    'get_environment_status',
     'merge_state_for_role',
+    'verify_finance_module_password',
 ]

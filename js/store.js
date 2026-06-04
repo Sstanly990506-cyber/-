@@ -105,7 +105,7 @@ async function readJsonOrThrow(res) {
 }
 
 async function pushServerState(syncTick) {
-  if (!serverSyncEnabled) return;
+  if (!serverSyncEnabled || !state.authToken) return;
   const payload = {
     glossOptions: state.glossOptions,
     customers: state.customers,
@@ -144,7 +144,7 @@ async function pushServerState(syncTick) {
 }
 
 export async function pullServerState() {
-  if (!serverSyncEnabled) return;
+  if (!serverSyncEnabled || !state.authToken) return;
   try {
     const res = await fetch(API_STATE_URL, { cache: 'no-store', headers: getAuthHeaders() });
     const payload = await readJsonOrThrow(res);
