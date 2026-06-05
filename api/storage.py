@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 import time
 import uuid
 import hashlib
@@ -22,7 +23,11 @@ except ImportError:  # optional unless DATABASE_URL is configured
     Jsonb = None
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_DATA_DIR = (BASE_DIR.parent / '.gloss-app-data').resolve()
+DEFAULT_DATA_DIR = (
+    Path(tempfile.gettempdir()) / 'gloss-app-data'
+    if os.environ.get('VERCEL')
+    else (BASE_DIR.parent / '.gloss-app-data').resolve()
+)
 DATA_DIR = Path(os.environ.get('APP_DATA_DIR') or DEFAULT_DATA_DIR).expanduser().resolve()
 LOCAL_STATE_PATH = DATA_DIR / 'app_state.json'
 LOCAL_USERS_PATH = DATA_DIR / 'users.json'
@@ -430,11 +435,18 @@ def merge_state_for_role(current: dict, incoming: dict, role: str) -> dict:
 def get_environment_status() -> dict:
     return {
         'hasDatabaseUrl': bool(DATABASE_URL),
+<<<<<< codex/improve-security-for-login-and-module-visibility-3buru9
+        'dataDir': str(DATA_DIR),
+        'isVercel': bool(os.environ.get('VERCEL')),
+        'hasStableSessionSecret': SESSION_SECRET_SOURCE != 'runtime-random',
+        'sessionSecretSource': SESSION_SECRET_SOURCE,
+=======
 <<<<<< codex/improve-security-for-login-and-module-visibility-1j66lv
         'hasStableSessionSecret': SESSION_SECRET_SOURCE != 'runtime-random',
         'sessionSecretSource': SESSION_SECRET_SOURCE,
 =======
         'hasStableSessionSecret': bool(os.environ.get('APP_SESSION_SECRET') or os.environ.get('SESSION_SECRET')),
+>>>>>> main
 >>>>>> main
         'hasFinanceModulePassword': bool(os.environ.get('FINANCE_MODULE_PASSWORD') or os.environ.get('INIT_FINANCE_PASSWORD')),
         'hasInitialAdminPassword': bool(os.environ.get('INIT_ADMIN_PASSWORD')),
