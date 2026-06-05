@@ -90,6 +90,13 @@ export function setAuthToken(token) {
   state.authToken = token || null;
 }
 
+function getSyncErrorMessage(err) {
+  const text = String(err?.message || err || '');
+  if (text.startsWith('401')) return '登入已失效，請重新登入';
+  if (text.startsWith('403')) return '權限不足，請確認帳號角色';
+  return `伺服器連線失敗：${text}`;
+}
+
 async function readJsonOrThrow(res) {
   let payload = null;
   try {
@@ -105,7 +112,7 @@ async function readJsonOrThrow(res) {
 }
 
 async function pushServerState(syncTick) {
-  if (!serverSyncEnabled) return;
+  if (!serverSyncEnabled || !state.authToken) return;
   const payload = {
     glossOptions: state.glossOptions,
     customers: state.customers,
@@ -138,13 +145,13 @@ async function pushServerState(syncTick) {
   } catch (err) {
     pendingSyncTick = 0;
     if (!fileModeOnly) {
-      onSyncUi({ badgeText: '儲存失敗，請重試', detailText: `儲存失敗，請重試：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
+      onSyncUi({ badgeText: '儲存失敗，請重試', detailText: `儲存失敗，請重試：${formatTs(Date.now())}（${getSyncErrorMessage(err)}）`, ok: false });
     }
   }
 }
 
 export async function pullServerState() {
-  if (!serverSyncEnabled) return;
+  if (!serverSyncEnabled || !state.authToken) return;
   try {
     const res = await fetch(API_STATE_URL, { cache: 'no-store', headers: getAuthHeaders() });
     const payload = await readJsonOrThrow(res);
@@ -159,7 +166,7 @@ export async function pullServerState() {
     setSyncUi('已儲存', '集中式資料庫', tick);
   } catch (err) {
     if (!fileModeOnly) {
-      onSyncUi({ badgeText: '儲存失敗，請重試', detailText: `儲存失敗，請重試：${formatTs(Date.now())}（伺服器連線失敗：${err.message}）`, ok: false });
+      onSyncUi({ badgeText: '儲存失敗，請重試', detailText: `儲存失敗，請重試：${formatTs(Date.now())}（${getSyncErrorMessage(err)}）`, ok: false });
     }
   }
 }
