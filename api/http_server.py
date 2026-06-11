@@ -5,36 +5,30 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from api._common import get_bearer_token, json_response, read_json_body
-from api.storage import BASE_DIR, authenticate_user, create_session_token, ensure_storage, filter_state_for_role, get_environment_status, get_storage_mode, merge_state_for_role, read_state, verify_finance_module_password, verify_session_token, write_state
-from api.trip_optimizer import optimize_trip
+from api.service import ApiError, get_state_payload, health_payload, optimize_trip_payload, update_state_payload, user_action_payload
+from api.storage import BASE_DIR
 
 SENSITIVE_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.py', '.bat', '.ps1', '.sh'}
 BLOCKED_PATH_PARTS = {'data'}
 PUBLIC_ROOT = Path(BASE_DIR).resolve()
 
 
-def is_sensitive_path(path: str) -> bool:
+def is_sensitive_path(path):
     normalized = path.split('?', 1)[0].lower()
     return any(normalized.endswith(suffix) for suffix in SENSITIVE_SUFFIXES)
 
 
-def is_blocked_static_path(path: str) -> bool:
+def is_blocked_static_path(path):
     candidate = Path(path)
     if candidate.is_absolute():
         return True
-
     lowered_parts = [part.lower() for part in candidate.parts if part not in {'', '.'}]
-    if any(part == '..' for part in lowered_parts):
-        return True
-    if any(part in BLOCKED_PATH_PARTS for part in lowered_parts):
-        return True
-    return is_sensitive_path(path)
+    return '..' in lowered_parts or any(part in BLOCKED_PATH_PARTS for part in lowered_parts) or is_sensitive_path(path)
 
 
-def resolve_public_file(rel_path: str) -> Path | None:
+def resolve_public_file(rel_path):
     if is_blocked_static_path(rel_path):
         return None
-
     file_path = (PUBLIC_ROOT / rel_path).resolve()
     try:
         file_path.relative_to(PUBLIC_ROOT)
@@ -46,156 +40,46 @@ def resolve_public_file(rel_path: str) -> Path | None:
 class AppRequestHandler(BaseHTTPRequestHandler):
     server_version = 'GlossApp/1.0'
 
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path or '/'
-
-        if path in {'/api/health', '/health'}:
-            self.handle_health()
-            return
-        if path in {'/api/state', '/state'}:
-            self.handle_get_state()
-            return
-        if path == '/':
-            self.serve_file('index.html')
-            return
-
-        rel_path = unquote(path.lstrip('/'))
-        if rel_path.startswith('api/'):
-            self.send_error(404)
-            return
-        if is_blocked_static_path(rel_path):
-            self.send_error(403)
-            return
-        self.serve_file(rel_path)
-
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        path = parsed.path or '/'
-        if path in {'/api/state', '/state'}:
-            self.handle_post_state()
-            return
-        if path in {'/api/users', '/users'}:
-            self.handle_post_users()
-            return
-        if path in {'/api/trips/optimize', '/trips/optimize'}:
-            self.handle_post_optimize_trip()
-            return
-        self.send_error(404)
-
     def log_message(self, format, *args):
         return
 
-    def handle_health(self):
+    def send_service_response(self, operation, *args):
         try:
-            ensure_storage()
-            json_response(self, 200, {'ok': True, 'database': get_storage_mode(), 'environment': get_environment_status()})
+            json_response(self, 200, operation(*args))
+        except ApiError as err:
+            json_response(self, err.status, err.payload)
         except Exception as err:
             json_response(self, 500, {'ok': False, 'error': str(err)})
 
-    def current_account(self):
-        return verify_session_token(get_bearer_token(self))
+    def do_GET(self):
+        path = urlparse(self.path).path or '/'
+        if path in {'/api/health', '/health'}:
+            self.send_service_response(health_payload)
+        elif path in {'/api/state', '/state'}:
+            self.send_service_response(get_state_payload, get_bearer_token(self))
+        elif path == '/':
+            self.serve_file('index.html')
+        else:
+            rel_path = unquote(path.lstrip('/'))
+            if rel_path.startswith('api/'):
+                self.send_error(404)
+            elif is_blocked_static_path(rel_path):
+                self.send_error(403)
+            else:
+                self.serve_file(rel_path)
 
-    def handle_get_state(self):
-        account = self.current_account()
-        if not account:
-            json_response(self, 401, {'ok': False, 'error': 'login required'})
-            return
-        try:
-            state = filter_state_for_role(read_state(), account.get('role') or 'viewer')
-            json_response(self, 200, state)
-        except Exception as err:
-            json_response(self, 500, {'ok': False, 'error': str(err)})
+    def do_POST(self):
+        path = urlparse(self.path).path or '/'
+        if path in {'/api/state', '/state'}:
+            self.send_service_response(update_state_payload, get_bearer_token(self), read_json_body(self))
+        elif path in {'/api/users', '/users'}:
+            self.send_service_response(user_action_payload, get_bearer_token(self), read_json_body(self))
+        elif path in {'/api/trips/optimize', '/trips/optimize'}:
+            self.send_service_response(optimize_trip_payload, get_bearer_token(self), read_json_body(self))
+        else:
+            self.send_error(404)
 
-    def handle_post_state(self):
-        account = self.current_account()
-        if not account:
-            json_response(self, 401, {'ok': False, 'error': 'login required'})
-            return
-        payload = read_json_body(self)
-        if not isinstance(payload, dict):
-            json_response(self, 400, {'error': 'invalid json'})
-            return
-
-        required = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables']
-        for key in required:
-            if key not in payload:
-                json_response(self, 400, {'error': f'missing key: {key}'})
-                return
-
-        try:
-            current = read_state()
-            payload = merge_state_for_role(current, dict(payload), account.get('role') or 'viewer')
-            ok, tick = write_state(payload)
-        except Exception as err:
-            json_response(self, 500, {'ok': False, 'error': str(err)})
-            return
-        if not ok:
-            json_response(self, 409, {'error': 'stale syncTick', 'serverSyncTick': tick})
-            return
-        json_response(self, 200, {'ok': True, 'syncTick': tick})
-
-
-    def handle_post_users(self):
-        payload = read_json_body(self)
-        if not isinstance(payload, dict):
-            json_response(self, 400, {'error': 'invalid json'})
-            return
-
-        action = str(payload.get('action') or '').strip().lower()
-        if action == 'register':
-            json_response(self, 403, {'ok': False, 'error': 'public registration disabled'})
-            return
-
-        if action == 'verify_finance_password':
-            account = self.current_account()
-            if not account:
-                json_response(self, 401, {'ok': False, 'error': 'login required'})
-                return
-            if account.get('role') not in {'admin', 'finance'}:
-                json_response(self, 403, {'ok': False, 'error': 'finance role required'})
-                return
-            password = str(payload.get('password') or '')
-            if not password:
-                json_response(self, 400, {'ok': False, 'error': 'missing finance password'})
-                return
-            if not verify_finance_module_password(password):
-                json_response(self, 401, {'ok': False, 'error': 'invalid finance password'})
-                return
-            json_response(self, 200, {'ok': True})
-            return
-
-        if action == 'login':
-            username = str(payload.get('username') or '').strip()
-            password = str(payload.get('password') or '')
-            if not username or not password:
-                json_response(self, 400, {'error': 'missing login fields'})
-                return
-            account = authenticate_user(username, password)
-            if not account:
-                json_response(self, 401, {'error': 'invalid credentials'})
-                return
-            json_response(self, 200, {'ok': True, 'account': account, 'token': create_session_token(account)})
-            return
-
-        json_response(self, 400, {'error': 'unsupported action'})
-
-    def handle_post_optimize_trip(self):
-        if not self.current_account():
-            json_response(self, 401, {'ok': False, 'error': 'login required'})
-            return
-        payload = read_json_body(self)
-        if not isinstance(payload, dict):
-            json_response(self, 400, {'error': 'invalid json'})
-            return
-        try:
-            result = optimize_trip(payload)
-        except ValueError as err:
-            json_response(self, 400, {'error': str(err)})
-            return
-        json_response(self, 200, result)
-
-    def serve_file(self, rel_path: str):
+    def serve_file(self, rel_path):
         file_path = resolve_public_file(rel_path)
         if file_path is None:
             self.send_error(403)
@@ -203,7 +87,6 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         if not file_path.exists() or not file_path.is_file():
             self.send_error(404)
             return
-
         body = file_path.read_bytes()
         content_type = mimetypes.guess_type(str(file_path))[0] or 'application/octet-stream'
         self.send_response(200)
@@ -213,5 +96,5 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def create_server(host: str, port: int) -> ThreadingHTTPServer:
+def create_server(host, port):
     return ThreadingHTTPServer((host, port), partial(AppRequestHandler))
