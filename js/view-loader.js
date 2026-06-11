@@ -16,7 +16,7 @@ async function loadApplicationView() {
 
 loadApplicationView().catch((error) => {
   console.error(error);
-  mount.innerHTML = '';
+  mount.replaceChildren();
   const panel = document.createElement('section');
   panel.className = 'panel card';
   const title = document.createElement('h1');
