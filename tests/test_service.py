@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, get_state_payload, health_payload, update_state_payload, user_action_payload
+from api.service import ApiError, changes_payload, get_state_payload, health_payload, update_state_payload, user_action_payload
 
 
 class ServiceTests(unittest.TestCase):
@@ -41,6 +41,13 @@ class ServiceTests(unittest.TestCase):
                 update_state_payload('token', payload)
         self.assertEqual(caught.exception.status, 409)
         self.assertEqual(caught.exception.payload['serverSyncTick'], 42)
+
+    def test_incremental_changes_are_filtered_by_role(self):
+        source = {'ok': True, 'cursor': 10, 'hasMore': False, 'changes': [
+            {'entity': 'orders', 'id': 'o1'}, {'entity': 'receivables', 'id': 'r1'}]}
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.changes_since', return_value=source):
+            result = changes_payload('token')
+        self.assertEqual([row['entity'] for row in result['changes']], ['orders'])
 
 
 if __name__ == '__main__':

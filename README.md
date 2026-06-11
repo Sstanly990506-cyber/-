@@ -33,12 +33,13 @@ python -m unittest discover -s tests -v
 ## 文件
 
 - [部署與區域網路使用](docs/DEPLOYMENT.md)
+- [容量與效能](docs/CAPACITY.md)
 - [安全設定](docs/SECURITY.md)
 - [故障排除](docs/TROUBLESHOOTING.md)
 - [系統架構](docs/ARCHITECTURE.md)
 
 ## 重要提醒
 
-- 正式環境必須設定 `APP_SESSION_SECRET` 與各角色初始化密碼。
+- 正式環境必須設定 `APP_SESSION_SECRET`、各角色初始化密碼與 PostgreSQL。
 - 手機不可使用 `127.0.0.1` 連接電腦，請使用電腦的區域網路 IP。
-- `start-no-python.bat` 是純前端模式，資料只存在目前瀏覽器，不會跨裝置同步。
+- `start-no-python.bat` 是純前端模式，不支援伺服器同步與大量資料模式。

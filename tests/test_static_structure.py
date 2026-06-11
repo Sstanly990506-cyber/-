@@ -13,7 +13,7 @@ class StaticStructureTests(unittest.TestCase):
 
     def test_environment_details_are_not_exposed_by_health_route(self):
         service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
-        self.assertIn('include_environment=False', service)
+        self.assertNotIn('get_environment_status', service)
 
     def test_configurable_text_is_sanitized(self):
         shared = (ROOT / 'js' / 'shared.js').read_text(encoding='utf-8')
@@ -29,6 +29,20 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('ordersView', view)
         self.assertIn("fetch('views/app-shell.html'", loader)
         self.assertNotIn('innerHTML', loader)
+
+    def test_scalable_data_routes_exist_in_both_servers(self):
+        flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
+        builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        for route in ('/api/bootstrap', '/api/data/', '/api/changes', '/api/reports/summary'):
+            self.assertIn(route, flask_server)
+            self.assertIn(route, builtin_server)
+
+    def test_frontend_uses_paged_incremental_storage(self):
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        self.assertIn('pageSize=100', store)
+        self.assertIn('/api/changes', store)
+        self.assertIn("localStorage.setItem('uiSettings'", store)
+        self.assertNotIn("localStorage.setItem('orders'", store)
 
 
 if __name__ == '__main__':
