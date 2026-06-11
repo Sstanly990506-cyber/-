@@ -1,5 +1,5 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
-from api.records import changes_since, delete_record, list_records, report_summary, upsert_record
+from api.records import changes_since, delete_record, list_records, upsert_record
 from api.storage import DEFAULT_APP_STATE, authenticate_user, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
@@ -38,10 +38,18 @@ def upsert_entity_payload(token,entity,record_id,payload):
     except ValueError as err:raise ApiError(str(err),400) from err
 def delete_entity_payload(token,entity,record_id):require_entity_access(token,entity);return delete_record(entity,record_id)
 def changes_payload(token,since=0,limit=1000):require_account(token);return changes_since(since,limit)
+def _all_records(entity):
+    first=list_records(entity,1,500);rows=list(first['items'])
+    for page in range(2,first['pages']+1):rows.extend(list_records(entity,page,500)['items'])
+    return rows
+def _number(value):
+    try:return float(value or 0)
+    except (TypeError,ValueError):return 0.0
 def report_payload(token):
     account=require_account(token)
     if account.get('role') not in {'admin','finance','ops'}:raise ApiError('permission denied',403)
-    return report_summary()
+    orders=_all_records('orders');receivables=_all_records('receivables');payables=_all_records('payables');inventory=_all_records('inventory')
+    return {'ok':True,'summary':{'ordersLoaded':len(orders),'pendingOrders':sum(1 for row in orders if row.get('status')!='已完成'),'receivableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('received'))) for row in receivables),'payableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('paid'))) for row in payables),'lowInventory':sum(1 for row in inventory if _number(row.get('stock'))<=_number(row.get('safetyStock')))}}
 def user_action_payload(token,payload):
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     action=str(payload.get('action') or '').strip().lower()
