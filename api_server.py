@@ -2,7 +2,9 @@
 import errno
 import socket
 
-from api.storage import DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_environment_status, get_storage_mode
+from api.http_server import create_server, is_blocked_static_path
+from api.service import ApiError, get_state_payload, health_payload, optimize_trip_payload, update_state_payload, user_action_payload
+from api.storage import BASE_DIR, DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
 
 try:
     from flask import Flask, abort, jsonify, request, send_from_directory
@@ -10,13 +12,7 @@ except ImportError:
     Flask = None
     abort = jsonify = request = send_from_directory = None
 
-from api.http_server import create_server, is_blocked_static_path
-from api.storage import BASE_DIR, authenticate_user, create_session_token, filter_state_for_role, merge_state_for_role, read_state, verify_finance_module_password, verify_session_token, write_state
-from api.trip_optimizer import optimize_trip
-
-app = None
-if Flask is not None:
-    app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path='')
+app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path='') if Flask is not None else None
 
 
 def get_lan_ips():
@@ -29,7 +25,6 @@ def get_lan_ips():
                 ips.add(ip)
     except OSError:
         pass
-
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.connect(('8.8.8.8', 80))
@@ -38,128 +33,51 @@ def get_lan_ips():
                 ips.add(ip)
     except OSError:
         pass
-
     return sorted(ips)
 
 
 if app is not None:
-    def json_error(message, status=500):
-        return jsonify({'ok': False, 'error': message}), status
-
-
-    def current_account():
+    def bearer_token():
         value = request.headers.get('Authorization', '')
         scheme, _, token = value.partition(' ')
-        if scheme.lower() != 'bearer' or not token.strip():
-            return None
-        return verify_session_token(token.strip())
+        return token.strip() if scheme.lower() == 'bearer' else ''
 
+    def service_response(operation, *args):
+        try:
+            return jsonify(operation(*args))
+        except ApiError as err:
+            return jsonify(err.payload), err.status
+        except Exception as err:
+            return jsonify({'ok': False, 'error': str(err)}), 500
 
     @app.get('/api/health')
     @app.get('/health')
     def health():
-        try:
-            ensure_storage()
-            return jsonify({'ok': True, 'database': get_storage_mode(), 'environment': get_environment_status()})
-        except Exception as err:
-            return json_error(str(err), 500)
-
+        return service_response(health_payload)
 
     @app.get('/api/state')
     @app.get('/state')
     def get_state():
-        account = current_account()
-        if not account:
-            return jsonify({'ok': False, 'error': 'login required'}), 401
-        try:
-            state = filter_state_for_role(read_state(), account.get('role') or 'viewer')
-            return jsonify(state)
-        except Exception as err:
-            return json_error(str(err), 500)
-
+        return service_response(get_state_payload, bearer_token())
 
     @app.post('/api/state')
     @app.post('/state')
     def post_state():
-        account = current_account()
-        if not account:
-            return jsonify({'ok': False, 'error': 'login required'}), 401
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            return jsonify({'error': 'invalid json'}), 400
-
-        required = ['glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables']
-        for key in required:
-            if key not in payload:
-                return jsonify({'error': f'missing key: {key}'}), 400
-
-        try:
-            current = read_state()
-            payload = merge_state_for_role(current, dict(payload), account.get('role') or 'viewer')
-            ok, tick = write_state(payload)
-        except Exception as err:
-            return json_error(str(err), 500)
-        if not ok:
-            return jsonify({'error': 'stale syncTick', 'serverSyncTick': tick}), 409
-        return jsonify({'ok': True, 'syncTick': tick})
-
+        return service_response(update_state_payload, bearer_token(), request.get_json(silent=True))
 
     @app.post('/api/users')
     @app.post('/users')
     def post_users():
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            return jsonify({'error': 'invalid json'}), 400
-
-        action = str(payload.get('action') or '').strip().lower()
-        if action == 'register':
-            return jsonify({'ok': False, 'error': 'public registration disabled'}), 403
-
-        if action == 'verify_finance_password':
-            account = current_account()
-            if not account:
-                return jsonify({'ok': False, 'error': 'login required'}), 401
-            if account.get('role') not in {'admin', 'finance'}:
-                return jsonify({'ok': False, 'error': 'finance role required'}), 403
-            password = str(payload.get('password') or '')
-            if not password:
-                return jsonify({'ok': False, 'error': 'missing finance password'}), 400
-            if not verify_finance_module_password(password):
-                return jsonify({'ok': False, 'error': 'invalid finance password'}), 401
-            return jsonify({'ok': True})
-
-        if action == 'login':
-            username = str(payload.get('username') or '').strip()
-            password = str(payload.get('password') or '')
-            if not username or not password:
-                return jsonify({'error': 'missing login fields'}), 400
-            account = authenticate_user(username, password)
-            if not account:
-                return jsonify({'error': 'invalid credentials'}), 401
-            return jsonify({'ok': True, 'account': account, 'token': create_session_token(account)})
-
-        return jsonify({'error': 'unsupported action'}), 400
-
+        return service_response(user_action_payload, bearer_token(), request.get_json(silent=True))
 
     @app.post('/api/trips/optimize')
     @app.post('/trips/optimize')
     def post_optimize_trip():
-        if not current_account():
-            return jsonify({'ok': False, 'error': 'login required'}), 401
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            return jsonify({'error': 'invalid json'}), 400
-        try:
-            result = optimize_trip(payload)
-        except ValueError as err:
-            return jsonify({'error': str(err)}), 400
-        return jsonify(result)
-
+        return service_response(optimize_trip_payload, bearer_token(), request.get_json(silent=True))
 
     @app.get('/')
     def index():
         return send_from_directory(BASE_DIR, 'index.html')
-
 
     @app.get('/<path:path>')
     def static_files(path):
@@ -170,7 +88,7 @@ if app is not None:
         return send_from_directory(BASE_DIR, path)
 
 
-def _resolve_port(host: str, preferred_port: int, max_tries: int = 20) -> int:
+def _resolve_port(host, preferred_port, max_tries=20):
     for candidate in range(preferred_port, preferred_port + max_tries):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             try:
@@ -179,39 +97,26 @@ def _resolve_port(host: str, preferred_port: int, max_tries: int = 20) -> int:
             except OSError as err:
                 if err.errno != errno.EADDRINUSE:
                     raise
-    raise SystemExit(
-        f'[ERROR] 找不到可用連接埠（起始埠 {preferred_port}，共嘗試 {max_tries} 個）。\n'
-        f'        請先關閉占用中的程式，或改用其他埠。'
-    )
+    raise SystemExit(f'[ERROR] 找不到可用連接埠（起始埠 {preferred_port}，共嘗試 {max_tries} 個）。')
 
 
-def run_server(host: str, port: int):
+def run_server(host, port):
     actual_port = _resolve_port(host, port)
-
     ensure_storage()
     print(f'[INFO] centralized storage: {get_storage_mode()}')
     if not DATABASE_URL:
-        print(f'[INFO] 未設定 DATABASE_URL，已自動改用本機 {LOCAL_STATE_PATH} 儲存。')
-    if app is None:
-        print('[INFO] 未安裝 Flask，已自動改用 Python 內建伺服器。')
+        print(f'[INFO] 未設定 DATABASE_URL，已使用本機 {LOCAL_STATE_PATH} 儲存。')
     if actual_port != port:
-        print(f'[WARN] 連接埠 {port} 已被占用，已自動改用 {actual_port}。')
+        print(f'[WARN] 連接埠 {port} 已被占用，改用 {actual_port}。')
     print(f'[INFO] server running: http://{host}:{actual_port}')
     if host == '0.0.0.0':
-        lan_ips = get_lan_ips()
-        if lan_ips:
-            print('[INFO] LAN 可用網址：')
-            for ip in lan_ips:
-                print(f'       http://{ip}:{actual_port}')
-        else:
-            print('[WARN] 無法自動偵測區網 IP，請手動查詢電腦 IP 後讓手機連線。')
+        for ip in get_lan_ips():
+            print(f'       http://{ip}:{actual_port}')
 
     if app is not None:
         app.run(host=host, port=actual_port, use_reloader=False)
         return
-
     server = create_server(host, actual_port)
-
     try:
         server.serve_forever()
     finally:
@@ -220,7 +125,6 @@ def run_server(host: str, port: int):
 
 if __name__ == '__main__':
     import argparse
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=4173)
