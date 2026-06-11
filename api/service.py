@@ -1,96 +1,67 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
 from api.records import changes_since, delete_record, list_records, report_summary, upsert_record
-from api.storage import authenticate_user, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, verify_finance_module_password, verify_session_token, write_state
+from api.storage import DEFAULT_APP_STATE, authenticate_user, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
-
-REQUIRED_STATE_KEYS = ('glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables')
-ENTITY_ROLE = {'orders': {'admin', 'ops'}, 'customers': {'admin', 'ops'}, 'inventory': {'admin', 'ops'}, 'events': {'admin', 'ops', 'finance', 'audit'}, 'audits': {'admin', 'audit'}, 'receivables': {'admin', 'finance'}, 'payables': {'admin', 'finance'}}
-
-
+REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
+ENTITY_ROLE={'orders':{'admin','ops'},'customers':{'admin','ops'},'inventory':{'admin','ops'},'events':{'admin','ops','finance','audit'},'audits':{'admin','audit'},'receivables':{'admin','finance'},'payables':{'admin','finance'}}
 class ApiError(Exception):
-    def __init__(self, message, status=400, **extra):
-        super().__init__(message); self.status = status; self.payload = {'ok': False, 'error': message, **extra}
-
-
+    def __init__(self,message,status=400,**extra):super().__init__(message);self.status=status;self.payload={'ok':False,'error':message,**extra}
 def require_account(token):
-    account = verify_session_token(token)
-    if not account: raise ApiError('login required', 401)
+    account=verify_session_token(token)
+    if not account:raise ApiError('login required',401)
     return account
-
-
-def require_entity_access(token, entity):
-    account = require_account(token); role = account.get('role') or 'viewer'
-    if entity not in ENTITY_ROLE: raise ApiError('unsupported entity', 404)
-    if role == 'viewer' or role not in ENTITY_ROLE[entity]: raise ApiError('permission denied', 403)
+def require_entity_access(token,entity):
+    account=require_account(token);role=account.get('role') or 'viewer'
+    if entity not in ENTITY_ROLE:raise ApiError('unsupported entity',404)
+    if role=='viewer' or role not in ENTITY_ROLE[entity]:raise ApiError('permission denied',403)
     return account
-
-
-def health_payload():
-    ensure_storage(); return {'ok': True, 'database': get_storage_mode()}
-
-
+def health_payload():ensure_storage();return {'ok':True,'database':get_storage_mode()}
+def bootstrap_payload(token):
+    account=require_account(token);source=filter_state_for_role(read_state(),account.get('role') or 'viewer');payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True;return payload
 def get_state_payload(token):
-    account = require_account(token); return filter_state_for_role(read_state(), account.get('role') or 'viewer')
-
-
-def update_state_payload(token, payload):
-    account = require_account(token)
-    if not isinstance(payload, dict): raise ApiError('invalid json', 400)
+    account=require_account(token);return filter_state_for_role(read_state(),account.get('role') or 'viewer')
+def update_state_payload(token,payload):
+    account=require_account(token)
+    if not isinstance(payload,dict):raise ApiError('invalid json',400)
     for key in REQUIRED_STATE_KEYS:
-        if key not in payload: raise ApiError(f'missing key: {key}', 400)
-    current = read_state(); merged = merge_state_for_role(current, dict(payload), account.get('role') or 'viewer'); ok, tick = write_state(merged)
-    if not ok: raise ApiError('stale syncTick', 409, serverSyncTick=tick)
-    return {'ok': True, 'syncTick': tick}
-
-
-def list_entity_payload(token, entity, page=1, page_size=100, query=''):
-    require_entity_access(token, entity)
-    try: return list_records(entity, page, page_size, query)
-    except ValueError as err: raise ApiError(str(err), 400) from err
-
-
-def upsert_entity_payload(token, entity, record_id, payload):
-    require_entity_access(token, entity)
-    try: return upsert_record(entity, record_id, payload)
-    except ValueError as err: raise ApiError(str(err), 400) from err
-
-
-def delete_entity_payload(token, entity, record_id):
-    require_entity_access(token, entity); return delete_record(entity, record_id)
-
-
-def changes_payload(token, since=0, limit=1000):
-    require_account(token); return changes_since(since, limit)
-
-
+        if key not in payload:raise ApiError(f'missing key: {key}',400)
+    current=read_state();merged=merge_state_for_role(current,dict(payload),account.get('role') or 'viewer');ok,tick=write_state(merged)
+    if not ok:raise ApiError('stale syncTick',409,serverSyncTick=tick)
+    return {'ok':True,'syncTick':tick}
+def list_entity_payload(token,entity,page=1,page_size=100,query=''):
+    require_entity_access(token,entity)
+    try:return list_records(entity,page,page_size,query)
+    except ValueError as err:raise ApiError(str(err),400) from err
+def upsert_entity_payload(token,entity,record_id,payload):
+    require_entity_access(token,entity)
+    try:return upsert_record(entity,record_id,payload)
+    except ValueError as err:raise ApiError(str(err),400) from err
+def delete_entity_payload(token,entity,record_id):require_entity_access(token,entity);return delete_record(entity,record_id)
+def changes_payload(token,since=0,limit=1000):require_account(token);return changes_since(since,limit)
 def report_payload(token):
-    account = require_account(token)
-    if account.get('role') not in {'admin', 'finance', 'ops'}: raise ApiError('permission denied', 403)
+    account=require_account(token)
+    if account.get('role') not in {'admin','finance','ops'}:raise ApiError('permission denied',403)
     return report_summary()
-
-
-def user_action_payload(token, payload):
-    if not isinstance(payload, dict): raise ApiError('invalid json', 400)
-    action = str(payload.get('action') or '').strip().lower()
-    if action == 'register': raise ApiError('public registration disabled', 403)
-    if action == 'login':
-        username = str(payload.get('username') or '').strip(); password = str(payload.get('password') or '')
-        if not username or not password: raise ApiError('missing login fields', 400)
-        account = authenticate_user(username, password)
-        if not account: raise ApiError('invalid credentials', 401)
-        return {'ok': True, 'account': account, 'token': create_session_token(account)}
-    if action == 'verify_finance_password':
-        account = require_account(token)
-        if account.get('role') not in {'admin', 'finance'}: raise ApiError('finance role required', 403)
-        password = str(payload.get('password') or '')
-        if not password: raise ApiError('missing finance password', 400)
-        if not verify_finance_module_password(password): raise ApiError('invalid finance password', 401)
-        return {'ok': True}
-    raise ApiError('unsupported action', 400)
-
-
-def optimize_trip_payload(token, payload):
+def user_action_payload(token,payload):
+    if not isinstance(payload,dict):raise ApiError('invalid json',400)
+    action=str(payload.get('action') or '').strip().lower()
+    if action=='register':raise ApiError('public registration disabled',403)
+    if action=='login':
+        username=str(payload.get('username') or '').strip();password=str(payload.get('password') or '')
+        if not username or not password:raise ApiError('missing login fields',400)
+        account=authenticate_user(username,password)
+        if not account:raise ApiError('invalid credentials',401)
+        return {'ok':True,'account':account,'token':create_session_token(account)}
+    if action=='verify_finance_password':
+        account=require_account(token)
+        if account.get('role') not in {'admin','finance'}:raise ApiError('finance role required',403)
+        password=str(payload.get('password') or '')
+        if not password:raise ApiError('missing finance password',400)
+        if not verify_finance_module_password(password):raise ApiError('invalid finance password',401)
+        return {'ok':True}
+    raise ApiError('unsupported action',400)
+def optimize_trip_payload(token,payload):
     require_account(token)
-    if not isinstance(payload, dict): raise ApiError('invalid json', 400)
-    try: return optimize_trip(payload)
-    except ValueError as err: raise ApiError(str(err), 400) from err
+    if not isinstance(payload,dict):raise ApiError('invalid json',400)
+    try:return optimize_trip(payload)
+    except ValueError as err:raise ApiError(str(err),400) from err
