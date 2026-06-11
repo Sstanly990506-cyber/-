@@ -37,7 +37,8 @@ def upsert_entity_payload(token,entity,record_id,payload):
     try:return upsert_record(entity,record_id,payload)
     except ValueError as err:raise ApiError(str(err),400) from err
 def delete_entity_payload(token,entity,record_id):require_entity_access(token,entity);return delete_record(entity,record_id)
-def changes_payload(token,since=0,limit=1000):require_account(token);return changes_since(since,limit)
+def changes_payload(token,since=0,limit=1000):
+    account=require_account(token);role=account.get('role') or 'viewer';result=changes_since(since,limit);allowed={entity for entity,roles in ENTITY_ROLE.items() if role in roles};result['changes']=[row for row in result['changes'] if row.get('entity') in allowed];return result
 def _all_records(entity):
     first=list_records(entity,1,500);rows=list(first['items'])
     for page in range(2,first['pages']+1):rows.extend(list_records(entity,page,500)['items'])
