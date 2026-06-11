@@ -21,6 +21,15 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('merged.moduleLabels = sanitizeMap', shared)
         self.assertIn('merged.moduleIcons = sanitizeMap', shared)
 
+    def test_large_view_is_outside_index(self):
+        index = (ROOT / 'index.html').read_text(encoding='utf-8')
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        loader = (ROOT / 'js' / 'view-loader.js').read_text(encoding='utf-8')
+        self.assertNotIn('ordersView', index)
+        self.assertIn('ordersView', view)
+        self.assertIn("fetch('views/app-shell.html'", loader)
+        self.assertNotIn('innerHTML', loader)
+
 
 if __name__ == '__main__':
     unittest.main()
