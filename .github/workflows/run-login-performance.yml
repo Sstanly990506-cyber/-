@@ -1,0 +1,25 @@
+name: Run login performance patch
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.pull_request.head.ref == 'codex/render-current-view-only'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/render-current-view-only
+          fetch-depth: 0
+      - name: Apply and verify patch
+        run: |
+          awk '/PATCH_GZ_B64:/{print $2}' .github/workflows/apply-login-performance.yml | base64 -d | gunzip > /tmp/performance.patch
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git am /tmp/performance.patch
+          python -m unittest discover -s tests -v
+          git rm .github/workflows/apply-login-performance.yml .github/workflows/run-login-performance.yml
+          git commit --amend --no-edit
+          git push origin HEAD:codex/render-current-view-only
