@@ -17,6 +17,8 @@ ENTITY_FIELDS = {
 }
 RECORDS_PATH = storage.DATA_DIR / 'records.json'
 RECORDS_LOCK = Lock()
+RECORD_STORAGE_INIT_LOCK = Lock()
+RECORD_STORAGE_READY = False
 
 
 def _now():
@@ -28,24 +30,27 @@ def _record_id(entity, row, index=0):
 
 
 def ensure_record_storage():
+    global RECORD_STORAGE_READY
     storage.ensure_storage()
-    if storage.DATABASE_URL:
-        with storage.get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute('''CREATE TABLE IF NOT EXISTS app_records (
-                    entity TEXT NOT NULL,
-                    record_id TEXT NOT NULL,
-                    data_json JSONB NOT NULL,
-                    updated_at BIGINT NOT NULL,
-                    deleted BOOLEAN NOT NULL DEFAULT FALSE,
-                    PRIMARY KEY (entity, record_id)
-                )''')
-                cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_updated_idx ON app_records(entity, updated_at)')
-                cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_deleted_idx ON app_records(entity, deleted)')
-            conn.commit()
-        _migrate_postgres_once()
-    else:
-        _migrate_local_once()
+    if RECORD_STORAGE_READY:
+        return
+    with RECORD_STORAGE_INIT_LOCK:
+        if RECORD_STORAGE_READY:
+            return
+        if storage.DATABASE_URL:
+            with storage.get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute('''CREATE TABLE IF NOT EXISTS app_records (
+                        entity TEXT NOT NULL, record_id TEXT NOT NULL, data_json JSONB NOT NULL,
+                        updated_at BIGINT NOT NULL, deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                        PRIMARY KEY (entity, record_id))''')
+                    cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_updated_idx ON app_records(entity, updated_at)')
+                    cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_deleted_idx ON app_records(entity, deleted)')
+                conn.commit()
+            _migrate_postgres_once()
+        else:
+            _migrate_local_once()
+        RECORD_STORAGE_READY = True
 
 
 def _migrate_postgres_once():

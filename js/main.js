@@ -30,6 +30,7 @@ let internalViewsFragment = null;
 let internalViewsMounted = true;
 let storeSyncStarted = false;
 let financeUnlockedUntil = 0;
+let activeViewId = 'loginView';
 
 const ROLE_PERMS = {
   admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView'],
@@ -313,10 +314,11 @@ function renderAll() {
   if (isModuleEnabled('inventoryView')) renderInventory(state);
   if (isModuleEnabled('notificationsView')) renderNotifications(state);
   if (state.userRole === 'admin') renderSettings(state);
-  const activeView = views.find((viewId) => !$(viewId)?.classList.contains('hidden'));
+  const activeView = activeViewId;
   if (activeView && activeView !== 'loginView' && !hasViewPermission(activeView)) {
     views.forEach((viewId) => $(viewId)?.classList.add('hidden'));
     $('dashboardView')?.classList.remove('hidden');
+    activeViewId = 'dashboardView';
   }
 }
 
@@ -332,6 +334,7 @@ function showView(id) {
     return;
   }
   if (id !== 'loginView') mountInternalViews();
+  activeViewId = id;
   views.forEach((v) => $(v)?.classList.add('hidden'));
   $(id)?.classList.remove('hidden');
   if (id === 'ordersView') {
@@ -399,11 +402,12 @@ function bindCoreEvents() {
     mountInternalViews();
     const prefix = state.settings?.welcomePrefix || '你好';
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
-    await startAuthenticatedSync();
-    appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
-    saveState();
     const landing = state.settings?.defaultLandingView || 'dashboardView';
     showView(hasViewPermission(landing) ? landing : 'dashboardView');
+    startAuthenticatedSync().then(() => {
+      appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
+      saveState();
+    }).catch((err) => applySyncUi({ badgeText: '同步失敗', detailText: err?.message || '背景載入失敗', ok: false }));
   });
 
   document.addEventListener('click', (e) => {
