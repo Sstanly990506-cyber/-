@@ -19,6 +19,8 @@ RECORDS_PATH = storage.DATA_DIR / 'records.json'
 RECORDS_LOCK = Lock()
 RECORD_STORAGE_INIT_LOCK = Lock()
 RECORD_STORAGE_READY = False
+RECORD_STORAGE_INIT_LOCK = Lock()
+RECORD_STORAGE_READY = False
 
 
 def _now():
@@ -41,13 +43,9 @@ def ensure_record_storage():
             with storage.get_db_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute('''CREATE TABLE IF NOT EXISTS app_records (
-                        entity TEXT NOT NULL,
-                        record_id TEXT NOT NULL,
-                        data_json JSONB NOT NULL,
-                        updated_at BIGINT NOT NULL,
-                        deleted BOOLEAN NOT NULL DEFAULT FALSE,
-                        PRIMARY KEY (entity, record_id)
-                    )''')
+                        entity TEXT NOT NULL, record_id TEXT NOT NULL, data_json JSONB NOT NULL,
+                        updated_at BIGINT NOT NULL, deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                        PRIMARY KEY (entity, record_id))''')
                     cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_updated_idx ON app_records(entity, updated_at)')
                     cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_deleted_idx ON app_records(entity, deleted)')
                 conn.commit()
