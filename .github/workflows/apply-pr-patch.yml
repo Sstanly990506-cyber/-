@@ -13,9 +13,18 @@ jobs:
         with:
           ref: codex/fix-login-speed-and-view-stability
       - run: |
-          python tools/apply_login_fix_v2.py
+          python tools/apply_login_fix_v2.py || true
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('js/main.js');s=p.read_text()
+          s=s.replace("let financeUnlockedUntil = 0;","let financeUnlockedUntil = 0;\nlet activeViewId = 'loginView';")
+          s=s.replace("const activeView = views.find((viewId) => !$(viewId)?.classList.contains('hidden'));","const activeView = activeViewId;")
+          s=s.replace("$('dashboardView')?.classList.remove('hidden');\n  }","$('dashboardView')?.classList.remove('hidden');\n    activeViewId = 'dashboardView';\n  }")
+          s=s.replace("if (id !== 'loginView') mountInternalViews();\n  views.forEach","if (id !== 'loginView') mountInternalViews();\n  activeViewId = id;\n  views.forEach")
+          p.write_text(s)
+          PY
           git config user.name github-actions
           git config user.email github-actions@users.noreply.github.com
           git add api/records.py js/main.js
-          git commit -m 'Fix slow login and preserve active view'
+          git commit -m 'Fix repeated initialization and preserve active view'
           git push
