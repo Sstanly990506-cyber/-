@@ -1,0 +1,21 @@
+name: Apply PR patch
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.head_ref == 'codex/fix-login-speed-and-view-stability'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/fix-login-speed-and-view-stability
+      - run: |
+          git apply .github/login-fix.patch
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add api/records.py js/main.js tests/test_records.py tests/test_static_structure.py
+          git commit -m 'Fix slow login and preserve active view'
+          git push
