@@ -1,0 +1,124 @@
+diff --git a/api/records.py b/api/records.py
+--- a/api/records.py
++++ b/api/records.py
+@@ -17,6 +17,8 @@ ENTITY_FIELDS = {
+ }
+ RECORDS_PATH = storage.DATA_DIR / 'records.json'
+ RECORDS_LOCK = Lock()
++RECORD_STORAGE_INIT_LOCK = Lock()
++RECORD_STORAGE_READY = False
+@@ -28,24 +30,31 @@ def _record_id(entity, row, index=0):
+ def ensure_record_storage():
++    global RECORD_STORAGE_READY
+     storage.ensure_storage()
+-    if storage.DATABASE_URL:
+-        with storage.get_db_connection() as conn:
+-            with conn.cursor() as cur:
+-                cur.execute('''CREATE TABLE IF NOT EXISTS app_records (
+-                    entity TEXT NOT NULL,
+-                    record_id TEXT NOT NULL,
+-                    data_json JSONB NOT NULL,
+-                    updated_at BIGINT NOT NULL,
+-                    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+-                    PRIMARY KEY (entity, record_id)
+-                )''')
+-                cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_updated_idx ON app_records(entity, updated_at)')
+-                cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_deleted_idx ON app_records(entity, deleted)')
+-            conn.commit()
+-        _migrate_postgres_once()
+-    else:
+-        _migrate_local_once()
++    if RECORD_STORAGE_READY:
++        return
++    with RECORD_STORAGE_INIT_LOCK:
++        if RECORD_STORAGE_READY:
++            return
++        if storage.DATABASE_URL:
++            with storage.get_db_connection() as conn:
++                with conn.cursor() as cur:
++                    cur.execute('''CREATE TABLE IF NOT EXISTS app_records (
++                        entity TEXT NOT NULL,
++                        record_id TEXT NOT NULL,
++                        data_json JSONB NOT NULL,
++                        updated_at BIGINT NOT NULL,
++                        deleted BOOLEAN NOT NULL DEFAULT FALSE,
++                        PRIMARY KEY (entity, record_id)
++                    )''')
++                    cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_updated_idx ON app_records(entity, updated_at)')
++                    cur.execute('CREATE INDEX IF NOT EXISTS app_records_entity_deleted_idx ON app_records(entity, deleted)')
++                conn.commit()
++            _migrate_postgres_once()
++        else:
++            _migrate_local_once()
++        RECORD_STORAGE_READY = True
+
+diff --git a/js/main.js b/js/main.js
+--- a/js/main.js
++++ b/js/main.js
+@@ -30,6 +30,7 @@ let internalViewsFragment = null;
+ let internalViewsMounted = true;
+ let storeSyncStarted = false;
+ let financeUnlockedUntil = 0;
++let activeViewId = 'loginView';
+@@ -313,10 +314,11 @@ function renderAll() {
+-  const activeView = views.find((viewId) => !$(viewId)?.classList.contains('hidden'));
++  const activeView = activeViewId;
+   if (activeView && activeView !== 'loginView' && !hasViewPermission(activeView)) {
+     views.forEach((viewId) => $(viewId)?.classList.add('hidden'));
+     $('dashboardView')?.classList.remove('hidden');
++    activeViewId = 'dashboardView';
+   }
+ }
+@@ -332,6 +334,7 @@ function showView(id) {
+   }
+   if (id !== 'loginView') mountInternalViews();
++  activeViewId = id;
+   views.forEach((v) => $(v)?.classList.add('hidden'));
+@@ -399,11 +402,12 @@ function bindCoreEvents() {
+     mountInternalViews();
+     const prefix = state.settings?.welcomePrefix || '你好';
+     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
+-    await startAuthenticatedSync();
+-    appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
+-    saveState();
+     const landing = state.settings?.defaultLandingView || 'dashboardView';
+     showView(hasViewPermission(landing) ? landing : 'dashboardView');
++    startAuthenticatedSync().then(() => {
++      appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
++      saveState();
++    }).catch((err) => applySyncUi({ badgeText: '同步失敗', detailText: err?.message || '背景載入失敗', ok: false }));
+   });
+
+diff --git a/tests/test_records.py b/tests/test_records.py
+--- a/tests/test_records.py
++++ b/tests/test_records.py
+@@ -10,6 +10,7 @@ class RecordStorageTests(unittest.TestCase):
+     def setUp(self):
+         self.temp = tempfile.TemporaryDirectory()
+         self.root = Path(self.temp.name)
++        records.RECORD_STORAGE_READY = False
+@@ -21,6 +22,7 @@ class RecordStorageTests(unittest.TestCase):
+     def tearDown(self):
++        records.RECORD_STORAGE_READY = False
+         for item in reversed(self.patches):
+
+diff --git a/tests/test_static_structure.py b/tests/test_static_structure.py
+--- a/tests/test_static_structure.py
++++ b/tests/test_static_structure.py
+@@ -44,6 +44,18 @@ class StaticStructureTests(unittest.TestCase):
+         self.assertNotIn("localStorage.setItem('orders'", store)
+ 
++    def test_login_loads_only_role_data_without_waiting_for_sync(self):
++        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
++        main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
++        self.assertIn('ROLE_KEYS', store)
++        self.assertNotIn('await loadServerReport()', store)
++        self.assertNotIn('await startAuthenticatedSync()', main)
++
++    def test_background_refresh_preserves_active_view(self):
++        main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
++        self.assertIn("let activeViewId = 'loginView'", main)
++        self.assertIn('const activeView = activeViewId', main)
++
+ 
+ if __name__ == '__main__':
