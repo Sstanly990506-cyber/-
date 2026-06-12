@@ -49,6 +49,18 @@ class ServiceTests(unittest.TestCase):
             result = changes_payload('token')
         self.assertEqual([row['entity'] for row in result['changes']], ['orders'])
 
+    def test_admin_can_create_account(self):
+        created = {'username': 'new-user', 'role': 'ops'}
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.register_user', return_value=created):
+            result = user_action_payload('token', {'action': 'create_account', 'username': 'new-user', 'password': 'password123', 'role': 'ops'})
+        self.assertEqual(result['account'], created)
+
+    def test_non_admin_cannot_change_finance_password(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'finance'}):
+            with self.assertRaises(ApiError) as caught:
+                user_action_payload('token', {'action': 'change_finance_password', 'password': 'password123'})
+        self.assertEqual(caught.exception.status, 403)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -610,6 +610,37 @@
             </div>
           </article>
 
+          <div class="settings-grid compact-settings-grid">
+            <article class="card">
+              <h3>新增登入帳戶</h3>
+              <form id="createAccountForm" class="form-grid compact">
+                <label>帳號<input id="newAccountUsername" autocomplete="off" required /></label>
+                <label>顯示名稱<input id="newAccountDisplay" required /></label>
+                <label>角色
+                  <select id="newAccountRole">
+                    <option value="ops">作業人員</option>
+                    <option value="finance">財經人員</option>
+                    <option value="audit">稽核人員</option>
+                    <option value="viewer">唯讀人員</option>
+                    <option value="admin">管理員</option>
+                  </select>
+                </label>
+                <label>密碼<input id="newAccountPassword" type="password" minlength="8" required /></label>
+                <label>確認密碼<input id="newAccountPasswordConfirm" type="password" minlength="8" required /></label>
+                <button class="btn primary" type="submit">新增帳戶</button>
+              </form>
+            </article>
+            <article class="card">
+              <h3>更改財經系統密碼</h3>
+              <p class="sub">新密碼會加密儲存，至少需要 8 個字元。</p>
+              <form id="financePasswordForm" class="form-grid compact">
+                <label>新財經密碼<input id="newFinancePassword" type="password" minlength="8" required /></label>
+                <label>確認新密碼<input id="newFinancePasswordConfirm" type="password" minlength="8" required /></label>
+                <button class="btn primary" type="submit">更新財經密碼</button>
+              </form>
+            </article>
+          </div>
+
           <div class="actions">
             <button class="btn primary" type="submit">儲存設定</button>
             <button class="btn" type="button" id="resetSettingsBtn">恢復預設</button>

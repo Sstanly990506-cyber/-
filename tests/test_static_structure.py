@@ -44,6 +44,16 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("localStorage.setItem('uiSettings'", store)
         self.assertNotIn("localStorage.setItem('orders'", store)
 
+    def test_admin_security_forms_are_present(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
+        storage = (ROOT / 'api' / 'storage.py').read_text(encoding='utf-8')
+        self.assertIn('createAccountForm', view)
+        self.assertIn('financePasswordForm', view)
+        self.assertIn("action: 'create_account'", settings)
+        self.assertIn("action: 'change_finance_password'", settings)
+        self.assertIn("hash_password(value)", storage)
+
 
 if __name__ == '__main__':
     unittest.main()

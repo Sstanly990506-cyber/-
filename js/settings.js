@@ -241,6 +241,51 @@ export function renderSettings(state) {
 }
 
 export function bindSettingsEvents(state, saveState, renderAll) {
+  const adminAction = async (payload) => {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  };
+
+  $('createAccountForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = $('newAccountPassword')?.value || '';
+    const confirm = $('newAccountPasswordConfirm')?.value || '';
+    if (password !== confirm) return alert('兩次輸入的帳戶密碼不同。');
+    try {
+      await adminAction({
+        action: 'create_account',
+        username: $('newAccountUsername')?.value.trim(),
+        display: $('newAccountDisplay')?.value.trim(),
+        role: $('newAccountRole')?.value,
+        password,
+      });
+      e.currentTarget.reset();
+      alert('帳戶已新增。');
+    } catch (err) {
+      alert(`新增帳戶失敗：${err.message}`);
+    }
+  });
+
+  $('financePasswordForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = $('newFinancePassword')?.value || '';
+    const confirm = $('newFinancePasswordConfirm')?.value || '';
+    if (password !== confirm) return alert('兩次輸入的財經密碼不同。');
+    try {
+      await adminAction({ action: 'change_finance_password', password });
+      e.currentTarget.reset();
+      alert('財經密碼已更新。');
+    } catch (err) {
+      alert(`更改財經密碼失敗：${err.message}`);
+    }
+  });
+
   $('settingsForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     state.settings = collectSettings();

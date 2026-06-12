@@ -1,6 +1,6 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
 from api.records import changes_since, delete_record, list_records, upsert_record
-from api.storage import DEFAULT_APP_STATE, authenticate_user, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, verify_finance_module_password, verify_session_token, write_state
+from api.storage import DEFAULT_APP_STATE, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, register_user, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
 ENTITY_ROLE={'orders':{'admin','ops'},'customers':{'admin','ops'},'inventory':{'admin','ops'},'events':{'admin','ops','finance','audit'},'audits':{'admin','audit'},'receivables':{'admin','finance'},'payables':{'admin','finance'}}
@@ -67,6 +67,22 @@ def user_action_payload(token,payload):
         password=str(payload.get('password') or '')
         if not password:raise ApiError('missing finance password',400)
         if not verify_finance_module_password(password):raise ApiError('invalid finance password',401)
+        return {'ok':True}
+    if action=='create_account':
+        account=require_account(token)
+        if account.get('role')!='admin':raise ApiError('admin role required',403)
+        username=str(payload.get('username') or '').strip();password=str(payload.get('password') or '');display=str(payload.get('display') or '').strip();role=str(payload.get('role') or 'viewer').strip()
+        if role not in {'admin','ops','finance','audit','viewer'}:raise ApiError('invalid role',400)
+        if not username or len(password)<8:raise ApiError('username required and password must be at least 8 characters',400)
+        try:created=register_user(username,password,display or username,role,source='admin-created')
+        except ValueError as err:raise ApiError(str(err),409) from err
+        return {'ok':True,'account':created}
+    if action=='change_finance_password':
+        account=require_account(token)
+        if account.get('role')!='admin':raise ApiError('admin role required',403)
+        password=str(payload.get('password') or '')
+        try:change_finance_module_password(password)
+        except ValueError as err:raise ApiError(str(err),400) from err
         return {'ok':True}
     raise ApiError('unsupported action',400)
 def optimize_trip_payload(token,payload):
