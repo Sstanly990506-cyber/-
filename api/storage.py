@@ -31,6 +31,7 @@ DEFAULT_DATA_DIR = (
 DATA_DIR = Path(os.environ.get('APP_DATA_DIR') or DEFAULT_DATA_DIR).expanduser().resolve()
 LOCAL_STATE_PATH = DATA_DIR / 'app_state.json'
 LOCAL_USERS_PATH = DATA_DIR / 'users.json'
+LOCAL_SECRETS_PATH = DATA_DIR / 'secrets.json'
 DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
 
 DEFAULT_APP_STATE = {
@@ -185,6 +186,15 @@ def ensure_postgres_storage():
                         role TEXT NOT NULL,
                         created_at TEXT NOT NULL,
                         source TEXT NOT NULL
+                    )
+                    '''
+                )
+                cur.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS app_secrets (
+                        secret_key TEXT PRIMARY KEY,
+                        secret_hash TEXT NOT NULL,
+                        updated_at BIGINT NOT NULL
                     )
                     '''
                 )
@@ -447,11 +457,62 @@ def get_environment_status() -> dict:
     }
 
 
+def read_secret_hash(secret_key: str) -> str:
+    ensure_storage()
+    if DATABASE_URL:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT secret_hash FROM app_secrets WHERE secret_key = %s', (secret_key,))
+                row = cur.fetchone() or {}
+        return str(row.get('secret_hash') or '')
+    with USERS_FILE_LOCK:
+        if not LOCAL_SECRETS_PATH.exists():
+            return ''
+        try:
+            payload = json.loads(LOCAL_SECRETS_PATH.read_text(encoding='utf-8-sig'))
+        except (OSError, json.JSONDecodeError):
+            return ''
+        return str((payload if isinstance(payload, dict) else {}).get(secret_key) or '')
+
+
+def write_secret_hash(secret_key: str, secret_hash: str):
+    ensure_storage()
+    if DATABASE_URL:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''INSERT INTO app_secrets(secret_key, secret_hash, updated_at) VALUES (%s, %s, %s)
+                       ON CONFLICT(secret_key) DO UPDATE SET secret_hash=EXCLUDED.secret_hash, updated_at=EXCLUDED.updated_at''',
+                    (secret_key, secret_hash, int(time.time() * 1000)),
+                )
+            conn.commit()
+        return
+    with USERS_FILE_LOCK:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            payload = json.loads(LOCAL_SECRETS_PATH.read_text(encoding='utf-8-sig')) if LOCAL_SECRETS_PATH.exists() else {}
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        payload = payload if isinstance(payload, dict) else {}
+        payload[secret_key] = secret_hash
+        temp_path = LOCAL_SECRETS_PATH.with_suffix('.tmp')
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+        temp_path.replace(LOCAL_SECRETS_PATH)
+
+
 def verify_finance_module_password(password: str) -> bool:
+    stored = read_secret_hash('finance_module_password')
+    if stored:
+        return verify_password(password, stored)
     configured = os.environ.get('FINANCE_MODULE_PASSWORD') or os.environ.get('INIT_FINANCE_PASSWORD') or ''
-    if not configured:
-        return False
-    return hmac.compare_digest(str(password or ''), configured)
+    return bool(configured) and hmac.compare_digest(str(password or ''), configured)
+
+
+def change_finance_module_password(password: str):
+    value = str(password or '')
+    if len(value) < 8:
+        raise ValueError('finance password must be at least 8 characters')
+    write_secret_hash('finance_module_password', hash_password(value))
 
 def get_bootstrap_password(account: dict) -> str:
     env_key = str(account.get('password_env') or '').strip()
@@ -689,4 +750,5 @@ __all__ = [
     'get_environment_status',
     'merge_state_for_role',
     'verify_finance_module_password',
+    'change_finance_module_password',
 ]
