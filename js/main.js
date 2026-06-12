@@ -31,7 +31,6 @@ let internalViewsMounted = true;
 let storeSyncStarted = false;
 let financeUnlockedUntil = 0;
 let activeViewId = 'loginView';
-let activeViewId = 'loginView';
 
 const ROLE_PERMS = {
   admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView'],

@@ -19,8 +19,6 @@ RECORDS_PATH = storage.DATA_DIR / 'records.json'
 RECORDS_LOCK = Lock()
 RECORD_STORAGE_INIT_LOCK = Lock()
 RECORD_STORAGE_READY = False
-RECORD_STORAGE_INIT_LOCK = Lock()
-RECORD_STORAGE_READY = False
 
 
 def _now():
