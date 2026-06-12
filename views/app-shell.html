@@ -91,8 +91,21 @@
             <h3>新增 / 編輯工單</h3>
             <form id="orderForm" class="form-grid order-grid">
               <input id="orderId" type="hidden" />
+              <section class="ai-document-panel span-2" aria-labelledby="aiDocumentTitle">
+                <div>
+                  <h4 id="aiDocumentTitle">AI 單據辨識</h4>
+                  <p class="sub">拍照或上傳 LINE 收到的單據；辨識後請確認內容再儲存。</p>
+                </div>
+                <div class="actions">
+                  <input id="aiDocumentInput" type="file" accept="image/*" capture="environment" />
+                  <button id="aiAnalyzeDocumentBtn" class="btn" type="button">辨識單據</button>
+                </div>
+                <p id="aiDocumentStatus" class="sub" role="status"></p>
+                <div id="aiDocumentResults" class="ai-document-results"></div>
+              </section>
               <label>工單編號<input id="orderNumber" /></label>
               <label>日期<input id="orderDate" type="date" /></label>
+              <label class="span-2">產品／品名<input id="orderProductName" /></label>
 
               <label>上游客戶（可搜尋）
                 <input id="upstreamInput" list="upstreamOptions" placeholder="輸入關鍵字，例如：彩" />
@@ -125,6 +138,7 @@
                 </div>
               </label>
               <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
+              <label class="span-2">加工備註<textarea id="orderNotes" rows="4"></textarea></label>
               <p id="orderSmartHint" class="sub span-2"></p>
               <label>狀態
                 <select id="orderStatus"></select>

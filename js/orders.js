@@ -15,6 +15,117 @@ function updateTaiInchPreview() {
   $('sizeTaiInch').value = l && w ? `${l.toFixed(2)} × ${w.toFixed(2)} 台吋` : '';
 }
 
+function readImageAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('無法讀取圖片'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function prepareDocumentImage(file) {
+  if (!file?.type?.startsWith('image/')) throw new Error('請選擇圖片檔案');
+  const source = await readImageAsDataUrl(file);
+  const image = new Image();
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = () => reject(new Error('圖片格式無法讀取'));
+    image.src = source;
+  });
+  const scale = Math.min(1, 2200 / Math.max(image.width, image.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.84);
+}
+
+function setDocumentStatus(message, isError = false) {
+  const status = $('aiDocumentStatus');
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle('ai-document-error', isError);
+}
+
+function setValue(id, value) {
+  const input = $(id);
+  if (input && value !== undefined && value !== null && value !== '') input.value = value;
+}
+
+function applyExtractedItem(document, item) {
+  setValue('orderNumber', document.orderNumber);
+  setValue('orderDate', document.orderDate);
+  setValue('upstreamInput', document.supplier);
+  setValue('downstreamInput', document.customer);
+  setValue('orderAddress', document.destination);
+  setValue('orderProductName', document.productName || item.description);
+  setValue('sheetCount', item.quantity);
+  setValue('sizeLength', item.sizeLength);
+  setValue('sizeWidth', item.sizeWidth);
+  setValue('sizeUnit', item.sizeUnit);
+  setValue('glossType', item.glossType);
+  setValue('orderNotes', item.notes);
+  updateTaiInchPreview();
+  setDocumentStatus('已套用辨識結果。請逐欄確認後再儲存工單。');
+}
+
+function renderDocumentResults(extraction) {
+  const container = $('aiDocumentResults');
+  if (!container) return;
+  container.replaceChildren();
+  const summary = window.document.createElement('p');
+  summary.className = 'sub';
+  summary.textContent = `${extraction.documentType || '單據'}｜工單 ${extraction.orderNumber || '未辨識'}｜${extraction.customer || extraction.supplier || '客戶未辨識'}`;
+  container.append(summary);
+  (extraction.items || []).forEach((item, index) => {
+    const card = window.document.createElement('article');
+    card.className = `ai-result-card ${Number(item.confidence || 0) < 0.8 ? 'low-confidence' : ''}`;
+    const text = window.document.createElement('p');
+    const size = item.sizeLength && item.sizeWidth ? `${item.sizeLength} × ${item.sizeWidth} ${item.sizeUnit || ''}` : '尺寸未辨識';
+    text.textContent = `${index + 1}. ${item.description || extraction.productName || '未命名項目'}｜${item.quantity || 0}｜${size}｜${item.glossType || '上光未辨識'}｜信心 ${Math.round(Number(item.confidence || 0) * 100)}%`;
+    const button = window.document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn';
+    button.textContent = '套用到工單';
+    button.onclick = () => applyExtractedItem(extraction, item);
+    card.append(text, button);
+    container.append(card);
+  });
+  if (!(extraction.items || []).length) setDocumentStatus('AI 沒有找到可建立的加工項目，請換一張更清楚的照片。', true);
+  if (extraction.warnings?.length) {
+    const warnings = window.document.createElement('p');
+    warnings.className = 'ai-document-warning';
+    warnings.textContent = `請注意：${extraction.warnings.join('、')}`;
+    container.append(warnings);
+  }
+}
+
+async function analyzeSelectedDocument(state) {
+  const input = $('aiDocumentInput');
+  const file = input?.files?.[0];
+  if (!file) return setDocumentStatus('請先拍照或選擇一張單據圖片。', true);
+  const button = $('aiAnalyzeDocumentBtn');
+  button.disabled = true;
+  setDocumentStatus('正在壓縮圖片並辨識，通常需要數秒...');
+  try {
+    const image = await prepareDocumentImage(file);
+    const response = await fetch('/api/documents/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) },
+      body: JSON.stringify({ image }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    renderDocumentResults(data.document);
+    setDocumentStatus(`辨識完成，共找到 ${(data.document.items || []).length} 筆項目。請選擇要套用的項目。`);
+  } catch (error) {
+    setDocumentStatus(`辨識失敗：${error.message}`, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 
 function findCustomerByName(state, keyword) {
   const key = (keyword || '').trim().toLowerCase();
@@ -87,6 +198,7 @@ function buildOrderFromForm(state) {
   return {
     orderNumber: $('orderNumber').value.trim(),
     orderDate: $('orderDate').value,
+    productName: $('orderProductName').value.trim(),
     upstream: $('upstreamInput').value.trim(),
     downstream: $('downstreamInput').value.trim(),
     address: $('orderAddress').value.trim(),
@@ -96,6 +208,7 @@ function buildOrderFromForm(state) {
     sizeUnit: $('sizeUnit').value || 'mm',
     glossType: $('glossType').value || '',
     totalPrice: Number($('totalPrice').value || 0),
+    notes: $('orderNotes').value.trim(),
     status: $('orderStatus').value || getEnabledOrderStatuses(state)[0],
   };
 }
@@ -142,9 +255,11 @@ function renderOrderTable(order) {
     <table>
       <tr><th>工單編號</th><td>${order.orderNumber || '-'}</td><th>日期</th><td>${order.orderDate || '-'}</td></tr>
       <tr><th>上游客戶</th><td>${order.upstream || '-'}</td><th>下游客戶</th><td>${order.downstream || '-'}</td></tr>
+      <tr><th>產品／品名</th><td colspan="3">${order.productName || '-'}</td></tr>
       <tr><th>地址</th><td colspan="3">${order.address || '-'}</td></tr>
       <tr><th>張數</th><td>${order.sheetCount || 0}</td><th>狀態</th><td>${order.status || '-'}</td></tr>
       <tr><th>尺寸（台吋）</th><td>${taiInchText}</td><th>上光種類</th><td>${order.glossType || '-'}</td></tr>
+      <tr><th>加工備註</th><td colspan="3">${order.notes || '-'}</td></tr>
     </table>
     <div class="footer"><span>客戶簽收：______________</span><span>製單人：______________</span></div>`;
 }
@@ -202,11 +317,13 @@ function matchesOrderSearch(order, keyword) {
   if (!keyword) return true;
   return [
     order.orderNumber,
+    order.productName,
     order.orderDate,
     order.upstream,
     order.downstream,
     order.address,
     order.status,
+    order.notes,
     order.updatedAt,
   ].some((value) => String(value || '').toLowerCase().includes(keyword));
 }
@@ -262,6 +379,8 @@ export function clearOrderForm() {
   $('orderId').value = '';
   $('orderDate').value = getTodayText();
   $('sizeTaiInch').value = '';
+  $('aiDocumentResults')?.replaceChildren();
+  setDocumentStatus('');
 }
 
 export function openOrderForEdit(state, orderId) {
@@ -270,6 +389,7 @@ export function openOrderForEdit(state, orderId) {
   $('orderId').value = order.id;
   $('orderNumber').value = order.orderNumber || '';
   $('orderDate').value = order.orderDate || '';
+  $('orderProductName').value = order.productName || '';
   $('upstreamInput').value = order.upstream || '';
   $('downstreamInput').value = order.downstream || '';
   $('orderAddress').value = order.address || '';
@@ -279,6 +399,7 @@ export function openOrderForEdit(state, orderId) {
   $('sizeUnit').value = order.sizeUnit || 'mm';
   $('glossType').value = order.glossType || '';
   $('totalPrice').value = order.totalPrice || '';
+  $('orderNotes').value = order.notes || '';
   $('orderStatus').value = order.status || '未完成';
   state.orderScreen = 'form';
   renderOrderScreen(state);
@@ -288,6 +409,7 @@ export function openOrderForEdit(state, orderId) {
 }
 
 export function bindOrderEvents(state, saveState, renderAll) {
+  $('aiAnalyzeDocumentBtn')?.addEventListener('click', () => analyzeSelectedDocument(state));
   $('addGlossBtn')?.addEventListener('click', () => {
     const input = $('newGlossType');
     const val = input.value.trim();

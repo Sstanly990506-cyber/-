@@ -37,6 +37,12 @@ class StaticStructureTests(unittest.TestCase):
             self.assertIn(route, flask_server)
             self.assertIn(route, builtin_server)
 
+    def test_document_analysis_route_exists_in_both_servers(self):
+        flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
+        builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        self.assertIn('/api/documents/analyze', flask_server)
+        self.assertIn('/api/documents/analyze', builtin_server)
+
     def test_frontend_uses_paged_incremental_storage(self):
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
         self.assertIn('pageSize=100', store)

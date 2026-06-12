@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs,unquote,urlparse
 from api._common import get_bearer_token,json_response,read_json_body
-from api.service import ApiError,bootstrap_payload,changes_payload,delete_entity_payload,get_state_payload,health_payload,list_entity_payload,optimize_trip_payload,report_payload,update_state_payload,upsert_entity_payload,user_action_payload
+from api.service import ApiError,analyze_document_payload,bootstrap_payload,changes_payload,delete_entity_payload,get_state_payload,health_payload,list_entity_payload,optimize_trip_payload,report_payload,update_state_payload,upsert_entity_payload,user_action_payload
 from api.storage import BASE_DIR
 SENSITIVE_SUFFIXES={'.db','.sqlite','.sqlite3','.py','.bat','.ps1','.sh'};BLOCKED_PATH_PARTS={'data'};PUBLIC_ROOT=Path(BASE_DIR).resolve()
 def is_sensitive_path(path):return any(path.split('?',1)[0].lower().endswith(s) for s in SENSITIVE_SUFFIXES)
@@ -43,6 +43,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         if path in {'/api/state','/state'}:self.send_service_response(update_state_payload,token,read_json_body(self))
         elif path in {'/api/users','/users'}:self.send_service_response(user_action_payload,token,read_json_body(self))
         elif path in {'/api/trips/optimize','/trips/optimize'}:self.send_service_response(optimize_trip_payload,token,read_json_body(self))
+        elif path=='/api/documents/analyze':self.send_service_response(analyze_document_payload,token,read_json_body(self))
         else:self.send_error(404)
     def do_PUT(self):
         parts=urlparse(self.path).path.split('/');token=get_bearer_token(self)

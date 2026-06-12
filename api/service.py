@@ -1,4 +1,5 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
+from api.document_ai import DocumentAIError, analyze_document_image
 from api.records import changes_since, delete_record, list_records, upsert_record
 from api.storage import DEFAULT_APP_STATE, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, register_user, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
@@ -90,3 +91,9 @@ def optimize_trip_payload(token,payload):
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     try:return optimize_trip(payload)
     except ValueError as err:raise ApiError(str(err),400) from err
+def analyze_document_payload(token,payload):
+    account=require_account(token)
+    if account.get('role') not in {'admin','ops'}:raise ApiError('permission denied',403)
+    if not isinstance(payload,dict):raise ApiError('invalid json',400)
+    try:return {'ok':True,'document':analyze_document_image(payload.get('image'))}
+    except DocumentAIError as err:raise ApiError(str(err),400) from err
