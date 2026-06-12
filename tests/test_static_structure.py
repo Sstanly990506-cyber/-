@@ -44,6 +44,19 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("localStorage.setItem('uiSettings'", store)
         self.assertNotIn("localStorage.setItem('orders'", store)
 
+    def test_login_does_not_wait_for_all_entity_pages(self):
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        self.assertIn('Promise.allSettled(keys.map', store)
+        self.assertNotIn('await Promise.all(keys.map', store)
+
+    def test_refresh_renders_only_the_active_view(self):
+        main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
+        render_all = main[main.index('function renderAll()'):main.index('function showView(id)')]
+        self.assertIn('switch (activeViewId)', render_all)
+        self.assertNotIn('\n  renderDashboard();', render_all)
+        self.assertNotIn('\n  renderCustomers(state);', render_all)
+        self.assertNotIn('\n  renderSettings(state);', render_all)
+
     def test_admin_security_forms_are_present(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
