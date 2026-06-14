@@ -89,6 +89,7 @@ def normalize_database_url(url: str) -> str:
         raise RuntimeError('DATABASE_URL 必須是 PostgreSQL 連線字串')
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
     query.setdefault('sslmode', 'require')
+    query.setdefault('connect_timeout', '8')
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
@@ -391,10 +392,13 @@ def verify_session_token(token: str) -> dict | None:
     username = normalize_username(payload.get('sub') or '')
     if not username:
         return None
-    for user in read_users():
-        if user.get('usernameKey') == username:
-            return sanitize_account_public(user)
-    return None
+    return {
+        'id': '',
+        'username': username,
+        'display': str(payload.get('display') or username),
+        'role': str(payload.get('role') or 'viewer'),
+        'createdAt': '',
+    }
 
 
 def can_access_field(role: str, field: str) -> bool:
@@ -646,6 +650,29 @@ def authenticate_user(username: str, password: str):
     key = normalize_username(username)
     if not key:
         return None
+    if DATABASE_URL:
+        ensure_storage()
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source
+                    FROM app_users
+                    WHERE username_key = %s
+                    LIMIT 1
+                    ''',
+                    (key,),
+                )
+                row = cur.fetchone()
+        if not row or not verify_password(password, row.get('password_hash') or ''):
+            return None
+        return sanitize_account_public({
+            'id': row.get('id'),
+            'username': row.get('username'),
+            'display': row.get('display_name'),
+            'role': row.get('role'),
+            'createdAt': row.get('created_at'),
+        })
     users = read_users()
     for user in users:
         if user['usernameKey'] != key:
