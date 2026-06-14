@@ -149,10 +149,46 @@ input[type="checkbox"] { width: auto; }
   gap: 12px;
 }
 .compact-nav-grid { align-items: stretch; }
-.dashboard-summary-grid {
-  display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+.dashboard-accountbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
+  padding: 14px 18px;
+}
+.dashboard-account,
+.dashboard-account-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dashboard-priorities { padding: 16px; }
+.dashboard-priorities h2 { margin-bottom: 12px; font-size: 18px; }
+.dashboard-priority-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.dashboard-priority {
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  padding: 14px;
+  text-align: left;
+  color: var(--text);
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+}
+.dashboard-priority span { color: var(--muted); font-size: 13px; }
+.dashboard-priority strong { font-size: 26px; line-height: 1.1; overflow-wrap: anywhere; }
+.dashboard-priority:hover { border-color: var(--primary); }
+.dashboard-priority:disabled { cursor: default; opacity: 0.72; }
+.dashboard-priority:disabled:hover { border-color: var(--border); }
+.dashboard-module-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .sync-badge {
   display: inline-block;
@@ -484,7 +520,6 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
 
 @media (max-width: 900px) {
   .card-grid,
-  .dashboard-summary-grid,
   .split,
   .orders-layout,
   .finance-split,
@@ -508,6 +543,17 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .app-shell { padding: 18px 14px 28px; }
   .topbar { align-items: flex-start; }
   .topbar > div:last-child { justify-content: flex-start; }
+  .dashboard-accountbar { align-items: flex-start; }
+  .dashboard-account-actions { width: 100%; }
+  .dashboard-account-actions .btn { width: auto; flex: 1; }
+  .dashboard-priority-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dashboard-priority { min-height: 82px; padding: 10px; }
+  .dashboard-priority span { font-size: 11px; }
+  .dashboard-priority strong { font-size: 22px; }
+  .dashboard-module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-module-grid .nav-card { min-height: 78px; padding: 12px; }
+  .dashboard-module-grid .nav-card-icon { font-size: 24px; }
+  .dashboard-module-grid .nav-card strong { font-size: 15px; }
   .order-grid,
   .settings-form-grid { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }

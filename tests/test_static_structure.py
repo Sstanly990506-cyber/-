@@ -58,6 +58,17 @@ class StaticStructureTests(unittest.TestCase):
         self.assertNotIn('\n  renderCustomers(state);', render_all)
         self.assertNotIn('\n  renderSettings(state);', render_all)
 
+    def test_dashboard_is_compact_and_actionable(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
+        styles = (ROOT / 'styles.css').read_text(encoding='utf-8')
+        self.assertEqual(view.count('data-dashboard-target'), 3)
+        self.assertNotIn('dashboardSmartTip', view)
+        self.assertNotIn('dashboardHeroTitle', view)
+        self.assertIn('summaries = {', main)
+        self.assertIn("priority.dataset.dashboardTarget === 'financeView'", main)
+        self.assertIn('.dashboard-module-grid { grid-template-columns: repeat(2', styles)
+
     def test_admin_security_forms_are_present(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
