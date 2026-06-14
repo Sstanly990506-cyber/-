@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from api.service import ApiError, changes_payload, get_state_payload, health_payload, update_state_payload, user_action_payload
+from api.storage import create_session_token, verify_session_token
 
 
 class ServiceTests(unittest.TestCase):
@@ -26,6 +27,14 @@ class ServiceTests(unittest.TestCase):
             result = user_action_payload('', {'action': 'login', 'username': 'ops', 'password': 'secret'})
         self.assertEqual(result['token'], 'token')
         self.assertEqual(result['account'], account)
+
+    def test_session_verification_does_not_query_users(self):
+        account = {'username': 'ops', 'display': 'Ops', 'role': 'ops'}
+        token = create_session_token(account)
+        with patch('api.storage.read_users', side_effect=AssertionError('token verification queried users')):
+            verified = verify_session_token(token)
+        self.assertEqual(verified['username'], 'ops')
+        self.assertEqual(verified['role'], 'ops')
 
     def test_update_rejects_incomplete_payload(self):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}):

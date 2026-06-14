@@ -46,7 +46,8 @@ class StaticStructureTests(unittest.TestCase):
 
     def test_login_does_not_wait_for_all_entity_pages(self):
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
-        self.assertIn('Promise.allSettled(keys.map', store)
+        self.assertIn('loadEntityPagesInBackground(keys)', store)
+        self.assertIn('concurrency=2', store)
         self.assertNotIn('await Promise.all(keys.map', store)
 
     def test_refresh_renders_only_the_active_view(self):
