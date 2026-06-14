@@ -301,24 +301,46 @@ function renderAll() {
   if (!state.user) return;
   mountInternalViews();
   applyUiSettings(state);
-  renderDashboard();
-  if (isModuleEnabled('customersView')) renderCustomers(state);
-  if (isModuleEnabled('ordersView')) {
-    renderOrders(state, renderCustomerOptions);
-    renderOrderScreen(state);
-  }
-  if (isModuleEnabled('auditView')) renderAudits(state);
-  if (isModuleEnabled('financeView') && Date.now() < financeUnlockedUntil) renderFinance(state);
-  if (isModuleEnabled('tripsView')) renderTrips(state);
-  if (isModuleEnabled('opsCenterView')) renderOpsCenter(state);
-  if (isModuleEnabled('inventoryView')) renderInventory(state);
-  if (isModuleEnabled('notificationsView')) renderNotifications(state);
-  if (state.userRole === 'admin') renderSettings(state);
-  const activeView = activeViewId;
-  if (activeView && activeView !== 'loginView' && !hasViewPermission(activeView)) {
+  applyRoleUi();
+  if (activeViewId && activeViewId !== 'loginView' && !hasViewPermission(activeViewId)) {
     views.forEach((viewId) => $(viewId)?.classList.add('hidden'));
     $('dashboardView')?.classList.remove('hidden');
     activeViewId = 'dashboardView';
+  }
+  switch (activeViewId) {
+    case 'dashboardView':
+      renderDashboard();
+      break;
+    case 'customersView':
+      if (isModuleEnabled('customersView')) renderCustomers(state);
+      break;
+    case 'ordersView':
+      if (isModuleEnabled('ordersView')) {
+        renderOrders(state, renderCustomerOptions);
+        renderOrderScreen(state);
+      }
+      break;
+    case 'auditView':
+      if (isModuleEnabled('auditView')) renderAudits(state);
+      break;
+    case 'financeView':
+      if (isModuleEnabled('financeView') && Date.now() < financeUnlockedUntil) renderFinance(state);
+      break;
+    case 'tripsView':
+      if (isModuleEnabled('tripsView')) renderTrips(state);
+      break;
+    case 'opsCenterView':
+      if (isModuleEnabled('opsCenterView')) renderOpsCenter(state);
+      break;
+    case 'inventoryView':
+      if (isModuleEnabled('inventoryView')) renderInventory(state);
+      break;
+    case 'notificationsView':
+      if (isModuleEnabled('notificationsView')) renderNotifications(state);
+      break;
+    case 'settingsView':
+      if (state.userRole === 'admin') renderSettings(state);
+      break;
   }
 }
 
@@ -339,7 +361,6 @@ function showView(id) {
   $(id)?.classList.remove('hidden');
   if (id === 'ordersView') {
     state.orderScreen = 'list';
-    renderOrderScreen(state);
   }
   renderAll();
 }
