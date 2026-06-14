@@ -18,34 +18,34 @@
       </section>
 
       <section id="dashboardView" class="panel hidden">
-        <header class="topbar card">
-          <div class="topbar-heading">
-            <h2 id="dashboardHeroTitle">讓每個角色都能快速上手的營運控制台</h2>
-            <p id="dashboardHeroSubtitle" class="sub">整合工單、客戶、車趟、財務與稽核的智慧中控台</p>
-            <p id="dashboardAnnouncement" class="sub">建議每日由營運中心追蹤待辦、由通知中心檢視異常提醒。</p>
-          </div>
-          <div>
+        <header class="card dashboard-accountbar">
+          <div class="dashboard-account">
             <span id="welcomeText"></span>
             <span id="syncBadge" class="sync-badge">儲存中</span>
             <span id="syncDetail" class="sync-detail">已儲存</span>
+          </div>
+          <div class="dashboard-account-actions">
             <button id="settingsBtn" class="btn" type="button" data-open-view="settingsView">設定</button>
             <button id="logoutBtn" class="btn ghost" type="button">登出</button>
           </div>
         </header>
 
-        <div class="dashboard-summary-grid">
-          <article class="card">
-            <h3>首頁重點</h3>
-            <div class="kpi-grid kpi-grid-2">
-              <div class="kpi"><span>今日新增工單</span><strong id="dashTodayOrders">0</strong></div>
-              <div class="kpi"><span>未完成工單數</span><strong id="dashPendingOrders">0</strong></div>
-            </div>
-          </article>
+        <section class="card dashboard-priorities">
+          <h2>待辦重點</h2>
+          <div class="dashboard-priority-grid">
+            <button class="dashboard-priority" type="button" data-dashboard-target>
+              <span id="dashPriorityLabel1">待處理</span><strong id="dashPriorityValue1">0</strong>
+            </button>
+            <button class="dashboard-priority" type="button" data-dashboard-target>
+              <span id="dashPriorityLabel2">異常項目</span><strong id="dashPriorityValue2">0</strong>
+            </button>
+            <button class="dashboard-priority" type="button" data-dashboard-target>
+              <span id="dashPriorityLabel3">重要提醒</span><strong id="dashPriorityValue3">0</strong>
+            </button>
+          </div>
+        </section>
 
-          <article class="card smart-tip" id="dashboardSmartTip">智能提示載入中...</article>
-        </div>
-
-        <div id="dashboardNavGrid" class="card-grid compact-nav-grid">
+        <div id="dashboardNavGrid" class="card-grid compact-nav-grid dashboard-module-grid">
           <button class="nav-card" type="button" data-target="ordersView">工單作業系統</button>
           <button class="nav-card" type="button" data-target="customersView">客戶資料系統</button>
           <button class="nav-card" type="button" data-target="tripsView">車趟系統</button>

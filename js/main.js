@@ -223,6 +223,11 @@ function getRiskScore(alerts) {
   return alerts.reduce((sum, a) => sum + (a.level === 'critical' ? 4 : a.level === 'warning' ? 2 : 1), 0);
 }
 
+function formatDashboardMoney(value) {
+  const compact = new Intl.NumberFormat('zh-TW', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value || 0));
+  return `NT$ ${compact}`;
+}
+
 function pushGlobalLineReminder(alerts) {
   const text = buildGlobalLineMessage(alerts);
   const url = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
@@ -274,25 +279,48 @@ function renderDashboard() {
   const todayCount = state.orders.filter((o) => (o.orderDate || '').slice(0, 10) === today).length;
   const pending = state.orders.filter((o) => (o.status || '未完成') !== '已完成').length;
   const recvOutstanding = state.receivables.reduce((sum, r) => sum + Math.max(0, Number(r.amount || 0) - Number(r.received || 0)), 0);
+  const payableOutstanding = state.payables.reduce((sum, p) => sum + Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)), 0);
   const inventoryWarnings = state.inventoryItems.filter((item) => Number(item.stock || 0) <= Number(item.safetyStock || 0));
-  const topCustomer = Object.entries(state.orders.reduce((acc, o) => {
-    const c = (o.downstream || o.upstream || '').trim();
-    if (!c) return acc;
-    acc[c] = (acc[c] || 0) + 1;
-    return acc;
-  }, {})).sort((a, b) => b[1] - a[1])[0];
-
-  if ($('dashTodayOrders')) $('dashTodayOrders').textContent = String(todayCount);
-  if ($('dashPendingOrders')) $('dashPendingOrders').textContent = String(pending);
-
   const alerts = proactiveNotify();
   const integrity = getIntegrityReport();
-  const tip = $('dashboardSmartTip');
-  if (tip) {
-    const customerText = topCustomer ? `熱度最高客戶：${topCustomer[0]}（${topCustomer[1]} 筆）` : '尚無客戶熱度資料';
-    const riskText = alerts.length ? `智能提醒 ${alerts.length} 筆（風險 ${getRiskScore(alerts)}）` : '智能提醒 0 筆';
-    tip.textContent = `智能總覽：待處理工單 ${pending} 筆，應收未收約 NT$ ${recvOutstanding.toLocaleString()}。${customerText}｜低庫存 ${inventoryWarnings.length} 項｜資料完整性 C:${integrity.critical}/W:${integrity.warning}｜${riskText}｜${COMPANY_INFO.name}`;
-  }
+  const moduleCount = MODULE_DEFINITIONS.filter((module) => isModuleEnabled(module.id) && hasViewPermission(module.id)).length;
+  const summaries = {
+    admin: [
+      ['未完成工單', pending, 'ordersView'],
+      ['應收未收', formatDashboardMoney(recvOutstanding), 'financeView'],
+      ['重要提醒', alerts.length, 'notificationsView'],
+    ],
+    ops: [
+      ['未完成工單', pending, 'ordersView'],
+      ['低庫存', inventoryWarnings.length, 'inventoryView'],
+      ['重要提醒', alerts.length, 'notificationsView'],
+    ],
+    finance: [
+      ['應收未收', formatDashboardMoney(recvOutstanding), 'financeView'],
+      ['應付未付', formatDashboardMoney(payableOutstanding), 'financeView'],
+      ['重要提醒', alerts.length, 'notificationsView'],
+    ],
+    audit: [
+      ['完整性問題', integrity.total, 'auditView'],
+      ['稽核紀錄', state.audits.length, 'auditView'],
+      ['重要提醒', alerts.length, 'notificationsView'],
+    ],
+    viewer: [
+      ['今日新增工單', todayCount, null],
+      ['重要提醒', alerts.length, 'notificationsView'],
+      ['可用功能', moduleCount, null],
+    ],
+  };
+  (summaries[state.userRole] || summaries.viewer).forEach(([label, value, target], index) => {
+    const position = index + 1;
+    if ($(`dashPriorityLabel${position}`)) $(`dashPriorityLabel${position}`).textContent = label;
+    if ($(`dashPriorityValue${position}`)) $(`dashPriorityValue${position}`).textContent = String(value);
+    const button = document.querySelectorAll('[data-dashboard-target]')[index];
+    if (button) {
+      button.dataset.dashboardTarget = target || '';
+      button.disabled = !target || !hasViewPermission(target);
+    }
+  });
 
   applyRoleUi();
 }
@@ -432,6 +460,12 @@ function bindCoreEvents() {
   });
 
   document.addEventListener('click', (e) => {
+    const priority = e.target.closest('[data-dashboard-target]');
+    if (priority?.dataset.dashboardTarget) {
+      if (priority.dataset.dashboardTarget === 'financeView') openFinanceGate();
+      else showView(priority.dataset.dashboardTarget);
+      return;
+    }
     const opener = e.target.closest('[data-open-view]');
     if (!opener) return;
     showView(opener.dataset.openView);
