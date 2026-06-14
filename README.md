@@ -28,6 +28,17 @@ python api_server.py --host 127.0.0.1 --port 4173
 python -m unittest discover -s tests -v
 ```
 
+## AI 單據辨識
+
+工單新增畫面可拍照或上傳從 LINE 下載的單據圖片，AI 會抽取工單編號、日期、客戶、品名、數量、尺寸、上光方式與備註。辨識結果只會填入表單，仍需由使用者確認後儲存。
+
+在伺服器或 Vercel 設定以下環境變數：
+
+- `OPENAI_API_KEY`：OpenAI API 金鑰，僅能設定在後端環境。
+- `OPENAI_VISION_MODEL`：選填，預設為 `gpt-4.1-mini`。
+
+上傳前，瀏覽器會將圖片縮小並轉成 JPEG；後端不會將原始圖片寫入資料庫。
+
 每次推送與 Pull Request 都會由 GitHub Actions 執行編譯檢查與自動測試。
 
 ## 文件

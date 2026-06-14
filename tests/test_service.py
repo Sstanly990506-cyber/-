@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, changes_payload, get_state_payload, health_payload, update_state_payload, user_action_payload
+from api.service import ApiError, analyze_document_payload, changes_payload, get_state_payload, health_payload, update_state_payload, user_action_payload
 
 
 class ServiceTests(unittest.TestCase):
@@ -48,6 +48,24 @@ class ServiceTests(unittest.TestCase):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.changes_since', return_value=source):
             result = changes_payload('token')
         self.assertEqual([row['entity'] for row in result['changes']], ['orders'])
+
+    def test_document_analysis_requires_login(self):
+        with patch('api.service.verify_session_token', return_value=None):
+            with self.assertRaises(ApiError) as caught:
+                analyze_document_payload('', {'image': 'data:image/jpeg;base64,abc'})
+        self.assertEqual(caught.exception.status, 401)
+
+    def test_document_analysis_returns_extraction(self):
+        extraction = {'orderNumber': 'A-1', 'items': []}
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.analyze_document_image', return_value=extraction):
+            result = analyze_document_payload('token', {'image': 'data:image/jpeg;base64,abc'})
+        self.assertEqual(result, {'ok': True, 'document': extraction})
+
+    def test_document_analysis_rejects_viewer(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'viewer'}):
+            with self.assertRaises(ApiError) as caught:
+                analyze_document_payload('token', {'image': 'data:image/jpeg;base64,abc'})
+        self.assertEqual(caught.exception.status, 403)
 
     def test_admin_can_create_account(self):
         created = {'username': 'new-user', 'role': 'ops'}
