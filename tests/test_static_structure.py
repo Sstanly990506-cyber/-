@@ -33,7 +33,7 @@ class StaticStructureTests(unittest.TestCase):
     def test_scalable_data_routes_exist_in_both_servers(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
-        for route in ('/api/bootstrap', '/api/data/', '/api/changes', '/api/reports/summary'):
+        for route in ('/api/bootstrap', '/api/data/', '/api/changes', '/api/reports/summary', '/api/orders/recognize'):
             self.assertIn(route, flask_server)
             self.assertIn(route, builtin_server)
 
@@ -81,6 +81,13 @@ class StaticStructureTests(unittest.TestCase):
         settings_close = view.index('</form>', view.index('id="settingsForm"'))
         self.assertGreater(view.index('id="createAccountForm"'), settings_close)
         self.assertGreater(view.index('id="financePasswordForm"'), settings_close)
+
+    def test_ai_order_recognition_fills_existing_form(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        self.assertIn('id="aiOrderImage"', view)
+        self.assertIn("fetch('/api/orders/recognize'", orders)
+        self.assertIn('applyRecognizedOrder', orders)
 
 
 if __name__ == '__main__':

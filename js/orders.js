@@ -287,7 +287,79 @@ export function openOrderForEdit(state, orderId) {
   return true;
 }
 
+async function prepareOrderImage(file) {
+  if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('請選擇 JPEG、PNG 或 WebP 圖片。');
+  if (file.size > 12 * 1024 * 1024) throw new Error('原始圖片不可超過 12 MB。');
+  const source = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('無法讀取圖片。'));
+    reader.readAsDataURL(file);
+  });
+  const image = await new Promise((resolve, reject) => {
+    const value = new Image();
+    value.onload = () => resolve(value);
+    value.onerror = () => reject(new Error('圖片格式無法解析。'));
+    value.src = source;
+  });
+  const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.82);
+}
+
+function applyRecognizedOrder(state, order) {
+  const fields = {
+    orderNumber: order.orderNumber, orderDate: order.orderDate, upstreamInput: order.upstream,
+    downstreamInput: order.downstream, orderAddress: order.address, sheetCount: order.sheetCount,
+    sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, totalPrice: order.totalPrice,
+  };
+  Object.entries(fields).forEach(([id, value]) => {
+    if (value === '' || value === null || value === undefined || value === 0) return;
+    const input = $(id);
+    if (input) input.value = String(value);
+  });
+  if (order.glossType) {
+    if (!state.glossOptions.includes(order.glossType)) state.glossOptions.push(order.glossType);
+    renderGlossOptions(state);
+    $('glossType').value = order.glossType;
+  }
+  updateTaiInchPreview();
+  updateOrderSmartHint(state);
+}
+
+async function recognizeOrderFromImage(state) {
+  const file = $('aiOrderImage')?.files?.[0];
+  if (!file) return alert('請先拍照或選擇工單圖片。');
+  const button = $('recognizeOrderBtn');
+  const status = $('aiOrderStatus');
+  button.disabled = true;
+  status.textContent = '正在壓縮圖片並識別，請稍候…';
+  try {
+    const image = await prepareOrderImage(file);
+    const response = await fetch('/api/orders/recognize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+      body: JSON.stringify({ image, glossOptions: state.glossOptions }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    applyRecognizedOrder(state, data.order || {});
+    const confidence = Math.round(Number(data.order?.confidence || 0) * 100);
+    const notes = (data.order?.notes || []).filter(Boolean).join('；');
+    status.textContent = `識別完成，信心度 ${confidence}%${notes ? `。請確認：${notes}` : '。請確認欄位後再儲存。'}`;
+  } catch (err) {
+    status.textContent = `識別失敗：${err.message}`;
+    alert(`AI 識別工單失敗：${err.message}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 export function bindOrderEvents(state, saveState, renderAll) {
+  $('recognizeOrderBtn')?.addEventListener('click', () => recognizeOrderFromImage(state));
   $('addGlossBtn')?.addEventListener('click', () => {
     const input = $('newGlossType');
     const val = input.value.trim();

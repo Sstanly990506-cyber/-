@@ -2,7 +2,7 @@
 import errno
 import socket
 from api.http_server import create_server, is_blocked_static_path
-from api.service import ApiError, bootstrap_payload, changes_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, report_payload, update_state_payload, upsert_entity_payload, user_action_payload
+from api.service import ApiError, bootstrap_payload, changes_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, recognize_order_payload, report_payload, update_state_payload, upsert_entity_payload, user_action_payload
 from api.storage import BASE_DIR, DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
 try:
     from flask import Flask, abort, jsonify, request, send_from_directory
@@ -40,6 +40,8 @@ if app is not None:
     @app.post('/api/trips/optimize')
     @app.post('/trips/optimize')
     def post_optimize_trip():return service_response(optimize_trip_payload,bearer_token(),request.get_json(silent=True))
+    @app.post('/api/orders/recognize')
+    def post_recognize_order():return service_response(recognize_order_payload,bearer_token(),request.get_json(silent=True))
     @app.get('/api/data/<entity>')
     def list_entity(entity):return service_response(list_entity_payload,bearer_token(),entity,request.args.get('page',1),request.args.get('pageSize',100),request.args.get('q',''))
     @app.put('/api/data/<entity>/<record_id>')

@@ -89,6 +89,15 @@
 
           <article id="ordersFormScreen" class="card hidden">
             <h3>新增 / 編輯工單</h3>
+            <section class="ai-order-recognizer">
+              <div>
+                <strong>AI 識別工單</strong>
+                <p class="sub">拍照或上傳工單，AI 只會填入下方表單，確認後再儲存。</p>
+              </div>
+              <input id="aiOrderImage" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" />
+              <button id="recognizeOrderBtn" class="btn" type="button">開始識別</button>
+              <span id="aiOrderStatus" class="sync-detail"></span>
+            </section>
             <form id="orderForm" class="form-grid order-grid">
               <input id="orderId" type="hidden" />
               <label>工單編號<input id="orderNumber" /></label>
