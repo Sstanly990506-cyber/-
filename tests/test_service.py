@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, changes_payload, get_state_payload, health_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, update_state_payload, user_action_payload
+from api.service import ApiError, _fill_recognized_customer_address, changes_payload, get_state_payload, health_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -89,6 +89,21 @@ class ServiceTests(unittest.TestCase):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', return_value={'items': []}), patch('api.service.recognize_order_image', return_value=recognized):
             result = recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ=='})
         self.assertEqual(result, {'ok': True, 'order': recognized})
+
+    def test_ai_recognition_uses_downstream_address_from_customer_system(self):
+        recognized = {'downstream': '威峰', 'address': ''}
+        customers = {'items': [{'name': '威峰裁切有限公司', 'address': '新北市測試路1號'}]}
+        with patch('api.service.list_records', return_value=customers):
+            result = _fill_recognized_customer_address(recognized)
+        self.assertEqual(result['address'], '新北市測試路1號')
+        self.assertEqual(result['addressSource'], 'customer-system')
+
+    def test_ai_recognition_preserves_visible_image_address(self):
+        recognized = {'downstream': '威峰', 'address': '圖片上的地址'}
+        with patch('api.service.list_records') as search:
+            result = _fill_recognized_customer_address(recognized)
+        self.assertEqual(result['address'], '圖片上的地址')
+        search.assert_not_called()
 
     def test_ops_can_check_ai_recognition_configuration(self):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.get_order_recognition_status', return_value={'configured': False, 'model': 'gpt-5.4-mini'}):

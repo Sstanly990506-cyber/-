@@ -49,6 +49,19 @@ def _all_records(entity):
 def _number(value):
     try:return float(value or 0)
     except (TypeError,ValueError):return 0.0
+def _fill_recognized_customer_address(recognized):
+    if str(recognized.get('address') or '').strip():return recognized
+    downstream=str(recognized.get('downstream') or '').strip()
+    if not downstream:return recognized
+    customers=list_records('customers',1,20,downstream).get('items') or []
+    key=downstream.lower()
+    customer=next((row for row in customers if str(row.get('name') or '').strip().lower()==key),None)
+    if not customer:customer=next((row for row in customers if key in str(row.get('name') or '').lower()),None)
+    if customer and str(customer.get('address') or '').strip():
+        recognized['downstream']=customer.get('name') or downstream
+        recognized['address']=str(customer['address']).strip()
+        recognized['addressSource']='customer-system'
+    return recognized
 def report_payload(token):
     account=require_account(token)
     if account.get('role') not in {'admin','finance','ops'}:raise ApiError('permission denied',403)
@@ -98,7 +111,7 @@ def recognize_order_payload(token,payload):
     if account.get('role') not in {'admin','ops'}:raise ApiError('permission denied',403)
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     corrections=list_records('aiCorrections',1,20).get('items') or []
-    try:recognized=recognize_order_image(payload.get('image'),payload.get('glossOptions'),corrections)
+    try:recognized=_fill_recognized_customer_address(recognize_order_image(payload.get('image'),payload.get('glossOptions'),corrections))
     except ValueError as err:raise ApiError(str(err),400) from err
     except OrderRecognitionError as err:raise ApiError(str(err),503) from err
     return {'ok':True,'order':recognized}
