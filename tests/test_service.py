@@ -70,6 +70,12 @@ class ServiceTests(unittest.TestCase):
                 user_action_payload('token', {'action': 'change_finance_password', 'password': 'password123'})
         self.assertEqual(caught.exception.status, 403)
 
+    def test_admin_can_change_finance_password(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.change_finance_module_password') as change_password:
+            result = user_action_payload('token', {'action': 'change_finance_password', 'password': 'password123'})
+        self.assertEqual(result, {'ok': True})
+        change_password.assert_called_once_with('password123')
+
 
 if __name__ == '__main__':
     unittest.main()
