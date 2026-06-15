@@ -99,6 +99,8 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('applyRecognizedOrder', orders)
         self.assertIn('reportAiCorrection', orders)
         self.assertIn('id="reportAiCorrectionBtn"', view)
+        self.assertIn('syncAddressFromDownstream(state, true)', orders)
+        self.assertIn('地址已從客戶系統帶入', orders)
 
     def test_order_quantity_supports_text_and_calculation_value(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')

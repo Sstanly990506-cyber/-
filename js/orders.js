@@ -25,12 +25,13 @@ function findCustomerByName(state, keyword) {
     || state.customers.find((c) => (c.name || '').toLowerCase().includes(key));
 }
 
-function syncAddressFromDownstream(state) {
+function syncAddressFromDownstream(state, onlyWhenEmpty = false) {
   const downstream = $('downstreamInput')?.value || '';
   const customer = findCustomerByName(state, downstream);
-  if (!customer) return;
+  if (!customer?.address || (onlyWhenEmpty && $('orderAddress')?.value.trim())) return false;
   $('downstreamInput').value = customer.name || downstream;
-  $('orderAddress').value = customer.address || '';
+  $('orderAddress').value = customer.address;
+  return true;
 }
 
 
@@ -342,15 +343,17 @@ function applyRecognizedOrder(state, order) {
     renderGlossOptions(state);
     $('glossType').value = order.glossType;
   }
+  const addressFilledFromCustomer = !String(order.address || '').trim() && syncAddressFromDownstream(state, true);
   updateTaiInchPreview();
   updateOrderSmartHint(state);
-  lastRecognizedOrder = { ...order };
+  lastRecognizedOrder = { ...order, address: $('orderAddress')?.value.trim() || '' };
   $('reportAiCorrectionBtn')?.classList.remove('hidden');
   document.querySelectorAll('.ai-review-required').forEach((input) => input.classList.remove('ai-review-required'));
   if (Number(order.confidence || 0) < 0.8) {
     Object.keys(fields).forEach((id) => $(id)?.classList.add('ai-review-required'));
     $('glossType')?.classList.add('ai-review-required');
   }
+  return addressFilledFromCustomer;
 }
 
 function buildAiCorrections(state) {
@@ -403,10 +406,11 @@ async function recognizeOrderFromImage(state) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
-    applyRecognizedOrder(state, data.order || {});
+    const addressFilledLocally = applyRecognizedOrder(state, data.order || {});
+    const addressFilledFromCustomer = data.order?.addressSource === 'customer-system' || addressFilledLocally;
     const confidence = Math.round(Number(data.order?.confidence || 0) * 100);
     const notes = (data.order?.notes || []).filter(Boolean).join('；');
-    status.textContent = `識別完成，信心度 ${confidence}%${notes ? `。請確認：${notes}` : '。請確認欄位後再儲存。'}`;
+    status.textContent = `識別完成，信心度 ${confidence}%${addressFilledFromCustomer ? '。地址已從客戶系統帶入' : ''}${notes ? `。請確認：${notes}` : '。請確認欄位後再儲存。'}`;
   } catch (err) {
     status.textContent = `識別失敗：${err.message}`;
     alert(`AI 識別工單失敗：${err.message}`);
