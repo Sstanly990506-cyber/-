@@ -41,7 +41,7 @@ class StaticStructureTests(unittest.TestCase):
     def test_scalable_data_routes_exist_in_both_servers(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
-        for route in ('/api/bootstrap', '/api/data/', '/api/changes', '/api/reports/summary', '/api/orders/recognize'):
+        for route in ('/api/bootstrap', '/api/data/', '/api/changes', '/api/reports/summary', '/api/orders/recognize', '/api/orders/recognize/status'):
             self.assertIn(route, flask_server)
             self.assertIn(route, builtin_server)
 
@@ -95,7 +95,14 @@ class StaticStructureTests(unittest.TestCase):
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
         self.assertIn('id="aiOrderImage"', view)
         self.assertIn("fetch('/api/orders/recognize'", orders)
+        self.assertIn("fetch('/api/orders/recognize/status'", orders)
         self.assertIn('applyRecognizedOrder', orders)
+
+    def test_ai_recognition_has_vercel_runtime_limits(self):
+        vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        self.assertIn('"maxDuration": 60', vercel)
+        self.assertIn('encoded.length <= 3_200_000', orders)
 
 
 if __name__ == '__main__':
