@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs,unquote,urlparse
 from api._common import get_bearer_token,json_response,read_json_body
-from api.service import ApiError,bootstrap_payload,changes_payload,delete_entity_payload,get_state_payload,health_payload,list_entity_payload,optimize_trip_payload,recognize_order_payload,report_payload,update_state_payload,upsert_entity_payload,user_action_payload
+from api.service import ApiError,bootstrap_payload,changes_payload,delete_entity_payload,get_state_payload,health_payload,list_entity_payload,optimize_trip_payload,recognize_order_payload,recognize_order_status_payload,report_payload,update_state_payload,upsert_entity_payload,user_action_payload
 from api.storage import BASE_DIR
 SENSITIVE_SUFFIXES={'.db','.sqlite','.sqlite3','.py','.bat','.ps1','.sh'};BLOCKED_PATH_PARTS={'data'};PUBLIC_ROOT=Path(BASE_DIR).resolve()
 def is_sensitive_path(path):return any(path.split('?',1)[0].lower().endswith(s) for s in SENSITIVE_SUFFIXES)
@@ -30,6 +30,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         elif path in {'/api/state','/state'}:self.send_service_response(get_state_payload,token)
         elif path=='/api/changes':self.send_service_response(changes_payload,token,q.get('since',['0'])[0],q.get('limit',['1000'])[0])
         elif path=='/api/reports/summary':self.send_service_response(report_payload,token)
+        elif path=='/api/orders/recognize/status':self.send_service_response(recognize_order_status_payload,token)
         elif path.startswith('/api/data/'):
             entity=path.split('/')[3];self.send_service_response(list_entity_payload,token,entity,q.get('page',['1'])[0],q.get('pageSize',['100'])[0],q.get('q',[''])[0])
         elif path=='/':self.serve_file('index.html')

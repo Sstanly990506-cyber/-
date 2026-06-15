@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, changes_payload, get_state_payload, health_payload, recognize_order_payload, update_state_payload, user_action_payload
+from api.service import ApiError, changes_payload, get_state_payload, health_payload, recognize_order_payload, recognize_order_status_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -89,6 +89,11 @@ class ServiceTests(unittest.TestCase):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.recognize_order_image', return_value=recognized):
             result = recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ=='})
         self.assertEqual(result, {'ok': True, 'order': recognized})
+
+    def test_ops_can_check_ai_recognition_configuration(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.get_order_recognition_status', return_value={'configured': False, 'model': 'gpt-5.4-mini'}):
+            result = recognize_order_status_payload('token')
+        self.assertEqual(result, {'ok': True, 'configured': False, 'model': 'gpt-5.4-mini'})
 
     def test_finance_cannot_recognize_order(self):
         with patch('api.service.verify_session_token', return_value={'role': 'finance'}):

@@ -1,6 +1,6 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
 from api.records import changes_since, delete_record, list_records, upsert_record
-from api.ai_orders import OrderRecognitionError, recognize_order_image
+from api.ai_orders import OrderRecognitionError, get_order_recognition_status, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, register_user, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
@@ -99,3 +99,7 @@ def recognize_order_payload(token,payload):
     except ValueError as err:raise ApiError(str(err),400) from err
     except OrderRecognitionError as err:raise ApiError(str(err),503) from err
     return {'ok':True,'order':recognized}
+def recognize_order_status_payload(token):
+    account=require_account(token)
+    if account.get('role') not in {'admin','ops'}:raise ApiError('permission denied',403)
+    return {'ok':True,**get_order_recognition_status()}

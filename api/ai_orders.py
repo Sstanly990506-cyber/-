@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 
 OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
-MAX_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_IMAGE_BYTES = 2_500_000
 
 ORDER_SCHEMA = {
     'type': 'object',
@@ -37,6 +37,13 @@ class OrderRecognitionError(RuntimeError):
     pass
 
 
+def get_order_recognition_status():
+    return {
+        'configured': bool(os.environ.get('OPENAI_API_KEY', '').strip()),
+        'model': os.environ.get('OPENAI_ORDER_MODEL', '').strip() or 'gpt-5.4-mini',
+    }
+
+
 def _validate_image_data_url(data_url):
     value = str(data_url or '')
     if not value.startswith('data:') or ';base64,' not in value:
@@ -50,7 +57,7 @@ def _validate_image_data_url(data_url):
     except ValueError as err:
         raise ValueError('invalid image encoding') from err
     if not raw or len(raw) > MAX_IMAGE_BYTES:
-        raise ValueError('image must be smaller than 4 MB')
+        raise ValueError('圖片壓縮後仍過大，請改用較小或較清晰的圖片。')
     return value
 
 
@@ -67,7 +74,7 @@ def _extract_output_text(response):
 def recognize_order_image(data_url, gloss_options=None):
     api_key = os.environ.get('OPENAI_API_KEY', '').strip()
     if not api_key:
-        raise OrderRecognitionError('OPENAI_API_KEY is not configured')
+        raise OrderRecognitionError('AI 尚未啟用：請先在 Vercel 設定 OPENAI_API_KEY，然後重新部署。')
     image = _validate_image_data_url(data_url)
     model = os.environ.get('OPENAI_ORDER_MODEL', '').strip() or 'gpt-5.4-mini'
     gloss_text = ', '.join(str(item) for item in (gloss_options or [])[:30])
@@ -111,9 +118,16 @@ def recognize_order_image(data_url, gloss_options=None):
             detail = json.loads(err.read().decode('utf-8')).get('error', {}).get('message')
         except Exception:
             detail = None
-        raise OrderRecognitionError(detail or f'AI service returned HTTP {err.code}') from err
+        messages = {
+            400: 'OpenAI 無法處理這張圖片或目前模型設定。',
+            401: 'OpenAI API 金鑰無效，請重新設定 OPENAI_API_KEY。',
+            403: 'OpenAI API 金鑰沒有使用此模型的權限。',
+            404: '設定的 OpenAI 模型不存在或目前無法使用。',
+            429: 'OpenAI API 額度不足或請求過多，請檢查帳戶額度後再試。',
+        }
+        raise OrderRecognitionError(messages.get(err.code) or detail or f'OpenAI 服務錯誤（HTTP {err.code}）') from err
     except (URLError, TimeoutError, json.JSONDecodeError) as err:
-        raise OrderRecognitionError('AI service is temporarily unavailable') from err
+        raise OrderRecognitionError('AI 服務連線逾時或暫時無法使用，請稍後再試。') from err
     try:
         recognized = json.loads(_extract_output_text(result))
     except json.JSONDecodeError as err:
