@@ -16,6 +16,7 @@ ORDER_SCHEMA = {
         'upstream': {'type': 'string'},
         'downstream': {'type': 'string'},
         'address': {'type': 'string'},
+        'sheetCountText': {'type': 'string'},
         'sheetCount': {'type': 'number'},
         'sizeLength': {'type': 'number'},
         'sizeWidth': {'type': 'number'},
@@ -26,7 +27,7 @@ ORDER_SCHEMA = {
         'notes': {'type': 'array', 'items': {'type': 'string'}},
     },
     'required': [
-        'orderNumber', 'orderDate', 'upstream', 'downstream', 'address', 'sheetCount',
+        'orderNumber', 'orderDate', 'upstream', 'downstream', 'address', 'sheetCountText', 'sheetCount',
         'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType', 'totalPrice', 'confidence', 'notes',
     ],
     'additionalProperties': False,
@@ -97,6 +98,8 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
     prompt = (
         'Extract a single factory work order from this image. Do not invent unreadable values. '
         'Use an empty string or zero when uncertain. orderDate must be YYYY-MM-DD when visible. '
+        'Preserve the visible quantity wording and math symbols in sheetCountText. '
+        'Put a numeric quantity usable for calculations in sheetCount only when it can be determined. '
         'Determine whether customer names are upstream or downstream only when the document makes it clear. '
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
         f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '
