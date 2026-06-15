@@ -78,6 +78,9 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("action: 'create_account'", settings)
         self.assertIn("action: 'change_finance_password'", settings)
         self.assertIn("hash_password(value)", storage)
+        settings_close = view.index('</form>', view.index('id="settingsForm"'))
+        self.assertGreater(view.index('id="createAccountForm"'), settings_close)
+        self.assertGreater(view.index('id="financePasswordForm"'), settings_close)
 
 
 if __name__ == '__main__':
