@@ -50,7 +50,6 @@ def _number(value):
     try:return float(value or 0)
     except (TypeError,ValueError):return 0.0
 def _fill_recognized_customer_address(recognized):
-    if str(recognized.get('address') or '').strip():return recognized
     downstream=str(recognized.get('downstream') or '').strip()
     if not downstream:return recognized
     customers=list_records('customers',1,20,downstream).get('items') or []
@@ -61,6 +60,8 @@ def _fill_recognized_customer_address(recognized):
         recognized['downstream']=customer.get('name') or downstream
         recognized['address']=str(customer['address']).strip()
         recognized['addressSource']='customer-system'
+    elif str(recognized.get('address') or '').strip():
+        recognized['addressSource']='image-downstream-destination'
     return recognized
 def report_payload(token):
     account=require_account(token)
