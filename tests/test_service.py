@@ -76,6 +76,14 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result, {'ok': True})
         change_password.assert_called_once_with('password123')
 
+    def test_vercel_users_handler_uses_shared_user_service(self):
+        from api.users import handler
+
+        with patch('api.users.get_bearer_token', return_value='token'), patch('api.users.read_json_body', return_value={'action': 'change_finance_password', 'password': 'password123'}), patch('api.users.user_action_payload', return_value={'ok': True}) as operation, patch('api.users.json_response') as response:
+            handler.do_POST(object())
+        operation.assert_called_once_with('token', {'action': 'change_finance_password', 'password': 'password123'})
+        response.assert_called_once_with(unittest.mock.ANY, 200, {'ok': True})
+
     def test_ops_can_recognize_order_without_saving_it(self):
         recognized = {'orderNumber': 'WO-1'}
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.recognize_order_image', return_value=recognized):

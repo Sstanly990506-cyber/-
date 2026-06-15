@@ -8,8 +8,16 @@ class StaticStructureTests(unittest.TestCase):
     def test_health_uses_shared_service(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        vercel_health = (ROOT / 'api' / 'health.py').read_text(encoding='utf-8')
         self.assertIn('from api.service import', flask_server)
         self.assertIn('from api.service import', builtin_server)
+        self.assertIn('from api.service import health_payload', vercel_health)
+
+    def test_vercel_users_route_uses_shared_service(self):
+        users = (ROOT / 'api' / 'users.py').read_text(encoding='utf-8')
+        self.assertIn('from api.service import ApiError, user_action_payload', users)
+        self.assertIn('user_action_payload(get_bearer_token(self), read_json_body(self))', users)
+        self.assertNotIn('unsupported action', users)
 
     def test_environment_details_are_not_exposed_by_health_route(self):
         service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')

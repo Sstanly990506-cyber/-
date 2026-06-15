@@ -517,6 +517,8 @@ def change_finance_module_password(password: str):
     if len(value) < 8:
         raise ValueError('finance password must be at least 8 characters')
     write_secret_hash('finance_module_password', hash_password(value))
+    if not verify_finance_module_password(value):
+        raise RuntimeError('finance password was not saved')
 
 def get_bootstrap_password(account: dict) -> str:
     env_key = str(account.get('password_env') or '').strip()
