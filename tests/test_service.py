@@ -98,12 +98,20 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result['address'], '新北市測試路1號')
         self.assertEqual(result['addressSource'], 'customer-system')
 
-    def test_ai_recognition_preserves_visible_image_address(self):
-        recognized = {'downstream': '威峰', 'address': '圖片上的地址'}
-        with patch('api.service.list_records') as search:
+    def test_customer_system_downstream_address_overrides_header_address(self):
+        recognized = {'downstream': '成峰', 'address': '廣告設計有限公司表頭地址'}
+        customers = {'items': [{'name': '成峰', 'address': '成峰送貨地址'}]}
+        with patch('api.service.list_records', return_value=customers):
             result = _fill_recognized_customer_address(recognized)
-        self.assertEqual(result['address'], '圖片上的地址')
-        search.assert_not_called()
+        self.assertEqual(result['address'], '成峰送貨地址')
+        self.assertEqual(result['addressSource'], 'customer-system')
+
+    def test_visible_downstream_destination_is_fallback_when_customer_has_no_address(self):
+        recognized = {'downstream': '成峰', 'address': '圖片明確標示的成峰送貨地址'}
+        with patch('api.service.list_records', return_value={'items': []}):
+            result = _fill_recognized_customer_address(recognized)
+        self.assertEqual(result['address'], '圖片明確標示的成峰送貨地址')
+        self.assertEqual(result['addressSource'], 'image-downstream-destination')
 
     def test_ops_can_check_ai_recognition_configuration(self):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.get_order_recognition_status', return_value={'configured': False, 'model': 'gpt-5.4-mini'}):

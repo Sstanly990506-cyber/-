@@ -343,7 +343,7 @@ function applyRecognizedOrder(state, order) {
     renderGlossOptions(state);
     $('glossType').value = order.glossType;
   }
-  const addressFilledFromCustomer = !String(order.address || '').trim() && syncAddressFromDownstream(state, true);
+  const addressFilledFromCustomer = syncAddressFromDownstream(state);
   updateTaiInchPreview();
   updateOrderSmartHint(state);
   lastRecognizedOrder = { ...order, address: $('orderAddress')?.value.trim() || '' };
@@ -410,7 +410,7 @@ async function recognizeOrderFromImage(state) {
     const addressFilledFromCustomer = data.order?.addressSource === 'customer-system' || addressFilledLocally;
     const confidence = Math.round(Number(data.order?.confidence || 0) * 100);
     const notes = (data.order?.notes || []).filter(Boolean).join('；');
-    status.textContent = `識別完成，信心度 ${confidence}%${addressFilledFromCustomer ? '。地址已從客戶系統帶入' : ''}${notes ? `。請確認：${notes}` : '。請確認欄位後再儲存。'}`;
+    status.textContent = `識別完成，信心度 ${confidence}%${addressFilledFromCustomer ? '。送貨地址已使用下游客戶系統地址' : ''}${notes ? `。請確認：${notes}` : '。請確認欄位後再儲存。'}`;
   } catch (err) {
     status.textContent = `識別失敗：${err.message}`;
     alert(`AI 識別工單失敗：${err.message}`);
