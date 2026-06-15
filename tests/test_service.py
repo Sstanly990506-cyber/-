@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, changes_payload, get_state_payload, health_payload, update_state_payload, user_action_payload
+from api.service import ApiError, changes_payload, get_state_payload, health_payload, recognize_order_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -75,6 +75,18 @@ class ServiceTests(unittest.TestCase):
             result = user_action_payload('token', {'action': 'change_finance_password', 'password': 'password123'})
         self.assertEqual(result, {'ok': True})
         change_password.assert_called_once_with('password123')
+
+    def test_ops_can_recognize_order_without_saving_it(self):
+        recognized = {'orderNumber': 'WO-1'}
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.recognize_order_image', return_value=recognized):
+            result = recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ=='})
+        self.assertEqual(result, {'ok': True, 'order': recognized})
+
+    def test_finance_cannot_recognize_order(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'finance'}):
+            with self.assertRaises(ApiError) as caught:
+                recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ=='})
+        self.assertEqual(caught.exception.status, 403)
 
 
 if __name__ == '__main__':

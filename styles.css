@@ -283,6 +283,19 @@ input[type="checkbox"] { width: auto; }
   grid-template-columns: 240px 1fr;
   gap: 16px;
 }
+.ai-order-recognizer {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 0.8fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 14px;
+  background: rgba(245, 158, 11, 0.06);
+}
+.ai-order-recognizer p { margin: 4px 0 0; }
+.ai-order-recognizer .sync-detail { grid-column: 1 / -1; }
 .side-menu {
   display: grid;
   align-content: start;
@@ -555,6 +568,7 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .dashboard-module-grid .nav-card-icon { font-size: 24px; }
   .dashboard-module-grid .nav-card strong { font-size: 15px; }
   .order-grid,
+  .ai-order-recognizer,
   .settings-form-grid { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
   .actions { flex-direction: column; }
