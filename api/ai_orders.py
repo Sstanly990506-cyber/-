@@ -1,12 +1,29 @@
 import base64
+import ast
 import json
 import os
+import operator
+import re
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
 MAX_IMAGE_BYTES = 2_500_000
+BUSINESS_RULES = (
+    'This system is used by a coating/varnishing factory. '
+    'The upstream customer is normally the printing company shown on the 印刷 row because it sends printed sheets to us. '
+    'The downstream customer is normally the company shown on a process after 上光, especially 裁切, 軋合, 軋型, or similar finishing rows. '
+    'Do not treat the company on the 上光 row as upstream or downstream because that row commonly identifies our own factory. '
+    'Use the downstream company address when it is explicitly visible; otherwise leave address empty rather than using an unrelated header address. '
+    'Read quantity primarily from the 印刷 row, preserving expressions such as 1362車+238張 in sheetCountText. '
+    'For that example sheetCount must be 1600. Do not prefer 訂購數量 or 紙張 row quantity when a more specific 印刷 row quantity exists. '
+)
+ARITHMETIC_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+}
 
 ORDER_SCHEMA = {
     'type': 'object',
@@ -88,6 +105,31 @@ def _correction_examples(corrections):
     return json.dumps(examples, ensure_ascii=False, separators=(',', ':'))
 
 
+def _evaluate_quantity_expression(node):
+    if isinstance(node, ast.Expression):
+        return _evaluate_quantity_expression(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, ast.BinOp) and type(node.op) in ARITHMETIC_OPERATORS:
+        return ARITHMETIC_OPERATORS[type(node.op)](
+            _evaluate_quantity_expression(node.left),
+            _evaluate_quantity_expression(node.right),
+        )
+    raise ValueError('unsupported quantity expression')
+
+
+def calculate_sheet_count(quantity_text):
+    value = str(quantity_text or '').replace('＋', '+').replace('－', '-').replace('×', '*').replace('x', '*').replace('X', '*')
+    expression = re.sub(r'[^0-9.+\-*()]', '', value)
+    if not expression or not re.search(r'[+\-*]', expression):
+        return 0
+    try:
+        result = _evaluate_quantity_expression(ast.parse(expression, mode='eval'))
+    except (SyntaxError, ValueError, ZeroDivisionError, TypeError):
+        return 0
+    return result if result > 0 and result <= 10_000_000 else 0
+
+
 def recognize_order_image(data_url, gloss_options=None, corrections=None):
     api_key = os.environ.get('OPENAI_API_KEY', '').strip()
     if not api_key:
@@ -100,7 +142,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
         'Use an empty string or zero when uncertain. orderDate must be YYYY-MM-DD when visible. '
         'Preserve the visible quantity wording and math symbols in sheetCountText. '
         'Put a numeric quantity usable for calculations in sheetCount only when it can be determined. '
-        'Determine whether customer names are upstream or downstream only when the document makes it clear. '
+        f'{BUSINESS_RULES}'
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
         f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '
         'Use the following recent human corrections as hints for recurring recognition mistakes, '
@@ -154,5 +196,8 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
         recognized = json.loads(_extract_output_text(result))
     except json.JSONDecodeError as err:
         raise OrderRecognitionError('AI returned invalid order data') from err
+    calculated_count = calculate_sheet_count(recognized.get('sheetCountText'))
+    if calculated_count:
+        recognized['sheetCount'] = int(calculated_count) if calculated_count.is_integer() else calculated_count
     recognized['model'] = model
     return recognized

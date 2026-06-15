@@ -42,6 +42,18 @@ class AiOrderTests(unittest.TestCase):
         self.assertIn('"address"', value)
         self.assertNotIn('"sheetCount"', value)
 
+    def test_business_rules_match_coating_factory_workflow(self):
+        self.assertIn('印刷 row', ai_orders.BUSINESS_RULES)
+        self.assertIn('upstream customer', ai_orders.BUSINESS_RULES)
+        self.assertIn('裁切', ai_orders.BUSINESS_RULES)
+        self.assertIn('downstream customer', ai_orders.BUSINESS_RULES)
+        self.assertIn('1362車+238張', ai_orders.BUSINESS_RULES)
+
+    def test_calculates_printing_row_quantity_expression(self):
+        self.assertEqual(ai_orders.calculate_sheet_count('1362車+238張'), 1600)
+        self.assertEqual(ai_orders.calculate_sheet_count('3箱×20張＋散裝5張'), 65)
+        self.assertEqual(ai_orders.calculate_sheet_count('約1600張'), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
