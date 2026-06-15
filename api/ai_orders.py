@@ -1,9 +1,6 @@
 import base64
-import ast
 import json
 import os
-import operator
-import re
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -17,13 +14,10 @@ BUSINESS_RULES = (
     'Do not treat the company on the 上光 row as upstream or downstream because that row commonly identifies our own factory. '
     'Use the downstream company address when it is explicitly visible; otherwise leave address empty rather than using an unrelated header address. '
     'Read quantity primarily from the 印刷 row, preserving expressions such as 1362車+238張 in sheetCountText. '
-    'For that example sheetCount must be 1600. Do not prefer 訂購數量 or 紙張 row quantity when a more specific 印刷 row quantity exists. '
+    'Do not calculate or simplify quantity expressions. For example, preserve 1362車+238張 exactly and set sheetCount to zero '
+    'unless the document separately shows one explicit numeric calculation quantity. '
+    'Do not prefer 訂購數量 or 紙張 row quantity when a more specific 印刷 row quantity exists. '
 )
-ARITHMETIC_OPERATORS = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-}
 
 ORDER_SCHEMA = {
     'type': 'object',
@@ -105,31 +99,6 @@ def _correction_examples(corrections):
     return json.dumps(examples, ensure_ascii=False, separators=(',', ':'))
 
 
-def _evaluate_quantity_expression(node):
-    if isinstance(node, ast.Expression):
-        return _evaluate_quantity_expression(node.body)
-    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-        return float(node.value)
-    if isinstance(node, ast.BinOp) and type(node.op) in ARITHMETIC_OPERATORS:
-        return ARITHMETIC_OPERATORS[type(node.op)](
-            _evaluate_quantity_expression(node.left),
-            _evaluate_quantity_expression(node.right),
-        )
-    raise ValueError('unsupported quantity expression')
-
-
-def calculate_sheet_count(quantity_text):
-    value = str(quantity_text or '').replace('＋', '+').replace('－', '-').replace('×', '*').replace('x', '*').replace('X', '*')
-    expression = re.sub(r'[^0-9.+\-*()]', '', value)
-    if not expression or not re.search(r'[+\-*]', expression):
-        return 0
-    try:
-        result = _evaluate_quantity_expression(ast.parse(expression, mode='eval'))
-    except (SyntaxError, ValueError, ZeroDivisionError, TypeError):
-        return 0
-    return result if result > 0 and result <= 10_000_000 else 0
-
-
 def recognize_order_image(data_url, gloss_options=None, corrections=None):
     api_key = os.environ.get('OPENAI_API_KEY', '').strip()
     if not api_key:
@@ -141,7 +110,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
         'Extract a single factory work order from this image. Do not invent unreadable values. '
         'Use an empty string or zero when uncertain. orderDate must be YYYY-MM-DD when visible. '
         'Preserve the visible quantity wording and math symbols in sheetCountText. '
-        'Put a numeric quantity usable for calculations in sheetCount only when it can be determined. '
+        'Put a numeric quantity in sheetCount only when the document separately shows one explicit calculation quantity. '
         f'{BUSINESS_RULES}'
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
         f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '
@@ -196,8 +165,5 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
         recognized = json.loads(_extract_output_text(result))
     except json.JSONDecodeError as err:
         raise OrderRecognitionError('AI returned invalid order data') from err
-    calculated_count = calculate_sheet_count(recognized.get('sheetCountText'))
-    if calculated_count:
-        recognized['sheetCount'] = int(calculated_count) if calculated_count.is_integer() else calculated_count
     recognized['model'] = model
     return recognized

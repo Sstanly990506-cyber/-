@@ -49,10 +49,10 @@ class AiOrderTests(unittest.TestCase):
         self.assertIn('downstream customer', ai_orders.BUSINESS_RULES)
         self.assertIn('1362車+238張', ai_orders.BUSINESS_RULES)
 
-    def test_calculates_printing_row_quantity_expression(self):
-        self.assertEqual(ai_orders.calculate_sheet_count('1362車+238張'), 1600)
-        self.assertEqual(ai_orders.calculate_sheet_count('3箱×20張＋散裝5張'), 65)
-        self.assertEqual(ai_orders.calculate_sheet_count('約1600張'), 0)
+    def test_business_rules_do_not_calculate_quantity_expression(self):
+        self.assertIn('Do not calculate or simplify quantity expressions', ai_orders.BUSINESS_RULES)
+        self.assertIn('preserve 1362車+238張 exactly', ai_orders.BUSINESS_RULES)
+        self.assertFalse(hasattr(ai_orders, 'calculate_sheet_count'))
 
 
 if __name__ == '__main__':
