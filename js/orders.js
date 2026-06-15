@@ -1,6 +1,8 @@
 import { $, COMPANY_INFO, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
 
+let lastRecognizedOrder = null;
+
 function toTaiInch(value, unit) {
   const num = Number(value || 0);
   if (!num) return 0;
@@ -262,6 +264,9 @@ export function clearOrderForm() {
   $('orderId').value = '';
   $('orderDate').value = getTodayText();
   $('sizeTaiInch').value = '';
+  lastRecognizedOrder = null;
+  $('reportAiCorrectionBtn')?.classList.add('hidden');
+  document.querySelectorAll('.ai-review-required').forEach((input) => input.classList.remove('ai-review-required'));
 }
 
 export function openOrderForEdit(state, orderId) {
@@ -336,6 +341,40 @@ function applyRecognizedOrder(state, order) {
   }
   updateTaiInchPreview();
   updateOrderSmartHint(state);
+  lastRecognizedOrder = { ...order };
+  $('reportAiCorrectionBtn')?.classList.remove('hidden');
+  document.querySelectorAll('.ai-review-required').forEach((input) => input.classList.remove('ai-review-required'));
+  if (Number(order.confidence || 0) < 0.8) {
+    Object.keys(fields).forEach((id) => $(id)?.classList.add('ai-review-required'));
+    $('glossType')?.classList.add('ai-review-required');
+  }
+}
+
+function buildAiCorrections(state) {
+  if (!lastRecognizedOrder) return {};
+  const current = buildOrderFromForm(state);
+  const changes = {};
+  Object.keys(current).filter((key) => key !== 'status').forEach((key) => {
+    const wrong = lastRecognizedOrder[key] ?? '';
+    const correct = current[key] ?? '';
+    if (String(wrong) !== String(correct)) changes[key] = { wrong, correct };
+  });
+  return changes;
+}
+
+async function reportAiCorrection(state) {
+  const changes = buildAiCorrections(state);
+  if (!Object.keys(changes).length) return alert('目前沒有發現你修改過的 AI 欄位。');
+  const response = await fetch('/api/orders/recognize/corrections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+    body: JSON.stringify({ changes, confidence: lastRecognizedOrder?.confidence }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.ok) return alert(`回報失敗：${data.error || `HTTP ${response.status}`}`);
+  lastRecognizedOrder = { ...buildOrderFromForm(state), confidence: lastRecognizedOrder?.confidence };
+  $('reportAiCorrectionBtn')?.classList.add('hidden');
+  alert(`已記錄 ${data.savedFields} 個修正欄位，之後 AI 會參考這些案例。`);
 }
 
 async function recognizeOrderFromImage(state) {
@@ -375,6 +414,7 @@ async function recognizeOrderFromImage(state) {
 
 export function bindOrderEvents(state, saveState, renderAll) {
   $('recognizeOrderBtn')?.addEventListener('click', () => recognizeOrderFromImage(state));
+  $('reportAiCorrectionBtn')?.addEventListener('click', () => reportAiCorrection(state));
   $('addGlossBtn')?.addEventListener('click', () => {
     const input = $('newGlossType');
     const val = input.value.trim();

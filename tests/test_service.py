@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, changes_payload, get_state_payload, health_payload, recognize_order_payload, recognize_order_status_payload, update_state_payload, user_action_payload
+from api.service import ApiError, changes_payload, get_state_payload, health_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -86,7 +86,7 @@ class ServiceTests(unittest.TestCase):
 
     def test_ops_can_recognize_order_without_saving_it(self):
         recognized = {'orderNumber': 'WO-1'}
-        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.recognize_order_image', return_value=recognized):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', return_value={'items': []}), patch('api.service.recognize_order_image', return_value=recognized):
             result = recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ=='})
         self.assertEqual(result, {'ok': True, 'order': recognized})
 
@@ -94,6 +94,19 @@ class ServiceTests(unittest.TestCase):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.get_order_recognition_status', return_value={'configured': False, 'model': 'gpt-5.4-mini'}):
             result = recognize_order_status_payload('token')
         self.assertEqual(result, {'ok': True, 'configured': False, 'model': 'gpt-5.4-mini'})
+
+    def test_ops_can_report_ai_correction(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops', 'username': 'ops'}), patch('api.service.upsert_record') as save:
+            result = report_order_correction_payload('token', {'changes': {'address': {'wrong': 'A', 'correct': 'B'}}})
+        self.assertEqual(result, {'ok': True, 'savedFields': 1})
+        self.assertEqual(save.call_args.args[0], 'aiCorrections')
+
+    def test_ai_correction_text_is_length_limited(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.upsert_record') as save:
+            report_order_correction_payload('token', {'changes': {'address': {'wrong': 'A' * 300, 'correct': 'B' * 300}}})
+        saved = save.call_args.args[2]['changes']['address']
+        self.assertEqual(len(saved['wrong']), 200)
+        self.assertEqual(len(saved['correct']), 200)
 
     def test_finance_cannot_recognize_order(self):
         with patch('api.service.verify_session_token', return_value={'role': 'finance'}):

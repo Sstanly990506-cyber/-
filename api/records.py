@@ -14,6 +14,7 @@ ENTITY_FIELDS = {
     'payables': 'payables',
     'inventory': 'inventoryItems',
     'events': 'systemEvents',
+    'aiCorrections': 'aiCorrections',
 }
 RECORDS_PATH = storage.DATA_DIR / 'records.json'
 RECORDS_LOCK = Lock()
