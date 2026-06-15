@@ -115,7 +115,8 @@
               </label>
               <label>地址<input id="orderAddress" placeholder="送貨/載貨地址" /></label>
 
-              <label>張數<input id="sheetCount" type="number" min="1" /></label>
+              <label>數量說明<input id="sheetCountText" type="text" maxlength="120" placeholder="例如：3箱×20張＋散裝5張" /></label>
+              <label>計算張數<input id="sheetCount" type="number" min="0" step="0.01" placeholder="供價格估算與報表使用" /></label>
               <label>長<input id="sizeLength" type="number" step="0.01" min="0" /></label>
               <label>寬<input id="sizeWidth" type="number" step="0.01" min="0" /></label>
               <label>單位

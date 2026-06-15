@@ -86,13 +86,15 @@ function updateOrderSmartHint(state) {
 
 
 function buildOrderFromForm(state) {
+  const sheetCount = Number($('sheetCount').value || 0);
   return {
     orderNumber: $('orderNumber').value.trim(),
     orderDate: $('orderDate').value,
     upstream: $('upstreamInput').value.trim(),
     downstream: $('downstreamInput').value.trim(),
     address: $('orderAddress').value.trim(),
-    sheetCount: Number($('sheetCount').value || 0),
+    sheetCount,
+    sheetCountText: $('sheetCountText').value.trim() || (sheetCount ? String(sheetCount) : ''),
     sizeLength: Number($('sizeLength').value || 0),
     sizeWidth: Number($('sizeWidth').value || 0),
     sizeUnit: $('sizeUnit').value || 'mm',
@@ -145,7 +147,7 @@ function renderOrderTable(order) {
       <tr><th>工單編號</th><td>${order.orderNumber || '-'}</td><th>日期</th><td>${order.orderDate || '-'}</td></tr>
       <tr><th>上游客戶</th><td>${order.upstream || '-'}</td><th>下游客戶</th><td>${order.downstream || '-'}</td></tr>
       <tr><th>地址</th><td colspan="3">${order.address || '-'}</td></tr>
-      <tr><th>張數</th><td>${order.sheetCount || 0}</td><th>狀態</th><td>${order.status || '-'}</td></tr>
+      <tr><th>數量</th><td>${order.sheetCountText || order.sheetCount || '-'}</td><th>計算張數</th><td>${order.sheetCount || '-'}</td></tr>
       <tr><th>尺寸（台吋）</th><td>${taiInchText}</td><th>上光種類</th><td>${order.glossType || '-'}</td></tr>
     </table>
     <div class="footer"><span>客戶簽收：______________</span><span>製單人：______________</span></div>`;
@@ -278,6 +280,7 @@ export function openOrderForEdit(state, orderId) {
   $('upstreamInput').value = order.upstream || '';
   $('downstreamInput').value = order.downstream || '';
   $('orderAddress').value = order.address || '';
+  $('sheetCountText').value = order.sheetCountText || (order.sheetCount ? String(order.sheetCount) : '');
   $('sheetCount').value = order.sheetCount || '';
   $('sizeLength').value = order.sizeLength || '';
   $('sizeWidth').value = order.sizeWidth || '';
@@ -326,7 +329,7 @@ async function prepareOrderImage(file) {
 function applyRecognizedOrder(state, order) {
   const fields = {
     orderNumber: order.orderNumber, orderDate: order.orderDate, upstreamInput: order.upstream,
-    downstreamInput: order.downstream, orderAddress: order.address, sheetCount: order.sheetCount,
+    downstreamInput: order.downstream, orderAddress: order.address, sheetCountText: order.sheetCountText, sheetCount: order.sheetCount,
     sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, totalPrice: order.totalPrice,
   };
   Object.entries(fields).forEach(([id, value]) => {

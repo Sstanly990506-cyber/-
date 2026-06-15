@@ -13,7 +13,7 @@ function cleanRecord(row){const result={...row};delete result._updatedAt;return 
 function snapshot(key){snapshots[key]=new Map((state[key]||[]).filter(row=>row?.id).map(row=>[row.id,JSON.stringify(row)]));}
 function normalizeMoney(v){const n=Number(v||0);return Number.isFinite(n)?Math.max(0,n):0;}
 function unique(rows){return [...new Map((rows||[]).filter(row=>row?.id).map(row=>[row.id,row])).values()];}
-function normalizeStateData(){state.customers=unique(state.customers);state.orders=unique(state.orders).map(o=>({...o,totalPrice:normalizeMoney(o.totalPrice),sheetCount:normalizeMoney(o.sheetCount)}));state.receivables=unique(state.receivables);state.payables=unique(state.payables);state.inventoryItems=unique(state.inventoryItems);state.audits=(state.audits||[]).slice(0,500);state.systemEvents=(state.systemEvents||[]).slice(0,500);state.settings=mergeSettings(state.settings||{});}
+function normalizeStateData(){state.customers=unique(state.customers);state.orders=unique(state.orders).map(o=>({...o,totalPrice:normalizeMoney(o.totalPrice),sheetCount:normalizeMoney(o.sheetCount),sheetCountText:String(o.sheetCountText??o.sheetCount??'')}));state.receivables=unique(state.receivables);state.payables=unique(state.payables);state.inventoryItems=unique(state.inventoryItems);state.audits=(state.audits||[]).slice(0,500);state.systemEvents=(state.systemEvents||[]).slice(0,500);state.settings=mergeSettings(state.settings||{});}
 function renderAllPagers(){for(const [key,anchor] of Object.entries(PAGER_ANCHORS))renderPager(key,anchor);}
 function refresh(){onRefresh();queueMicrotask(renderAllPagers);}
 export function setAuthToken(token){state.authToken=token||null;}

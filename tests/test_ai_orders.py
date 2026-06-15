@@ -12,7 +12,7 @@ class FakeResponse:
     def read(self):
         order = {
             'orderNumber': 'WO-1', 'orderDate': '2026-06-15', 'upstream': '', 'downstream': 'Client',
-            'address': '', 'sheetCount': 10, 'sizeLength': 100, 'sizeWidth': 200, 'sizeUnit': 'mm',
+            'address': '', 'sheetCountText': '10張', 'sheetCount': 10, 'sizeLength': 100, 'sizeWidth': 200, 'sizeUnit': 'mm',
             'glossType': 'PVA光', 'totalPrice': 500, 'confidence': 0.9, 'notes': [],
         }
         return json.dumps({'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': json.dumps(order)}]}]}).encode()

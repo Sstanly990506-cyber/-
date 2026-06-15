@@ -100,6 +100,15 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('reportAiCorrection', orders)
         self.assertIn('id="reportAiCorrectionBtn"', view)
 
+    def test_order_quantity_supports_text_and_calculation_value(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        self.assertIn('id="sheetCountText" type="text"', view)
+        self.assertIn('id="sheetCount" type="number"', view)
+        self.assertIn("sheetCountText: $('sheetCountText').value.trim()", orders)
+        self.assertIn("sheetCountText:String(o.sheetCountText??o.sheetCount??'')", store)
+
     def test_ai_recognition_has_vercel_runtime_limits(self):
         vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')

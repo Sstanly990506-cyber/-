@@ -110,7 +110,7 @@ def report_order_correction_payload(token,payload):
     account=require_account(token)
     if account.get('role') not in {'admin','ops'}:raise ApiError('permission denied',403)
     if not isinstance(payload,dict) or not isinstance(payload.get('changes'),dict):raise ApiError('invalid correction',400)
-    allowed={'orderNumber','orderDate','upstream','downstream','address','sheetCount','sizeLength','sizeWidth','sizeUnit','glossType','totalPrice'}
+    allowed={'orderNumber','orderDate','upstream','downstream','address','sheetCountText','sheetCount','sizeLength','sizeWidth','sizeUnit','glossType','totalPrice'}
     changes={}
     for key,value in payload['changes'].items():
         if key not in allowed or not isinstance(value,dict) or value.get('wrong')==value.get('correct'):continue
