@@ -41,7 +41,7 @@ class StaticStructureTests(unittest.TestCase):
     def test_scalable_data_routes_exist_in_both_servers(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
-        for route in ('/api/bootstrap', '/api/data/', '/api/changes', '/api/reports/summary', '/api/orders/recognize', '/api/orders/recognize/status'):
+        for route in ('/api/bootstrap', '/api/data/', '/api/changes', '/api/reports/summary', '/api/orders/recognize', '/api/orders/recognize/status', '/api/orders/recognize/corrections'):
             self.assertIn(route, flask_server)
             self.assertIn(route, builtin_server)
 
@@ -97,6 +97,8 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("fetch('/api/orders/recognize'", orders)
         self.assertIn("fetch('/api/orders/recognize/status'", orders)
         self.assertIn('applyRecognizedOrder', orders)
+        self.assertIn('reportAiCorrection', orders)
+        self.assertIn('id="reportAiCorrectionBtn"', view)
 
     def test_ai_recognition_has_vercel_runtime_limits(self):
         vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')

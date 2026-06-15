@@ -296,6 +296,10 @@ input[type="checkbox"] { width: auto; }
 }
 .ai-order-recognizer p { margin: 4px 0 0; }
 .ai-order-recognizer .sync-detail { grid-column: 1 / -1; }
+.ai-review-required {
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
 .side-menu {
   display: grid;
   align-content: start;

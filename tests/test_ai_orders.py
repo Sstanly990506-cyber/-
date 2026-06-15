@@ -37,6 +37,11 @@ class AiOrderTests(unittest.TestCase):
         self.assertEqual(result['orderNumber'], 'WO-1')
         self.assertEqual(result['model'], 'gpt-5.4-mini')
 
+    def test_correction_examples_only_include_changed_fields(self):
+        value = ai_orders._correction_examples([{'changes': {'address': {'wrong': 'A', 'correct': 'B'}, 'sheetCount': {'wrong': 5, 'correct': 5}}}])
+        self.assertIn('"address"', value)
+        self.assertNotIn('"sheetCount"', value)
+
 
 if __name__ == '__main__':
     unittest.main()

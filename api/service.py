@@ -1,4 +1,6 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
+import time
+import uuid
 from api.records import changes_since, delete_record, list_records, upsert_record
 from api.ai_orders import OrderRecognitionError, get_order_recognition_status, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, register_user, verify_finance_module_password, verify_session_token, write_state
@@ -95,7 +97,8 @@ def recognize_order_payload(token,payload):
     account=require_account(token)
     if account.get('role') not in {'admin','ops'}:raise ApiError('permission denied',403)
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
-    try:recognized=recognize_order_image(payload.get('image'),payload.get('glossOptions'))
+    corrections=list_records('aiCorrections',1,20).get('items') or []
+    try:recognized=recognize_order_image(payload.get('image'),payload.get('glossOptions'),corrections)
     except ValueError as err:raise ApiError(str(err),400) from err
     except OrderRecognitionError as err:raise ApiError(str(err),503) from err
     return {'ok':True,'order':recognized}
@@ -103,3 +106,19 @@ def recognize_order_status_payload(token):
     account=require_account(token)
     if account.get('role') not in {'admin','ops'}:raise ApiError('permission denied',403)
     return {'ok':True,**get_order_recognition_status()}
+def report_order_correction_payload(token,payload):
+    account=require_account(token)
+    if account.get('role') not in {'admin','ops'}:raise ApiError('permission denied',403)
+    if not isinstance(payload,dict) or not isinstance(payload.get('changes'),dict):raise ApiError('invalid correction',400)
+    allowed={'orderNumber','orderDate','upstream','downstream','address','sheetCount','sizeLength','sizeWidth','sizeUnit','glossType','totalPrice'}
+    changes={}
+    for key,value in payload['changes'].items():
+        if key not in allowed or not isinstance(value,dict) or value.get('wrong')==value.get('correct'):continue
+        wrong=value.get('wrong');correct=value.get('correct')
+        if isinstance(wrong,str):wrong=wrong[:200]
+        if isinstance(correct,str):correct=correct[:200]
+        changes[key]={'wrong':wrong,'correct':correct}
+    if not changes:raise ApiError('沒有可回報的修正欄位',400)
+    record_id=str(uuid.uuid4())
+    upsert_record('aiCorrections',record_id,{'id':record_id,'changes':changes,'confidence':payload.get('confidence'),'reportedAt':int(time.time()*1000),'reportedBy':account.get('username') or account.get('display') or ''})
+    return {'ok':True,'savedFields':len(changes)}

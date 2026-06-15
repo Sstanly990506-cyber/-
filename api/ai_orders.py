@@ -71,7 +71,23 @@ def _extract_output_text(response):
     raise OrderRecognitionError('AI did not return recognizable order data')
 
 
-def recognize_order_image(data_url, gloss_options=None):
+def _correction_examples(corrections):
+    examples = []
+    for item in (corrections or [])[:20]:
+        changes = item.get('changes') if isinstance(item, dict) else None
+        if not isinstance(changes, dict):
+            continue
+        cleaned = {
+            key: {'wrong': value.get('wrong'), 'correct': value.get('correct')}
+            for key, value in changes.items()
+            if isinstance(value, dict) and value.get('wrong') != value.get('correct')
+        }
+        if cleaned:
+            examples.append(cleaned)
+    return json.dumps(examples, ensure_ascii=False, separators=(',', ':'))
+
+
+def recognize_order_image(data_url, gloss_options=None, corrections=None):
     api_key = os.environ.get('OPENAI_API_KEY', '').strip()
     if not api_key:
         raise OrderRecognitionError('AI 尚未啟用：請先在 Vercel 設定 OPENAI_API_KEY，然後重新部署。')
@@ -83,7 +99,10 @@ def recognize_order_image(data_url, gloss_options=None):
         'Use an empty string or zero when uncertain. orderDate must be YYYY-MM-DD when visible. '
         'Determine whether customer names are upstream or downstream only when the document makes it clear. '
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
-        f'Known gloss types, when relevant: {gloss_text or "none supplied"}.'
+        f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '
+        'Use the following recent human corrections as hints for recurring recognition mistakes, '
+        'but only apply them when supported by the current image: '
+        f'{_correction_examples(corrections) or "none supplied"}.'
     )
     payload = {
         'model': model,
