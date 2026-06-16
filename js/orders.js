@@ -1,7 +1,18 @@
-import { $, COMPANY_INFO, getTodayText } from './shared.js';
+import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
 
 let lastRecognizedOrder = null;
+let aiCorrectionsCache = [];
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+}
 
 function toTaiInch(value, unit) {
   const num = Number(value || 0);
@@ -199,6 +210,77 @@ function renderOrderFilters(state) {
   wrap.innerHTML = items.map((status) => `<button class="btn filter-btn ${state.orderStatusFilter === status ? 'active' : ''}" data-status-filter="${status}" type="button">${status}</button>`).join('');
 }
 
+const AI_FIELD_LABELS = {
+  orderNumber: '工單編號',
+  orderDate: '日期',
+  upstream: '上游客戶',
+  downstream: '下游客戶',
+  address: '送貨地址',
+  sheetCountText: '數量說明',
+  sheetCount: '計算張數',
+  sizeLength: '長',
+  sizeWidth: '寬',
+  sizeUnit: '單位',
+  glossType: '上光種類',
+  totalPrice: '總價',
+};
+
+function correctionRows(correction) {
+  return Object.entries(correction?.changes || {}).map(([field, value]) => ({
+    id: correction.id,
+    field,
+    fieldLabel: AI_FIELD_LABELS[field] || field,
+    wrong: value?.wrong ?? '',
+    correct: value?.correct ?? '',
+    confidence: correction.confidence,
+    reportedAt: correction.reportedAt,
+    reportedBy: correction.reportedBy || '-',
+  }));
+}
+
+function renderAiCorrectionCenter(rows = aiCorrectionsCache) {
+  const body = $('aiCorrectionsTbody');
+  const summary = $('aiCorrectionsSummary');
+  if (!body) return;
+  const flatRows = rows.flatMap(correctionRows);
+  if (summary) summary.textContent = `已記錄 ${rows.length} 筆修正案例，${flatRows.length} 個欄位。`;
+  body.innerHTML = flatRows.length ? flatRows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.fieldLabel)}</td>
+      <td>${escapeHtml(row.wrong || '-')}</td>
+      <td>${escapeHtml(row.correct || '-')}</td>
+      <td>${row.confidence ? `${Math.round(Number(row.confidence) * 100)}%` : '-'}</td>
+      <td>${row.reportedAt ? new Date(Number(row.reportedAt)).toLocaleString() : '-'}</td>
+      <td>${escapeHtml(row.reportedBy)}</td>
+      <td><button class="btn small ghost" type="button" data-delete-ai-correction="${escapeHtml(row.id)}">刪除</button></td>
+    </tr>`).join('') : '<tr><td colspan="7">目前還沒有 AI 修正紀錄。</td></tr>';
+}
+
+async function loadAiCorrections(state) {
+  const body = $('aiCorrectionsTbody');
+  if (body) body.innerHTML = '<tr><td colspan="7">正在載入修正紀錄…</td></tr>';
+  const res = await fetch('/api/data/aiCorrections?page=1&pageSize=100', {
+    headers: { Authorization: `Bearer ${state.authToken || ''}` },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  aiCorrectionsCache = data.items || [];
+  renderAiCorrectionCenter();
+}
+
+function exportAiCorrections() {
+  const rows = [['欄位', 'AI 原本辨識', '修正後', '信心度', '回報時間', '回報人']];
+  aiCorrectionsCache.flatMap(correctionRows).forEach((row) => rows.push([
+    row.fieldLabel,
+    row.wrong,
+    row.correct,
+    row.confidence ? `${Math.round(Number(row.confidence) * 100)}%` : '',
+    row.reportedAt ? new Date(Number(row.reportedAt)).toLocaleString() : '',
+    row.reportedBy,
+  ]));
+  downloadCsv('AI-修正中心.csv', rows);
+}
+
 function getOrderSearchKeyword() {
   return ($('orderSearch')?.value || '').trim().toLowerCase();
 }
@@ -232,6 +314,7 @@ export function renderOrders(state, renderCustomerOptions) {
   renderCustomerOptions(state);
   renderOrderStatusOptions(state);
   renderOrderFilters(state);
+  renderAiCorrectionCenter();
   const body = $('ordersTbody');
   body.innerHTML = '';
 
@@ -380,6 +463,7 @@ async function reportAiCorrection(state) {
   if (!response.ok || !data.ok) return alert(`回報失敗：${data.error || `HTTP ${response.status}`}`);
   lastRecognizedOrder = { ...buildOrderFromForm(state), confidence: lastRecognizedOrder?.confidence };
   $('reportAiCorrectionBtn')?.classList.add('hidden');
+  loadAiCorrections(state).catch(() => {});
   alert(`已記錄 ${data.savedFields} 個修正欄位，之後 AI 會參考這些案例。`);
 }
 
@@ -422,6 +506,21 @@ async function recognizeOrderFromImage(state) {
 export function bindOrderEvents(state, saveState, renderAll) {
   $('recognizeOrderBtn')?.addEventListener('click', () => recognizeOrderFromImage(state));
   $('reportAiCorrectionBtn')?.addEventListener('click', () => reportAiCorrection(state));
+  $('refreshAiCorrectionsBtn')?.addEventListener('click', () => loadAiCorrections(state).catch((err) => alert(`載入 AI 修正紀錄失敗：${err.message}`)));
+  $('exportAiCorrectionsBtn')?.addEventListener('click', () => exportAiCorrections());
+  $('aiCorrectionsTbody')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-delete-ai-correction]');
+    if (!btn) return;
+    if (!window.confirm('確定要刪除這筆 AI 修正紀錄嗎？')) return;
+    const res = await fetch(`/api/data/aiCorrections/${encodeURIComponent(btn.dataset.deleteAiCorrection)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${state.authToken || ''}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) return alert(`刪除失敗：${data.error || `HTTP ${res.status}`}`);
+    await loadAiCorrections(state);
+  });
+  loadAiCorrections(state).catch(() => renderAiCorrectionCenter());
   $('addGlossBtn')?.addEventListener('click', () => {
     const input = $('newGlossType');
     const val = input.value.trim();

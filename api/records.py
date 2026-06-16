@@ -200,6 +200,40 @@ def clear_records(entities=None):
     return {'ok': True, 'cleared': counts, 'updatedAt': tick}
 
 
+def export_records(entities=None):
+    ensure_record_storage()
+    selected = [entity for entity in (entities or ENTITY_FIELDS.keys()) if entity in ENTITY_FIELDS]
+    data = {}
+    for entity in selected:
+        first = list_records(entity, 1, 500)
+        rows = list(first['items'])
+        for page in range(2, first['pages'] + 1):
+            rows.extend(list_records(entity, page, 500)['items'])
+        data[entity] = [{key: value for key, value in row.items() if key != '_updatedAt'} for row in rows]
+    return data
+
+
+def restore_records(records_by_entity):
+    ensure_record_storage()
+    if not isinstance(records_by_entity, dict):
+        raise ValueError('invalid backup records')
+    selected = list(ENTITY_FIELDS.keys())
+    clear_records(selected)
+    restored = {entity: 0 for entity in selected}
+    for entity in selected:
+        rows = records_by_entity.get(entity) or []
+        if not isinstance(rows, list):
+            continue
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                continue
+            payload = {key: value for key, value in row.items() if key != '_updatedAt'}
+            record_id = _record_id(entity, payload, index)
+            upsert_record(entity, record_id, payload)
+            restored[entity] += 1
+    return {'ok': True, 'restored': restored}
+
+
 def changes_since(since, limit=1000):
     ensure_record_storage(); since = max(0, int(since or 0)); limit = max(1, min(5000, int(limit or 1000)))
     changes = []

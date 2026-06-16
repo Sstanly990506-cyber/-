@@ -219,6 +219,128 @@ function getReportCData(state) {
   return [...map.values()].sort((a, b) => b.month.localeCompare(a.month)).map((m) => ({ ...m, net: m.income - m.expense }));
 }
 
+function currentMonthText() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function getMonthCloseData(state, reportA, month) {
+  const target = month || currentMonthText();
+  const receivables = reportA.filter((r) => (r.date || '').slice(0, 7) === target);
+  const payables = state.payables
+    .filter((p) => (p.date || '').slice(0, 7) === target)
+    .map((p) => ({ ...p, unpaid: Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)) }));
+  const receivableTotal = receivables.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const receivedTotal = receivables.reduce((sum, r) => sum + Number(r.received || 0), 0);
+  const payableTotal = payables.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const paidTotal = payables.reduce((sum, p) => sum + Number(p.paid || 0), 0);
+  return {
+    month: target,
+    receivables,
+    payables,
+    receivableTotal,
+    receivedTotal,
+    receivableUnpaid: Math.max(0, receivableTotal - receivedTotal),
+    payableTotal,
+    paidTotal,
+    payableUnpaid: Math.max(0, payableTotal - paidTotal),
+    cashNet: receivedTotal - paidTotal,
+  };
+}
+
+function renderMonthClose(state, reportA) {
+  const monthInput = $('financeCloseMonth');
+  if (monthInput && !monthInput.value) monthInput.value = currentMonthText();
+  const data = getMonthCloseData(state, reportA, monthInput?.value);
+  if ($('financeMonthSummary')) {
+    $('financeMonthSummary').textContent = `${data.month} 月結：已收 ${money(data.receivedTotal)}，已付 ${money(data.paidTotal)}，淨現金 ${money(data.cashNet)}，未收 ${money(data.receivableUnpaid)}，未付 ${money(data.payableUnpaid)}`;
+  }
+  if ($('financeMonthCloseTbody')) {
+    $('financeMonthCloseTbody').innerHTML = `
+      <tr>
+        <td>${escapeHtml(data.month)}</td>
+        <td>${money(data.receivableTotal)}</td>
+        <td>${money(data.receivedTotal)}</td>
+        <td>${money(data.payableTotal)}</td>
+        <td>${money(data.paidTotal)}</td>
+        <td>${money(data.cashNet)}</td>
+      </tr>`;
+  }
+  return data;
+}
+
+function getCustomerStatementRows(state, reportA) {
+  const customer = ($('statementCustomer')?.value || '').trim();
+  const month = $('financeCloseMonth')?.value || currentMonthText();
+  if (!customer) return { customer, month, rows: [] };
+  const key = customer.toLowerCase();
+  const rows = reportA
+    .filter((r) => (r.date || '').slice(0, 7) === month)
+    .filter((r) => String(r.customer || '').toLowerCase().includes(key))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  return { customer, month, rows };
+}
+
+function exportMonthClose(state, reportA) {
+  const data = getMonthCloseData(state, reportA, $('financeCloseMonth')?.value);
+  const rows = [
+    ['月份', '應收', '已收', '未收', '應付', '已付', '未付', '淨現金'],
+    [data.month, data.receivableTotal, data.receivedTotal, data.receivableUnpaid, data.payableTotal, data.paidTotal, data.payableUnpaid, data.cashNet],
+    [],
+    ['待收客戶', '工單', '日期', '應收', '已收', '未收'],
+    ...data.receivables.filter((r) => r.remain > 0).map((r) => [r.customer, r.orderNumber, r.date, r.amount, r.received, r.remain]),
+    [],
+    ['待付供應商', '項目', '日期', '應付', '已付', '未付'],
+    ...data.payables.filter((p) => p.unpaid > 0).map((p) => [p.vendor, p.item, p.date, p.amount, p.paid, p.unpaid]),
+  ];
+  downloadCsv(`月結-${data.month}.csv`, rows);
+}
+
+function exportCustomerStatement(state, reportA) {
+  const statement = getCustomerStatementRows(state, reportA);
+  if (!statement.customer) return alert('請先輸入客戶名稱。');
+  if (!statement.rows.length) return alert('這個月份找不到該客戶的對帳資料。');
+  const totals = statement.rows.reduce((acc, r) => {
+    acc.amount += Number(r.amount || 0);
+    acc.received += Number(r.received || 0);
+    acc.remain += Number(r.remain || 0);
+    return acc;
+  }, { amount: 0, received: 0, remain: 0 });
+  downloadCsv(`對帳單-${statement.customer}-${statement.month}.csv`, [
+    ['客戶', statement.customer],
+    ['月份', statement.month],
+    ['應收合計', totals.amount],
+    ['已收合計', totals.received],
+    ['未收合計', totals.remain],
+    [],
+    ['日期', '工單', '應收', '已收', '未收'],
+    ...statement.rows.map((r) => [r.date, r.orderNumber, r.amount, r.received, r.remain]),
+  ]);
+}
+
+function printCustomerStatement(state, reportA) {
+  const statement = getCustomerStatementRows(state, reportA);
+  if (!statement.customer) return alert('請先輸入客戶名稱。');
+  if (!statement.rows.length) return alert('這個月份找不到該客戶的對帳資料。');
+  const totals = statement.rows.reduce((acc, r) => {
+    acc.amount += Number(r.amount || 0);
+    acc.received += Number(r.received || 0);
+    acc.remain += Number(r.remain || 0);
+    return acc;
+  }, { amount: 0, received: 0, remain: 0 });
+  const rows = statement.rows.map((r) => `<tr><td>${escapeHtml(r.date || '-')}</td><td>${escapeHtml(r.orderNumber || '-')}</td><td>${money(r.amount)}</td><td>${money(r.received)}</td><td>${money(r.remain)}</td></tr>`).join('');
+  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>客戶對帳單</title>
+  <style>body{font-family:"Noto Sans TC",sans-serif;padding:18px;color:#111}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #777;padding:7px;text-align:left}.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;font-weight:700}</style></head><body>
+  <h2>${escapeHtml(COMPANY_INFO.name)} 客戶對帳單</h2>
+  <p>客戶：${escapeHtml(statement.customer)}　月份：${escapeHtml(statement.month)}</p>
+  <div class="sum"><span>應收：${money(totals.amount)}</span><span>已收：${money(totals.received)}</span><span>未收：${money(totals.remain)}</span></div>
+  <table><thead><tr><th>日期</th><th>工單</th><th>應收</th><th>已收</th><th>未收</th></tr></thead><tbody>${rows}</tbody></table>
+  <script>window.print();</script></body></html>`;
+  const win = window.open('', '_blank', 'width=980,height=760');
+  if (!win) return alert('請允許彈出視窗');
+  win.document.write(html);
+  win.document.close();
+}
+
 function renderFinanceInsights(state, reportA) {
   const received = reportA.reduce((sum, r) => sum + Number(r.received || 0), 0);
   const unreceived = reportA.reduce((sum, r) => sum + Number(r.remain || 0), 0);
@@ -397,6 +519,7 @@ export function renderFinance(state) {
   renderTodayAlerts(state, reportA);
   renderFinanceChartAndAnalysis(reportC, reportA);
   renderFinanceQuickActions(state, reportA);
+  renderMonthClose(state, reportA);
 
   const isMain = state.financeScreen === 'main';
   $('financeMainScreen').classList.toggle('hidden', !isMain);
@@ -465,6 +588,10 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     getReportCData(state).forEach((r) => rows.push([r.month, r.income, r.expense, r.net]));
     downloadCsv('report-C-收支月報.csv', rows);
   });
+  $('financeCloseMonth')?.addEventListener('change', () => renderMonthClose(state, getLinkedReceivablesData(state)));
+  $('exportMonthCloseBtn')?.addEventListener('click', () => exportMonthClose(state, getLinkedReceivablesData(state)));
+  $('exportCustomerStatementBtn')?.addEventListener('click', () => exportCustomerStatement(state, getLinkedReceivablesData(state)));
+  $('printCustomerStatementBtn')?.addEventListener('click', () => printCustomerStatement(state, getLinkedReceivablesData(state)));
 
   $('invoiceOrdersList')?.addEventListener('change', (e) => {
     const box = e.target.closest('input[data-invoice-order-id]');

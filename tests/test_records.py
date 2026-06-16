@@ -63,6 +63,16 @@ class RecordStorageTests(unittest.TestCase):
         result = records.list_records('inventory', query='blue')
         self.assertEqual([row['id'] for row in result['items']], ['a'])
 
+    def test_export_and_restore_records(self):
+        records.upsert_record('orders', 'o-1', {'id': 'o-1', 'orderNumber': 'WO-1'})
+        backup = records.export_records()
+        records.upsert_record('orders', 'o-2', {'id': 'o-2', 'orderNumber': 'WO-2'})
+        restored = records.restore_records(backup)
+        self.assertEqual(restored['restored']['orders'], 1)
+        page = records.list_records('orders')
+        self.assertEqual(page['total'], 1)
+        self.assertEqual(page['items'][0]['orderNumber'], 'WO-1')
+
 
 if __name__ == '__main__':
     unittest.main()
