@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, _fill_recognized_customer_address, changes_payload, get_state_payload, health_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, update_state_payload, user_action_payload
+from api.service import ApiError, _fill_recognized_customer_address, changes_payload, clear_test_data_payload, get_state_payload, health_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -69,6 +69,26 @@ class ServiceTests(unittest.TestCase):
             with self.assertRaises(ApiError) as caught:
                 user_action_payload('token', {'action': 'change_finance_password', 'password': 'password123'})
         self.assertEqual(caught.exception.status, 403)
+
+    def test_only_admin_can_clear_test_data(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}):
+            with self.assertRaises(ApiError) as caught:
+                clear_test_data_payload('token', {'confirm': '清空測試資料'})
+        self.assertEqual(caught.exception.status, 403)
+
+    def test_admin_clear_test_data_requires_confirmation(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}):
+            with self.assertRaises(ApiError) as caught:
+                clear_test_data_payload('token', {'confirm': 'delete'})
+        self.assertEqual(caught.exception.status, 400)
+
+    def test_admin_can_clear_test_data(self):
+        cleared = {'ok': True, 'cleared': {'orders': 2}, 'updatedAt': 10}
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.clear_records', return_value=cleared) as clear:
+            result = clear_test_data_payload('token', {'confirm': '清空測試資料'})
+        clear.assert_called_once_with()
+        self.assertEqual(result['cleared']['orders'], 2)
+        self.assertIn('帳號', result['message'])
 
     def test_admin_can_change_finance_password(self):
         with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.change_finance_module_password') as change_password:

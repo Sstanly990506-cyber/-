@@ -169,6 +169,37 @@ def delete_record(entity, record_id):
     return {'ok': True, 'id': record_id, 'updatedAt': tick}
 
 
+def clear_records(entities=None):
+    ensure_record_storage()
+    selected = [entity for entity in (entities or ENTITY_FIELDS.keys()) if entity in ENTITY_FIELDS]
+    counts = {entity: 0 for entity in selected}
+    tick = _now()
+    if storage.DATABASE_URL:
+        with storage.get_db_connection() as conn:
+            with conn.cursor() as cur:
+                for entity in selected:
+                    cur.execute('SELECT record_id FROM app_records WHERE entity=%s AND deleted=FALSE ORDER BY updated_at ASC', (entity,))
+                    ids = [str(row['record_id']) for row in (cur.fetchall() or [])]
+                    counts[entity] = len(ids)
+                    for record_id in ids:
+                        tick += 1
+                        cur.execute('UPDATE app_records SET deleted=TRUE, updated_at=%s WHERE entity=%s AND record_id=%s', (tick, entity, record_id))
+            conn.commit()
+    else:
+        with RECORDS_LOCK:
+            records = _load_local()
+            for entity in selected:
+                values = records.setdefault(entity, {})
+                for value in values.values():
+                    if value.get('deleted'):
+                        continue
+                    tick += 1
+                    counts[entity] += 1
+                    value.update({'deleted': True, 'updatedAt': tick})
+            _write_local(records)
+    return {'ok': True, 'cleared': counts, 'updatedAt': tick}
+
+
 def changes_since(since, limit=1000):
     ensure_record_storage(); since = max(0, int(since or 0)); limit = max(1, min(5000, int(limit or 1000)))
     changes = []

@@ -44,6 +44,19 @@ class RecordStorageTests(unittest.TestCase):
         changes = records.changes_since(created['updatedAt'] - 1)
         self.assertTrue(any(change['id'] == 'c-1' and change['deleted'] for change in changes['changes']))
 
+    def test_clear_records_marks_all_selected_data_deleted(self):
+        records.upsert_record('orders', 'o-1', {'id': 'o-1', 'orderNumber': 'WO-1'})
+        records.upsert_record('customers', 'c-1', {'id': 'c-1', 'name': 'A'})
+        records.upsert_record('payables', 'p-1', {'id': 'p-1', 'vendor': 'B'})
+        result = records.clear_records()
+        self.assertEqual(result['cleared']['orders'], 1)
+        self.assertEqual(result['cleared']['customers'], 1)
+        self.assertEqual(result['cleared']['payables'], 1)
+        self.assertEqual(records.list_records('orders')['total'], 0)
+        changes = records.changes_since(0)
+        deleted_ids = {change['id'] for change in changes['changes'] if change['deleted']}
+        self.assertEqual({'o-1', 'c-1', 'p-1'} & deleted_ids, {'o-1', 'c-1', 'p-1'})
+
     def test_search_filters_on_server(self):
         records.upsert_record('inventory', 'a', {'id': 'a', 'name': 'Blue film'})
         records.upsert_record('inventory', 'b', {'id': 'b', 'name': 'Red film'})
