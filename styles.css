@@ -138,6 +138,11 @@ input[type="checkbox"] { width: auto; }
   background: rgba(239, 68, 68, 0.12);
   border-color: rgba(239, 68, 68, 0.18);
 }
+.btn.danger {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.48);
+  color: #fee2e2;
+}
 .btn.active {
   background: linear-gradient(135deg, var(--primary), var(--accent));
   color: white;

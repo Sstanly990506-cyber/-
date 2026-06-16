@@ -1,7 +1,7 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
 import time
 import uuid
-from api.records import changes_since, delete_record, list_records, upsert_record
+from api.records import changes_since, clear_records, delete_record, list_records, upsert_record
 from api.ai_orders import OrderRecognitionError, get_order_recognition_status, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, register_user, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
@@ -40,6 +40,13 @@ def upsert_entity_payload(token,entity,record_id,payload):
     try:return upsert_record(entity,record_id,payload)
     except ValueError as err:raise ApiError(str(err),400) from err
 def delete_entity_payload(token,entity,record_id):require_entity_access(token,entity);return delete_record(entity,record_id)
+def clear_test_data_payload(token,payload):
+    account=require_account(token)
+    if account.get('role')!='admin':raise ApiError('admin role required',403)
+    if not isinstance(payload,dict) or str(payload.get('confirm') or '').strip()!='清空測試資料':raise ApiError('confirmation required',400)
+    result=clear_records()
+    result['message']='測試資料已清空；帳號、財務密碼與系統設定已保留。'
+    return result
 def changes_payload(token,since=0,limit=1000):
     account=require_account(token);role=account.get('role') or 'viewer';result=changes_since(since,limit);allowed={entity for entity,roles in ENTITY_ROLE.items() if role in roles};result['changes']=[row for row in result['changes'] if row.get('entity') in allowed];return result
 def _all_records(entity):

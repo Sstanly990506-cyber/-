@@ -252,6 +252,20 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     return data;
   };
 
+  const clearTestData = async () => {
+    const confirmText = '清空測試資料';
+    const input = window.prompt(`這會清掉工單、客戶、收付款、庫存、稽核、通知和 AI 修正紀錄。\n帳號、財務密碼與系統設定會保留。\n\n如果確定要清空，請輸入：${confirmText}`);
+    if (input !== confirmText) return;
+    const res = await fetch('/api/admin/clear-test-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+      body: JSON.stringify({ confirm: confirmText }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  };
+
   $('createAccountForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const password = $('newAccountPassword')?.value || '';
@@ -283,6 +297,17 @@ export function bindSettingsEvents(state, saveState, renderAll) {
       alert('財經密碼已更新。');
     } catch (err) {
       alert(`更改財經密碼失敗：${err.message}`);
+    }
+  });
+
+  $('clearTestDataBtn')?.addEventListener('click', async () => {
+    try {
+      const result = await clearTestData();
+      const total = Object.values(result.cleared || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+      alert(`測試資料已清空，共清除 ${total} 筆。系統會重新整理畫面。`);
+      window.location.reload();
+    } catch (err) {
+      alert(`清空測試資料失敗：${err.message}`);
     }
   });
 
