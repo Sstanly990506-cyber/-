@@ -3,6 +3,16 @@ import { getOrderReceivableKey } from './store.js';
 
 const selectedInvoiceOrderIds = new Set();
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+}
+
 function inRange(state, dateText) {
   const { start, end } = state.reportRange;
   if (!dateText) return true;
@@ -260,6 +270,42 @@ function renderFinanceChartAndAnalysis(reportC, reportA) {
 }
 
 
+function renderFinanceQuickActions(state, reportA) {
+  const receivableWrap = $('financeReceivableActions');
+  const payableWrap = $('financePayableActions');
+  if (receivableWrap) {
+    const rows = reportA.filter((r) => r.remain > 0).sort((a, b) => b.remain - a.remain).slice(0, 8);
+    receivableWrap.innerHTML = rows.length ? rows.map((r) => `
+      <tr>
+        <td>${escapeHtml(r.customer || '-')}</td>
+        <td>${escapeHtml(r.orderNumber || '-')}</td>
+        <td>${money(r.remain)}</td>
+        <td class="table-actions">
+          <button class="btn small" type="button" data-finance-receivable-done="${escapeHtml(r.key)}">收清</button>
+          <button class="btn small ghost" type="button" data-finance-receivable-delete="${escapeHtml(r.key)}">刪除</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="4">目前沒有待收款。</td></tr>';
+  }
+  if (payableWrap) {
+    const rows = state.payables
+      .map((p) => ({ ...p, unpaid: Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)) }))
+      .filter((p) => p.unpaid > 0)
+      .sort((a, b) => b.unpaid - a.unpaid)
+      .slice(0, 8);
+    payableWrap.innerHTML = rows.length ? rows.map((p) => `
+      <tr>
+        <td>${escapeHtml(p.vendor || '-')}</td>
+        <td>${escapeHtml(p.item || '-')}</td>
+        <td>${money(p.unpaid)}</td>
+        <td class="table-actions">
+          <button class="btn small" type="button" data-finance-payable-done="${escapeHtml(p.id)}">付清</button>
+          <button class="btn small ghost" type="button" data-finance-payable-delete="${escapeHtml(p.id)}">刪除</button>
+        </td>
+      </tr>`).join('') : '<tr><td colspan="4">目前沒有待付款。</td></tr>';
+  }
+}
+
+
 function buildTodayAlerts(state, reportA) {
   const today = new Date().toISOString().slice(0, 10);
   const unpaidToday = state.payables.filter((p) => (p.date || '').slice(0, 10) === today && Number(p.amount || 0) > Number(p.paid || 0));
@@ -350,6 +396,7 @@ export function renderFinance(state) {
   renderFinanceInsights(state, reportA);
   renderTodayAlerts(state, reportA);
   renderFinanceChartAndAnalysis(reportC, reportA);
+  renderFinanceQuickActions(state, reportA);
 
   const isMain = state.financeScreen === 'main';
   $('financeMainScreen').classList.toggle('hidden', !isMain);
@@ -438,6 +485,45 @@ export function bindFinanceEvents(state, saveState, renderAll) {
   });
   $('exportInvoiceBtn')?.addEventListener('click', () => openInvoiceWindow(state));
   $('sendLineReminderBtn')?.addEventListener('click', () => openLineReminder(state, getLinkedReceivablesData(state)));
+
+  $('financeReceivableActions')?.addEventListener('click', (e) => {
+    const done = e.target.closest('[data-finance-receivable-done]');
+    const remove = e.target.closest('[data-finance-receivable-delete]');
+    const key = done?.dataset.financeReceivableDone || remove?.dataset.financeReceivableDelete || '';
+    if (!key) return;
+    const item = state.receivables.find((r) => ((r.orderNumber || '').trim() || r.id) === key);
+    if (done) {
+      if (item) {
+        item.received = Number(item.amount || 0);
+      } else {
+        const order = state.orders.find((o) => getOrderReceivableKey(o) === key);
+        if (order) state.receivables.unshift({ id: crypto.randomUUID(), source: 'manual-close', date: getTodayText(), customer: order.downstream || order.upstream || '-', orderNumber: key, amount: Number(order.totalPrice || 0), received: Number(order.totalPrice || 0) });
+      }
+    }
+    if (remove) {
+      if (!item) return alert('這筆是從工單自動帶出的應收；請到工單調整金額或狀態。');
+      if (!window.confirm('確定要刪除這筆應收資料嗎？')) return;
+      state.receivables = state.receivables.filter((r) => r.id !== item.id);
+    }
+    saveState();
+    renderAll();
+  });
+
+  $('financePayableActions')?.addEventListener('click', (e) => {
+    const done = e.target.closest('[data-finance-payable-done]');
+    const remove = e.target.closest('[data-finance-payable-delete]');
+    const id = done?.dataset.financePayableDone || remove?.dataset.financePayableDelete || '';
+    if (!id) return;
+    const item = state.payables.find((p) => p.id === id);
+    if (!item) return;
+    if (done) item.paid = Number(item.amount || 0);
+    if (remove) {
+      if (!window.confirm('確定要刪除這筆應付資料嗎？')) return;
+      state.payables = state.payables.filter((p) => p.id !== id);
+    }
+    saveState();
+    renderAll();
+  });
 
   $('recvOrderNumber')?.addEventListener('input', () => autofillReceivableFromOrder(state));
   $('recvOrderNumber')?.addEventListener('blur', () => autofillReceivableFromOrder(state));
