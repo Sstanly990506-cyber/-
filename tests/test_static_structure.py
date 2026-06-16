@@ -96,9 +96,21 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("action: 'create_account'", settings)
         self.assertIn("action: 'change_finance_password'", settings)
         self.assertIn("hash_password(value)", storage)
+        self.assertNotIn('e.currentTarget.reset()', settings)
         settings_close = view.index('</form>', view.index('id="settingsForm"'))
         self.assertGreater(view.index('id="createAccountForm"'), settings_close)
         self.assertGreater(view.index('id="financePasswordForm"'), settings_close)
+
+    def test_finance_quick_actions_are_present(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        finance = (ROOT / 'js' / 'finance.js').read_text(encoding='utf-8')
+        styles = (ROOT / 'styles.css').read_text(encoding='utf-8')
+        self.assertIn('financeReceivableActions', view)
+        self.assertIn('financePayableActions', view)
+        self.assertIn('data-finance-receivable-done', finance)
+        self.assertIn('data-finance-payable-done', finance)
+        self.assertIn('escapeHtml(value)', finance)
+        self.assertIn('.table-actions', styles)
 
     def test_ai_order_recognition_fills_existing_form(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')

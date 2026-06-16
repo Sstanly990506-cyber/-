@@ -268,6 +268,7 @@ export function bindSettingsEvents(state, saveState, renderAll) {
 
   $('createAccountForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
     const password = $('newAccountPassword')?.value || '';
     const confirm = $('newAccountPasswordConfirm')?.value || '';
     if (password !== confirm) return alert('兩次輸入的帳戶密碼不同。');
@@ -279,7 +280,7 @@ export function bindSettingsEvents(state, saveState, renderAll) {
         role: $('newAccountRole')?.value,
         password,
       });
-      e.currentTarget.reset();
+      form?.reset();
       alert('帳戶已新增。');
     } catch (err) {
       alert(`新增帳戶失敗：${err.message}`);
@@ -288,12 +289,13 @@ export function bindSettingsEvents(state, saveState, renderAll) {
 
   $('financePasswordForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
     const password = $('newFinancePassword')?.value || '';
     const confirm = $('newFinancePasswordConfirm')?.value || '';
     if (password !== confirm) return alert('兩次輸入的財經密碼不同。');
     try {
       await adminAction({ action: 'change_finance_password', password });
-      e.currentTarget.reset();
+      form?.reset();
       alert('財經密碼已更新。');
     } catch (err) {
       alert(`更改財經密碼失敗：${err.message}`);
