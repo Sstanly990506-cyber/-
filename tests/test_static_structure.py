@@ -55,6 +55,19 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('/api/admin/clear-test-data', settings)
         self.assertIn('clearTestDataBtn', view)
 
+    def test_backup_restore_routes_and_controls_exist(self):
+        flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
+        builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        for route in ('/api/admin/backup', '/api/admin/restore'):
+            self.assertIn(route, flask_server)
+            self.assertIn(route, builtin_server)
+            self.assertIn(route, settings)
+        self.assertIn('downloadBackupBtn', view)
+        self.assertIn('restoreBackupFile', view)
+        self.assertIn('restoreBackupBtn', view)
+
     def test_frontend_uses_paged_incremental_storage(self):
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
         self.assertIn('pageSize=100', store)
@@ -111,6 +124,26 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('data-finance-payable-done', finance)
         self.assertIn('escapeHtml(value)', finance)
         self.assertIn('.table-actions', styles)
+
+    def test_finance_month_close_and_statement_are_present(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        finance = (ROOT / 'js' / 'finance.js').read_text(encoding='utf-8')
+        self.assertIn('financeCloseMonth', view)
+        self.assertIn('statementCustomer', view)
+        self.assertIn('exportMonthCloseBtn', view)
+        self.assertIn('printCustomerStatementBtn', view)
+        self.assertIn('getMonthCloseData', finance)
+        self.assertIn('exportCustomerStatement', finance)
+
+    def test_ai_correction_center_is_present(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
+        self.assertIn('aiCorrectionsTbody', view)
+        self.assertIn('refreshAiCorrectionsBtn', view)
+        self.assertIn('/api/data/aiCorrections', orders)
+        self.assertIn('exportAiCorrections', orders)
+        self.assertIn("'aiCorrections':{'admin','ops'}", service)
 
     def test_ai_order_recognition_fills_existing_form(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')

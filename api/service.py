@@ -1,12 +1,12 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
 import time
 import uuid
-from api.records import changes_since, clear_records, delete_record, list_records, upsert_record
+from api.records import changes_since, clear_records, delete_record, export_records, list_records, restore_records, upsert_record
 from api.ai_orders import OrderRecognitionError, get_order_recognition_status, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, filter_state_for_role, get_storage_mode, merge_state_for_role, read_state, register_user, verify_finance_module_password, verify_session_token, write_state
 from api.trip_optimizer import optimize_trip
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
-ENTITY_ROLE={'orders':{'admin','ops'},'customers':{'admin','ops'},'inventory':{'admin','ops'},'events':{'admin','ops','finance','audit'},'audits':{'admin','audit'},'receivables':{'admin','finance'},'payables':{'admin','finance'}}
+ENTITY_ROLE={'orders':{'admin','ops'},'customers':{'admin','ops'},'inventory':{'admin','ops'},'events':{'admin','ops','finance','audit'},'audits':{'admin','audit'},'receivables':{'admin','finance'},'payables':{'admin','finance'},'aiCorrections':{'admin','ops'}}
 class ApiError(Exception):
     def __init__(self,message,status=400,**extra):super().__init__(message);self.status=status;self.payload={'ok':False,'error':message,**extra}
 def require_account(token):
@@ -47,6 +47,24 @@ def clear_test_data_payload(token,payload):
     result=clear_records()
     result['message']='測試資料已清空；帳號、財務密碼與系統設定已保留。'
     return result
+def backup_payload(token):
+    account=require_account(token)
+    if account.get('role')!='admin':raise ApiError('admin role required',403)
+    state=read_state()
+    return {'ok':True,'backup':{'version':1,'app':'sanqing-operations','exportedAt':int(time.time()*1000),'settings':state.get('settings') or {},'glossOptions':state.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'],'records':export_records(),'note':'此備份不包含登入密碼、財務密碼或伺服器環境變數。'}}
+def restore_backup_payload(token,payload):
+    account=require_account(token)
+    if account.get('role')!='admin':raise ApiError('admin role required',403)
+    if not isinstance(payload,dict) or str(payload.get('confirm') or '').strip()!='還原備份':raise ApiError('confirmation required',400)
+    backup=payload.get('backup')
+    if not isinstance(backup,dict) or not isinstance(backup.get('records'),dict):raise ApiError('invalid backup file',400)
+    current=read_state();next_state=dict(current);next_state['syncTick']=int(time.time()*1000)
+    if isinstance(backup.get('settings'),dict):next_state['settings']=backup.get('settings')
+    if isinstance(backup.get('glossOptions'),list):next_state['glossOptions']=backup.get('glossOptions')
+    ok,tick=write_state(next_state)
+    if not ok:raise ApiError('stale syncTick',409,serverSyncTick=tick)
+    result=restore_records(backup.get('records'))
+    return {'ok':True,'restored':result.get('restored') or {},'syncTick':tick,'message':'備份已還原；帳號、財務密碼與系統設定安全資訊已保留。'}
 def changes_payload(token,since=0,limit=1000):
     account=require_account(token);role=account.get('role') or 'viewer';result=changes_since(since,limit);allowed={entity for entity,roles in ENTITY_ROLE.items() if role in roles};result['changes']=[row for row in result['changes'] if row.get('entity') in allowed];return result
 def _all_records(entity):

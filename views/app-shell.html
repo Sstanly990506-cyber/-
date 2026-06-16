@@ -148,6 +148,25 @@
             </form>
           </article>
         </div>
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <h3>AI 修正中心</h3>
+              <p class="sub">查看已回報的 AI 識別錯誤，確認系統下次會參考哪些修正案例。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" id="refreshAiCorrectionsBtn">刷新修正紀錄</button>
+              <button class="btn" type="button" id="exportAiCorrectionsBtn">匯出 AI 修正 CSV</button>
+            </div>
+          </div>
+          <p id="aiCorrectionsSummary" class="sub">尚未載入修正紀錄。</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>欄位</th><th>AI 原本辨識</th><th>修正後</th><th>信心度</th><th>回報時間</th><th>回報人</th><th>操作</th></tr></thead>
+              <tbody id="aiCorrectionsTbody"></tbody>
+            </table>
+          </div>
+        </article>
       </section>
 
       <section id="customersView" class="panel hidden">
@@ -505,6 +524,24 @@
               <button class="btn" type="button" id="exportReportBBtn">匯出報表 B（毛利）</button>
               <button class="btn" type="button" id="exportReportCBtn">匯出報表 C（收支月報）</button>
             </div>
+            <article class="card">
+              <h4>月結與客戶對帳單</h4>
+              <p class="sub">選擇月份後可匯出月結摘要；輸入客戶名稱可匯出或列印對帳單。</p>
+              <div class="filter-row">
+                <input id="financeCloseMonth" type="month" />
+                <input id="statementCustomer" placeholder="客戶名稱，例如：Client001" />
+                <button class="btn" type="button" id="exportMonthCloseBtn">匯出月結 CSV</button>
+                <button class="btn" type="button" id="exportCustomerStatementBtn">匯出客戶對帳單</button>
+                <button class="btn primary" type="button" id="printCustomerStatementBtn">列印對帳單</button>
+              </div>
+              <div id="financeMonthSummary" class="hero-badge">尚未產生月結摘要</div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>項目</th><th>應收</th><th>已收</th><th>應付</th><th>已付</th><th>淨現金</th></tr></thead>
+                  <tbody id="financeMonthCloseTbody"></tbody>
+                </table>
+              </div>
+            </article>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>客戶</th><th>工單</th><th>應收</th><th>已收</th><th>未收</th><th>帳齡(天)</th></tr></thead>
@@ -680,8 +717,14 @@
           </article>
           <article class="card">
             <h3>系統維護</h3>
-            <p class="sub">清空測試資料會移除工單、客戶、收付款、庫存、稽核、通知和 AI 修正紀錄；帳號、財務密碼與系統設定會保留。</p>
-            <button class="btn danger" type="button" id="clearTestDataBtn">清空測試資料</button>
+            <p class="sub">備份會包含營運資料與設定，不包含登入密碼、財務密碼或伺服器金鑰。還原與清空都需要管理員確認。</p>
+            <div class="actions">
+              <button class="btn primary" type="button" id="downloadBackupBtn">下載備份</button>
+              <label class="btn" for="restoreBackupFile">選擇備份檔</label>
+              <input id="restoreBackupFile" type="file" accept="application/json,.json" class="hidden" />
+              <button class="btn" type="button" id="restoreBackupBtn">還原備份</button>
+              <button class="btn danger" type="button" id="clearTestDataBtn">清空測試資料</button>
+            </div>
           </article>
         </div>
       </section>

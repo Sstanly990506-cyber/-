@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, _fill_recognized_customer_address, changes_payload, clear_test_data_payload, get_state_payload, health_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, update_state_payload, user_action_payload
+from api.service import ApiError, _fill_recognized_customer_address, backup_payload, changes_payload, clear_test_data_payload, get_state_payload, health_payload, list_entity_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -89,6 +89,32 @@ class ServiceTests(unittest.TestCase):
         clear.assert_called_once_with()
         self.assertEqual(result['cleared']['orders'], 2)
         self.assertIn('帳號', result['message'])
+
+    def test_admin_can_download_backup_without_passwords(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_state', return_value={'settings': {'appTitle': 'A'}, 'glossOptions': ['PVA']}), patch('api.service.export_records', return_value={'orders': []}):
+            result = backup_payload('token')
+        self.assertEqual(result['backup']['settings']['appTitle'], 'A')
+        self.assertEqual(result['backup']['records'], {'orders': []})
+        self.assertNotIn('password', str(result['backup']).lower())
+
+    def test_restore_backup_requires_confirmation(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}):
+            with self.assertRaises(ApiError) as caught:
+                restore_backup_payload('token', {'confirm': 'wrong', 'backup': {'records': {}}})
+        self.assertEqual(caught.exception.status, 400)
+
+    def test_admin_can_restore_backup(self):
+        backup = {'settings': {'appTitle': 'A'}, 'glossOptions': ['PVA'], 'records': {'orders': []}}
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_state', return_value={'syncTick': 1}), patch('api.service.write_state', return_value=(True, 10)) as write, patch('api.service.restore_records', return_value={'restored': {'orders': 0}}) as restore:
+            result = restore_backup_payload('token', {'confirm': '還原備份', 'backup': backup})
+        self.assertEqual(result['restored']['orders'], 0)
+        self.assertEqual(write.call_args.args[0]['settings']['appTitle'], 'A')
+        restore.assert_called_once_with({'orders': []})
+
+    def test_ops_can_list_ai_corrections(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', return_value={'ok': True, 'items': [], 'total': 0}):
+            result = list_entity_payload('token', 'aiCorrections')
+        self.assertEqual(result['items'], [])
 
     def test_admin_can_change_finance_password(self):
         with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.change_finance_module_password') as change_password:

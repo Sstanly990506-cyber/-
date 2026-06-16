@@ -241,15 +241,29 @@ export function renderSettings(state) {
 }
 
 export function bindSettingsEvents(state, saveState, renderAll) {
+  const adminHeaders = (json = false) => ({
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+    Authorization: `Bearer ${state.authToken || ''}`,
+  });
+
   const adminAction = async (payload) => {
     const res = await fetch('/api/users', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+      headers: adminHeaders(true),
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
+  };
+
+  const downloadJson = (filename, value) => {
+    const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
   };
 
   const clearTestData = async () => {
@@ -258,12 +272,22 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     if (input !== confirmText) return;
     const res = await fetch('/api/admin/clear-test-data', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+      headers: adminHeaders(true),
       body: JSON.stringify({ confirm: confirmText }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
+  };
+
+  const readBackupFile = async (file) => {
+    if (!file) throw new Error('請先選擇備份檔。');
+    const text = await file.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error('備份檔不是有效 JSON。');
+    }
   };
 
   $('createAccountForm')?.addEventListener('submit', async (e) => {
@@ -310,6 +334,39 @@ export function bindSettingsEvents(state, saveState, renderAll) {
       window.location.reload();
     } catch (err) {
       alert(`清空測試資料失敗：${err.message}`);
+    }
+  });
+
+  $('downloadBackupBtn')?.addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/admin/backup', { headers: adminHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+      downloadJson(`sanqing-backup-${stamp}.json`, data.backup);
+      alert('備份檔已下載。請把它放在安全的位置。');
+    } catch (err) {
+      alert(`下載備份失敗：${err.message}`);
+    }
+  });
+
+  $('restoreBackupBtn')?.addEventListener('click', async () => {
+    try {
+      const backup = await readBackupFile($('restoreBackupFile')?.files?.[0]);
+      const confirmText = '還原備份';
+      const input = window.prompt(`還原會覆蓋目前工單、客戶、財經、庫存、稽核、通知與 AI 修正紀錄。\n帳號與財務密碼會保留。\n\n如果確定要還原，請輸入：${confirmText}`);
+      if (input !== confirmText) return;
+      const res = await fetch('/api/admin/restore', {
+        method: 'POST',
+        headers: adminHeaders(true),
+        body: JSON.stringify({ confirm: confirmText, backup }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      alert('備份已還原，系統會重新整理畫面。');
+      window.location.reload();
+    } catch (err) {
+      alert(`還原備份失敗：${err.message}`);
     }
   });
 
