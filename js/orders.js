@@ -114,6 +114,47 @@ function updateOrderSmartHint(state) {
   if (!$('totalPrice').value) $('totalPrice').value = String(suggestion.estimated);
 }
 
+function formatRuleSize(rule) {
+  return `${Number(rule.sizeLength || 0).toLocaleString()} x ${Number(rule.sizeWidth || 0).toLocaleString()} ${rule.sizeUnit || 'mm'}`;
+}
+
+function clearPriceRuleForm() {
+  $('priceRuleForm')?.reset();
+  if ($('priceRuleId')) $('priceRuleId').value = '';
+  if ($('priceRuleUnit')) $('priceRuleUnit').value = 'mm';
+}
+
+function buildPriceRuleFromForm() {
+  return {
+    id: $('priceRuleId')?.value || crypto.randomUUID(),
+    customer: $('priceRuleCustomer')?.value.trim() || '',
+    glossType: $('priceRuleGloss')?.value.trim() || '',
+    sizeLength: Number($('priceRuleLength')?.value || 0),
+    sizeWidth: Number($('priceRuleWidth')?.value || 0),
+    sizeUnit: $('priceRuleUnit')?.value || 'mm',
+    unitPrice: Number($('priceRuleUnitPrice')?.value || 0),
+    note: $('priceRuleNote')?.value.trim() || '',
+    updatedAt: new Date().toLocaleString(),
+  };
+}
+
+function renderPriceRules(state) {
+  const body = $('priceRulesTbody');
+  if (!body) return;
+  const rows = [...(state.priceRules || [])].sort((a, b) => String(a.customer || '').localeCompare(String(b.customer || ''), 'zh-Hant'));
+  body.innerHTML = rows.length ? rows.map((rule) => `
+    <tr>
+      <td>${escapeHtml(rule.customer || '-')}</td>
+      <td>${escapeHtml(rule.glossType || '不限')}</td>
+      <td>${escapeHtml(formatRuleSize(rule))}</td>
+      <td>NT$ ${Number(rule.unitPrice || 0).toLocaleString()}</td>
+      <td>
+        <button class="btn small" type="button" data-edit-price-rule="${escapeHtml(rule.id)}">編輯</button>
+        <button class="btn small ghost" type="button" data-delete-price-rule="${escapeHtml(rule.id)}">刪除</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="5">尚未建立客人價格。</td></tr>';
+}
+
 function buildOrderFromForm(state) {
   const sheetCount = Number($('sheetCount').value || 0);
   return {
@@ -187,15 +228,18 @@ function renderOrderTable(order) {
 export function renderOrderScreen(state) {
   const listScreen = $('ordersListScreen');
   const formScreen = $('ordersFormScreen');
-  const isList = state.orderScreen === 'list';
-  listScreen.classList.toggle('hidden', !isList);
-  formScreen.classList.toggle('hidden', isList);
+  const pricingScreen = $('ordersPricingScreen');
+  const activeScreen = state.orderScreen || 'list';
+  listScreen.classList.toggle('hidden', activeScreen !== 'list');
+  formScreen.classList.toggle('hidden', activeScreen !== 'form');
+  pricingScreen?.classList.toggle('hidden', activeScreen !== 'pricing');
 
   updateOrderSmartHint(state);
+  renderPriceRules(state);
   $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.orderScreen === state.orderScreen);
+    btn.classList.toggle('active', btn.dataset.orderScreen === activeScreen);
   });
 }
 
@@ -639,6 +683,54 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('exportOrderBtn')?.addEventListener('click', () => {
     openOrderExportWindow(buildOrderFromForm(state));
+  });
+
+  $('priceRuleForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const rule = buildPriceRuleFromForm();
+    if (!rule.customer || !rule.sizeLength || !rule.sizeWidth || !rule.unitPrice) return alert('請填客人、尺寸與每張單價。');
+    const ruleLength = toTaiInch(rule.sizeLength, rule.sizeUnit);
+    const ruleWidth = toTaiInch(rule.sizeWidth, rule.sizeUnit);
+    const duplicated = state.priceRules.find((item) => item.id !== rule.id
+      && String(item.customer || '').trim() === rule.customer
+      && String(item.glossType || '').trim() === rule.glossType
+      && Math.abs(toTaiInch(item.sizeLength, item.sizeUnit) - ruleLength) <= 0.15
+      && Math.abs(toTaiInch(item.sizeWidth, item.sizeUnit) - ruleWidth) <= 0.15);
+    if (duplicated && !window.confirm('這個客人、品項與尺寸已經有價格，要覆蓋那筆嗎？')) return;
+    if (duplicated) rule.id = duplicated.id;
+    const index = state.priceRules.findIndex((item) => item.id === rule.id);
+    if (index >= 0) state.priceRules[index] = rule;
+    else state.priceRules.unshift(rule);
+    clearPriceRuleForm();
+    saveState();
+    renderAll();
+  });
+
+  $('clearPriceRuleBtn')?.addEventListener('click', clearPriceRuleForm);
+  $('priceRulesTbody')?.addEventListener('click', (e) => {
+    const edit = e.target.closest('[data-edit-price-rule]');
+    const remove = e.target.closest('[data-delete-price-rule]');
+    const id = edit?.dataset.editPriceRule || remove?.dataset.deletePriceRule || '';
+    if (!id) return;
+    const rule = state.priceRules.find((item) => item.id === id);
+    if (!rule) return;
+    if (edit) {
+      $('priceRuleId').value = rule.id || '';
+      $('priceRuleCustomer').value = rule.customer || '';
+      $('priceRuleGloss').value = rule.glossType || '';
+      $('priceRuleLength').value = rule.sizeLength || '';
+      $('priceRuleWidth').value = rule.sizeWidth || '';
+      $('priceRuleUnit').value = rule.sizeUnit || 'mm';
+      $('priceRuleUnitPrice').value = rule.unitPrice || '';
+      $('priceRuleNote').value = rule.note || '';
+      $('priceRuleCustomer')?.focus();
+      return;
+    }
+    if (remove && window.confirm('確定刪除這筆客人價格嗎？')) {
+      state.priceRules = state.priceRules.filter((item) => item.id !== id);
+      saveState();
+      renderAll();
+    }
   });
 
   updateOrderSmartHint(state);

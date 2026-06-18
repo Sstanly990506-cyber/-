@@ -455,7 +455,9 @@ def can_access_field(role: str, field: str) -> bool:
         return True
     if field in base_fields:
         return True
-    if role == 'finance' and field in {'receivables', 'payables', 'priceRules'}:
+    if role == 'finance' and field in {'receivables', 'payables'}:
+        return True
+    if role == 'ops' and field == 'priceRules':
         return True
     if role == 'audit' and field == 'audits':
         return True

@@ -165,19 +165,24 @@ class StaticStructureTests(unittest.TestCase):
         records = (ROOT / 'api' / 'records.py').read_text(encoding='utf-8')
         service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
         self.assertIn('priceRuleForm', view)
-        self.assertIn('data-finance-screen="pricing"', view)
-        self.assertIn('financePricingScreen', view)
+        self.assertIn('data-order-screen="pricing"', view)
+        self.assertIn('ordersPricingScreen', view)
+        self.assertNotIn('data-finance-screen="pricing"', view)
+        self.assertNotIn('financePricingScreen', view)
         self.assertIn('priceRulesTbody', view)
-        main_block = view[view.index('id="financeMainScreen"'):view.index('id="financePricingScreen"')]
-        self.assertNotIn('priceRuleForm', main_block)
-        self.assertIn('buildPriceRuleFromForm', finance)
-        self.assertIn("activeScreen !== 'pricing'", finance)
-        self.assertIn('data-edit-price-rule', finance)
+        orders_block = view[view.index('id="ordersView"'):view.index('id="customersView"')]
+        finance_block = view[view.index('id="financeView"'):view.index('id="auditView"')]
+        self.assertIn('priceRuleForm', orders_block)
+        self.assertNotIn('priceRuleForm', finance_block)
+        self.assertIn('buildPriceRuleFromForm', orders)
+        self.assertIn("activeScreen !== 'pricing'", orders)
+        self.assertIn('data-edit-price-rule', orders)
+        self.assertNotIn('buildPriceRuleFromForm', finance)
         self.assertIn('findCustomerPriceRule', orders)
         self.assertIn('estimateOrderPriceFromRule', orders)
         self.assertIn("priceRules:'priceRules'", store)
         self.assertIn("'priceRules': 'priceRules'", records)
-        self.assertIn("'priceRules':'financeView'", service)
+        self.assertIn("'priceRules':'ordersView'", service)
 
     def test_ai_correction_center_is_present(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')

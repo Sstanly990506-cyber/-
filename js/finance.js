@@ -224,47 +224,6 @@ function currentMonthText() {
   return new Date().toISOString().slice(0, 7);
 }
 
-function formatRuleSize(rule) {
-  return `${Number(rule.sizeLength || 0).toLocaleString()} x ${Number(rule.sizeWidth || 0).toLocaleString()} ${rule.sizeUnit || 'mm'}`;
-}
-
-function clearPriceRuleForm() {
-  $('priceRuleForm')?.reset();
-  if ($('priceRuleId')) $('priceRuleId').value = '';
-  if ($('priceRuleUnit')) $('priceRuleUnit').value = 'mm';
-}
-
-function buildPriceRuleFromForm() {
-  return {
-    id: $('priceRuleId')?.value || crypto.randomUUID(),
-    customer: $('priceRuleCustomer')?.value.trim() || '',
-    glossType: $('priceRuleGloss')?.value.trim() || '',
-    sizeLength: Number($('priceRuleLength')?.value || 0),
-    sizeWidth: Number($('priceRuleWidth')?.value || 0),
-    sizeUnit: $('priceRuleUnit')?.value || 'mm',
-    unitPrice: Number($('priceRuleUnitPrice')?.value || 0),
-    note: $('priceRuleNote')?.value.trim() || '',
-    updatedAt: new Date().toLocaleString(),
-  };
-}
-
-function renderPriceRules(state) {
-  const body = $('priceRulesTbody');
-  if (!body) return;
-  const rows = [...(state.priceRules || [])].sort((a, b) => String(a.customer || '').localeCompare(String(b.customer || ''), 'zh-Hant'));
-  body.innerHTML = rows.length ? rows.map((rule) => `
-    <tr>
-      <td>${escapeHtml(rule.customer || '-')}</td>
-      <td>${escapeHtml(rule.glossType || '不限')}</td>
-      <td>${escapeHtml(formatRuleSize(rule))}</td>
-      <td>NT$ ${money(rule.unitPrice || 0)}</td>
-      <td>
-        <button class="btn small" type="button" data-edit-price-rule="${escapeHtml(rule.id)}">編輯</button>
-        <button class="btn small ghost" type="button" data-delete-price-rule="${escapeHtml(rule.id)}">刪除</button>
-      </td>
-    </tr>`).join('') : '<tr><td colspan="5">尚未建立客人價格。</td></tr>';
-}
-
 function getMonthCloseData(state, reportA, month) {
   const target = month || currentMonthText();
   const receivables = reportA.filter((r) => (r.date || '').slice(0, 7) === target);
@@ -562,12 +521,10 @@ export function renderFinance(state) {
   renderFinanceChartAndAnalysis(reportC, reportA);
   renderFinanceQuickActions(state, reportA);
   renderMonthClose(state, reportA);
-  renderPriceRules(state);
 
   const activeScreen = state.financeScreen || 'main';
   $('financeMainScreen').classList.toggle('hidden', activeScreen !== 'main');
   $('financeWorkspaceScreen').classList.toggle('hidden', activeScreen !== 'workspace');
-  $('financePricingScreen')?.classList.toggle('hidden', activeScreen !== 'pricing');
 
   document.querySelectorAll('[data-finance-screen]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.financeScreen === state.financeScreen);
@@ -609,54 +566,6 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     e.target.reset();
     saveState();
     renderAll();
-  });
-
-  $('priceRuleForm')?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const rule = buildPriceRuleFromForm();
-    if (!rule.customer || !rule.sizeLength || !rule.sizeWidth || !rule.unitPrice) return alert('請填客人、尺寸與每張單價。');
-    const ruleLength = toTaiInch(rule.sizeLength, rule.sizeUnit);
-    const ruleWidth = toTaiInch(rule.sizeWidth, rule.sizeUnit);
-    const duplicated = state.priceRules.find((item) => item.id !== rule.id
-      && String(item.customer || '').trim() === rule.customer
-      && String(item.glossType || '').trim() === rule.glossType
-      && Math.abs(toTaiInch(item.sizeLength, item.sizeUnit) - ruleLength) <= 0.15
-      && Math.abs(toTaiInch(item.sizeWidth, item.sizeUnit) - ruleWidth) <= 0.15);
-    if (duplicated && !window.confirm('這個客人、品項與尺寸已經有價格，要覆蓋那筆嗎？')) return;
-    if (duplicated) rule.id = duplicated.id;
-    const index = state.priceRules.findIndex((item) => item.id === rule.id);
-    if (index >= 0) state.priceRules[index] = rule;
-    else state.priceRules.unshift(rule);
-    clearPriceRuleForm();
-    saveState();
-    renderAll();
-  });
-
-  $('clearPriceRuleBtn')?.addEventListener('click', clearPriceRuleForm);
-  $('priceRulesTbody')?.addEventListener('click', (e) => {
-    const edit = e.target.closest('[data-edit-price-rule]');
-    const remove = e.target.closest('[data-delete-price-rule]');
-    const id = edit?.dataset.editPriceRule || remove?.dataset.deletePriceRule || '';
-    if (!id) return;
-    const rule = state.priceRules.find((item) => item.id === id);
-    if (!rule) return;
-    if (edit) {
-      $('priceRuleId').value = rule.id || '';
-      $('priceRuleCustomer').value = rule.customer || '';
-      $('priceRuleGloss').value = rule.glossType || '';
-      $('priceRuleLength').value = rule.sizeLength || '';
-      $('priceRuleWidth').value = rule.sizeWidth || '';
-      $('priceRuleUnit').value = rule.sizeUnit || 'mm';
-      $('priceRuleUnitPrice').value = rule.unitPrice || '';
-      $('priceRuleNote').value = rule.note || '';
-      $('priceRuleCustomer')?.focus();
-      return;
-    }
-    if (remove && window.confirm('確定刪除這筆客人價格嗎？')) {
-      state.priceRules = state.priceRules.filter((item) => item.id !== id);
-      saveState();
-      renderAll();
-    }
   });
 
   $('applyReportRangeBtn')?.addEventListener('click', () => {
