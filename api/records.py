@@ -134,6 +134,59 @@ def list_records(entity, page=1, page_size=100, query=''):
     return {'ok': True, 'entity': entity, 'items': items, 'page': page, 'pageSize': page_size, 'total': total, 'pages': (total + page_size - 1) // page_size}
 
 
+def count_records_by_entity(entities=None):
+    ensure_record_storage()
+    selected = [entity for entity in (entities or ENTITY_FIELDS.keys()) if entity in ENTITY_FIELDS]
+    start = time.perf_counter()
+    counts = {entity: 0 for entity in selected}
+    if storage.DATABASE_URL:
+        with storage.get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT entity, COUNT(*) AS count FROM app_records WHERE deleted=FALSE AND entity = ANY(%s) GROUP BY entity',
+                    (selected,),
+                )
+                for row in cur.fetchall() or []:
+                    counts[str(row['entity'])] = int(row['count'] or 0)
+    else:
+        with RECORDS_LOCK:
+            records = _load_local()
+        for entity in selected:
+            counts[entity] = sum(1 for value in records.get(entity, {}).values() if not value.get('deleted'))
+    return counts, round((time.perf_counter() - start) * 1000, 1)
+
+
+def first_pages_for_entities(entities, page_size=100):
+    ensure_record_storage()
+    selected = [entity for entity in entities if entity in ENTITY_FIELDS]
+    page_size = max(1, min(500, int(page_size or 100)))
+    pages = {}
+    if storage.DATABASE_URL:
+        with storage.get_db_connection() as conn:
+            with conn.cursor() as cur:
+                for entity in selected:
+                    cur.execute('SELECT COUNT(*) AS count FROM app_records WHERE entity=%s AND deleted=FALSE', (entity,))
+                    total = int((cur.fetchone() or {}).get('count') or 0)
+                    cur.execute(
+                        '''SELECT record_id, data_json, updated_at FROM app_records
+                           WHERE entity=%s AND deleted=FALSE ORDER BY updated_at DESC LIMIT %s''',
+                        (entity, page_size),
+                    )
+                    rows = cur.fetchall() or []
+                    items = [dict(row['data_json']) | {'id': row['record_id'], '_updatedAt': int(row['updated_at'])} for row in rows]
+                    pages[entity] = {'ok': True, 'entity': entity, 'items': items, 'page': 1, 'pageSize': page_size, 'total': total, 'pages': (total + page_size - 1) // page_size}
+        return pages
+    with RECORDS_LOCK:
+        records = _load_local()
+    for entity in selected:
+        rows = [(rid, value) for rid, value in records.get(entity, {}).items() if not value.get('deleted')]
+        rows.sort(key=lambda item: int(item[1].get('updatedAt') or 0), reverse=True)
+        total = len(rows)
+        items = [dict(value.get('data') or {}) | {'id': rid, '_updatedAt': int(value.get('updatedAt') or 0)} for rid, value in rows[:page_size]]
+        pages[entity] = {'ok': True, 'entity': entity, 'items': items, 'page': 1, 'pageSize': page_size, 'total': total, 'pages': (total + page_size - 1) // page_size}
+    return pages
+
+
 def upsert_record(entity, record_id, data):
     ensure_record_storage()
     if entity not in ENTITY_FIELDS or not isinstance(data, dict):
