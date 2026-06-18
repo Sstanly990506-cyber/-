@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, _fill_recognized_customer_address, backup_payload, changes_payload, clear_test_data_payload, get_state_payload, health_payload, list_entity_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
+from api.service import ApiError, _fill_recognized_customer_address, backup_payload, changes_payload, clear_test_data_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -45,7 +45,7 @@ class ServiceTests(unittest.TestCase):
 
     def test_stale_update_returns_server_tick(self):
         payload = {key: [] for key in ('glossOptions', 'customers', 'orders', 'audits', 'receivables', 'payables')}
-        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.read_state', return_value={}), patch('api.service.merge_state_for_role', return_value=payload), patch('api.service.write_state', return_value=(False, 42)):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.read_state', return_value={}), patch('api.service.merge_state_for_account', return_value=payload), patch('api.service.write_state', return_value=(False, 42)):
             with self.assertRaises(ApiError) as caught:
                 update_state_payload('token', payload)
         self.assertEqual(caught.exception.status, 409)
@@ -60,9 +60,31 @@ class ServiceTests(unittest.TestCase):
 
     def test_admin_can_create_account(self):
         created = {'username': 'new-user', 'role': 'ops'}
-        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.register_user', return_value=created):
-            result = user_action_payload('token', {'action': 'create_account', 'username': 'new-user', 'password': 'password123', 'role': 'ops'})
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.register_user', return_value=created) as register:
+            result = user_action_payload('token', {'action': 'create_account', 'username': 'new-user', 'password': 'password123', 'role': 'driver', 'allowedViews': ['tripsView']})
         self.assertEqual(result['account'], created)
+        self.assertEqual(register.call_args.kwargs['allowed_views'], ['tripsView'])
+
+    def test_admin_can_list_and_update_account_permissions(self):
+        users = [{'id': 'u1', 'username': 'driver1', 'usernameKey': 'driver1', 'display': 'Driver', 'role': 'viewer', 'allowedViews': []}]
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_users', return_value=users), patch('api.service.write_users') as write:
+            listed = user_action_payload('token', {'action': 'list_accounts'})
+            updated = user_action_payload('token', {'action': 'update_account_permissions', 'id': 'u1', 'role': 'driver', 'allowedViews': ['tripsView']})
+        self.assertEqual(listed['accounts'][0]['username'], 'driver1')
+        self.assertEqual(updated['account']['role'], 'driver')
+        self.assertEqual(updated['account']['allowedViews'], ['tripsView'])
+        write.assert_called_once()
+
+    def test_driver_cannot_list_orders_but_can_optimize_trip(self):
+        driver = {'role': 'driver', 'allowedViews': ['tripsView']}
+        with patch('api.service.verify_session_token', return_value=driver):
+            with self.assertRaises(ApiError) as caught:
+                list_entity_payload('token', 'orders')
+        self.assertEqual(caught.exception.status, 403)
+        with patch('api.service.verify_session_token', return_value=driver), patch('api.service.optimize_trip', return_value={'ok': True}) as optimize:
+            result = optimize_trip_payload('token', {'stops': []})
+        self.assertEqual(result, {'ok': True})
+        optimize.assert_called_once_with({'stops': []})
 
     def test_non_admin_cannot_change_finance_password(self):
         with patch('api.service.verify_session_token', return_value={'role': 'finance'}):

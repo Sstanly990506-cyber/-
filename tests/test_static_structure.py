@@ -106,8 +106,13 @@ class StaticStructureTests(unittest.TestCase):
         storage = (ROOT / 'api' / 'storage.py').read_text(encoding='utf-8')
         self.assertIn('createAccountForm', view)
         self.assertIn('financePasswordForm', view)
+        self.assertIn('accountPermissionsList', view)
+        self.assertIn('value="driver"', view)
         self.assertIn("action: 'create_account'", settings)
+        self.assertIn("action: 'update_account_permissions'", settings)
         self.assertIn("action: 'change_finance_password'", settings)
+        self.assertIn('allowedViews', settings)
+        self.assertIn('allowedViews', storage)
         self.assertIn("hash_password(value)", storage)
         self.assertNotIn('e.currentTarget.reset()', settings)
         settings_close = view.index('</form>', view.index('id="settingsForm"'))
@@ -143,7 +148,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('refreshAiCorrectionsBtn', view)
         self.assertIn('/api/data/aiCorrections', orders)
         self.assertIn('exportAiCorrections', orders)
-        self.assertIn("'aiCorrections':{'admin','ops'}", service)
+        self.assertIn("'aiCorrections':'ordersView'", service)
 
     def test_ai_order_recognition_fills_existing_form(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
