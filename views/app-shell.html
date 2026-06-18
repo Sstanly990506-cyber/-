@@ -71,7 +71,6 @@
           <aside class="card side-menu">
             <button class="btn side-btn active" type="button" data-order-screen="list">工單列表</button>
             <button class="btn side-btn" type="button" data-order-screen="form">新增工單</button>
-            <button class="btn side-btn" type="button" data-order-screen="pricing">客人價格</button>
           </aside>
 
           <article id="ordersListScreen" class="card">
@@ -108,6 +107,9 @@
                 <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="真正談價格、收款的客人" />
                 <datalist id="billingCustomerOptions"></datalist>
               </label>
+              <div class="actions span-2">
+                <button id="openPriceRulesFromOrderBtn" class="btn" type="button" data-order-screen="pricing">設定客人價格</button>
+              </div>
 
               <label>上游客戶（可搜尋）
                 <input id="upstreamInput" list="upstreamOptions" placeholder="輸入關鍵字，例如：彩" />
@@ -154,8 +156,13 @@
           </article>
         <div id="ordersPricingScreen" class="hidden">
           <article class="card">
-            <h3>客人價格表</h3>
-            <p class="sub">依客人、品項/上光種類與尺寸設定每張單價。新增工單時，符合的價格會自動估算總價。</p>
+            <div class="section-head">
+              <div>
+                <h3>客人價格表</h3>
+                <p class="sub">依客人、品項/上光種類與尺寸設定每張單價。新增工單時，符合的價格會自動估算總價。</p>
+              </div>
+              <button class="btn" type="button" data-order-screen="form">返回新增工單</button>
+            </div>
             <form id="priceRuleForm" class="form-grid compact">
               <input id="priceRuleId" type="hidden" />
               <label>客人<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>
