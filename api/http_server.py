@@ -4,7 +4,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs,unquote,urlparse
 from api._common import get_bearer_token,json_response,read_json_body
-from api.service import ApiError,backup_payload,bootstrap_payload,changes_payload,clear_test_data_payload,delete_entity_payload,get_state_payload,health_payload,list_entity_payload,optimize_trip_payload,recognize_order_payload,recognize_order_status_payload,report_order_correction_payload,report_payload,restore_backup_payload,update_state_payload,upsert_entity_payload,user_action_payload
+from api.service import ApiError,backup_payload,bootstrap_payload,capacity_payload,changes_payload,clear_test_data_payload,delete_entity_payload,get_state_payload,health_payload,list_entity_payload,optimize_trip_payload,recognize_order_payload,recognize_order_status_payload,report_order_correction_payload,report_payload,restore_backup_payload,update_state_payload,upsert_entity_payload,user_action_payload
 from api.storage import BASE_DIR
 SENSITIVE_SUFFIXES={'.db','.sqlite','.sqlite3','.py','.bat','.ps1','.sh'};BLOCKED_PATH_PARTS={'data'};PUBLIC_ROOT=Path(BASE_DIR).resolve()
 def is_sensitive_path(path):return any(path.split('?',1)[0].lower().endswith(s) for s in SENSITIVE_SUFFIXES)
@@ -29,6 +29,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         elif path=='/api/bootstrap':self.send_service_response(bootstrap_payload,token)
         elif path in {'/api/state','/state'}:self.send_service_response(get_state_payload,token)
         elif path=='/api/admin/backup':self.send_service_response(backup_payload,token)
+        elif path=='/api/admin/capacity':self.send_service_response(capacity_payload,token)
         elif path=='/api/changes':self.send_service_response(changes_payload,token,q.get('since',['0'])[0],q.get('limit',['1000'])[0])
         elif path=='/api/reports/summary':self.send_service_response(report_payload,token)
         elif path=='/api/orders/recognize/status':self.send_service_response(recognize_order_status_payload,token)

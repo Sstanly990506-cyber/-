@@ -367,6 +367,18 @@ th, td {
   border-radius: 16px;
   background: rgba(15, 23, 42, 0.42);
 }
+.capacity-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 12px 0;
+}
+.capacity-grid small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 600;
+}
 th {
   color: #f8fafc;
   position: sticky;

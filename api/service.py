@@ -51,6 +51,32 @@ def merge_state_for_account(current,incoming,account):
     if 'syncTick' in incoming:merged['syncTick']=incoming['syncTick']
     return merged
 def health_payload():ensure_storage();return {'ok':True,'database':get_storage_mode()}
+def capacity_payload(token):
+    account=require_account(token)
+    if account.get('role')!='admin':raise ApiError('admin role required',403)
+    started=time.perf_counter();ensure_storage();storage_ms=(time.perf_counter()-started)*1000
+    entities=['orders','customers','receivables','payables','inventory','audits','events','aiCorrections']
+    counts={};timings={};errors={}
+    for entity in entities:
+        start=time.perf_counter()
+        try:
+            page=list_records(entity,1,1)
+            counts[entity]=int(page.get('total') or 0)
+            timings[entity]=round((time.perf_counter()-start)*1000,1)
+        except Exception as err:
+            counts[entity]=0;timings[entity]=round((time.perf_counter()-start)*1000,1);errors[entity]=str(err)
+    total=sum(counts.values())
+    warnings=[]
+    if get_storage_mode()!='postgresql':warnings.append('正式大量資料建議使用 PostgreSQL；本機 JSON 適合開發或少量資料。')
+    if counts.get('orders',0)>=100000:warnings.append('工單超過 100,000 筆，建議開始封存舊工單與分段報表。')
+    elif counts.get('orders',0)>=50000:warnings.append('工單超過 50,000 筆，手機列表與報表要持續觀察速度。')
+    if total>=200000:warnings.append('總資料量超過 200,000 筆，建議定期備份並拆分大型報表。')
+    slow=[entity for entity,ms in timings.items() if ms>=500]
+    if slow:warnings.append(f"以下資料讀取偏慢：{', '.join(slow)}。")
+    status='ok'
+    if warnings:status='watch'
+    if errors:status='error'
+    return {'ok':True,'status':status,'storageMode':get_storage_mode(),'checkedAt':int(time.time()*1000),'storageMs':round(storage_ms,1),'counts':counts,'totalRecords':total,'timingsMs':timings,'warnings':warnings,'errors':errors}
 def bootstrap_payload(token):
     account=require_account(token);source=filter_state_for_account(read_state(),account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True;return payload
 def get_state_payload(token):

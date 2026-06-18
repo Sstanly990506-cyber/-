@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, _fill_recognized_customer_address, backup_payload, changes_payload, clear_test_data_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
+from api.service import ApiError, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -118,6 +118,29 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result['backup']['settings']['appTitle'], 'A')
         self.assertEqual(result['backup']['records'], {'orders': []})
         self.assertNotIn('password', str(result['backup']).lower())
+
+    def test_admin_can_read_capacity_payload(self):
+        pages = {
+            'orders': {'total': 10},
+            'customers': {'total': 3},
+            'receivables': {'total': 2},
+            'payables': {'total': 1},
+            'inventory': {'total': 4},
+            'audits': {'total': 5},
+            'events': {'total': 6},
+            'aiCorrections': {'total': 7},
+        }
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.ensure_storage'), patch('api.service.get_storage_mode', return_value='postgresql'), patch('api.service.list_records', side_effect=lambda entity, *_args: pages[entity]):
+            result = capacity_payload('token')
+        self.assertEqual(result['totalRecords'], 38)
+        self.assertEqual(result['counts']['orders'], 10)
+        self.assertEqual(result['status'], 'ok')
+
+    def test_non_admin_cannot_read_capacity_payload(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}):
+            with self.assertRaises(ApiError) as caught:
+                capacity_payload('token')
+        self.assertEqual(caught.exception.status, 403)
 
     def test_restore_backup_requires_confirmation(self):
         with patch('api.service.verify_session_token', return_value={'role': 'admin'}):

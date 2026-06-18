@@ -52,6 +52,16 @@ const PERMISSION_ROLES = [
   ['admin', '管理員'],
 ];
 const PERMISSION_MODULES = MODULE_DEFINITIONS.filter((module) => !['loginView', 'dashboardView', 'settingsView'].includes(module.id));
+const CAPACITY_LABELS = {
+  orders: '工單',
+  customers: '客戶',
+  receivables: '應收款',
+  payables: '應付款',
+  inventory: '庫存',
+  audits: '稽核紀錄',
+  events: '通知事件',
+  aiCorrections: 'AI 修正',
+};
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -95,6 +105,22 @@ function accountPermissionHtml(account) {
       <div class="module-permission-grid">${checks}</div>
       <button class="btn small" type="button" data-save-account-permissions>儲存權限</button>
     </div>`;
+}
+
+function renderCapacity(payload) {
+  const summary = $('capacitySummary');
+  const metrics = $('capacityMetrics');
+  const warnings = $('capacityWarnings');
+  if (!summary || !metrics || !warnings) return;
+  const statusText = payload.status === 'ok' ? '健康' : payload.status === 'watch' ? '需觀察' : '有錯誤';
+  summary.textContent = `${statusText}｜${payload.storageMode || '-'}｜總資料 ${Number(payload.totalRecords || 0).toLocaleString()} 筆｜檢測 ${new Date(Number(payload.checkedAt || Date.now())).toLocaleString()}`;
+  metrics.innerHTML = Object.entries(payload.counts || {}).map(([entity, count]) => {
+    const ms = payload.timingsMs?.[entity] ?? 0;
+    return `<div class="kpi"><span>${CAPACITY_LABELS[entity] || entity}</span><strong>${Number(count || 0).toLocaleString()}</strong><small>${Number(ms || 0).toLocaleString()} ms</small></div>`;
+  }).join('');
+  const lines = [...(payload.warnings || [])];
+  Object.entries(payload.errors || {}).forEach(([entity, message]) => lines.push(`${CAPACITY_LABELS[entity] || entity} 檢測失敗：${message}`));
+  warnings.innerHTML = lines.length ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('') : '<li>目前沒有明顯風險。</li>';
 }
 
 function fillForm(settings) {
@@ -330,12 +356,27 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     $('accountPermissionsList').innerHTML = (data.accounts || []).map(accountPermissionHtml).join('') || '<p class="sub">目前沒有帳號資料。</p>';
   };
 
+  const loadCapacity = async () => {
+    if (state.userRole !== 'admin' || !$('capacitySummary')) return;
+    $('capacitySummary').textContent = '檢測中...';
+    const res = await fetch('/api/admin/capacity', { headers: adminHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderCapacity(data);
+  };
+
   renderNewAccountPermissions();
   loadAccounts().catch((err) => console.warn('account permission list failed', err));
+  loadCapacity().catch((err) => {
+    if ($('capacitySummary')) $('capacitySummary').textContent = `容量檢測失敗：${err.message}`;
+  });
 
   $('newAccountRole')?.addEventListener('change', renderNewAccountPermissions);
   $('refreshAccountsBtn')?.addEventListener('click', () => {
     loadAccounts().catch((err) => alert(`刷新帳號失敗：${err.message}`));
+  });
+  $('refreshCapacityBtn')?.addEventListener('click', () => {
+    loadCapacity().catch((err) => alert(`容量檢測失敗：${err.message}`));
   });
   $('accountPermissionsList')?.addEventListener('change', (e) => {
     const select = e.target.closest('[data-account-role]');

@@ -721,6 +721,14 @@
             <div id="accountPermissionsList" class="account-permissions-list"></div>
           </article>
           <article class="card">
+            <h3>系統健康 / 容量監控</h3>
+            <p class="sub">檢查目前資料量、儲存模式與 API 速度，提早知道哪裡可能開始變慢。</p>
+            <div class="actions"><button class="btn primary" type="button" id="refreshCapacityBtn">重新檢測</button></div>
+            <div id="capacitySummary" class="hero-badge">尚未檢測</div>
+            <div id="capacityMetrics" class="capacity-grid"></div>
+            <ul id="capacityWarnings" class="list"></ul>
+          </article>
+          <article class="card">
             <h3>更改財經系統密碼</h3>
             <p class="sub">不需要舊密碼。新密碼會加密儲存，至少需要 8 個字元。</p>
             <form id="financePasswordForm" class="form-grid compact">
