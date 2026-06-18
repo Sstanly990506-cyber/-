@@ -1,9 +1,10 @@
 window.__appBootstrapped = false;
 
 const mount = document.getElementById('appMount');
+const apiWarmup = fetch('/api/health', { cache: 'no-store' }).catch(() => null);
 
 async function loadApplicationView() {
-  const response = await fetch('views/app-shell.html', { cache: 'no-store' });
+  const response = await fetch('views/app-shell.html');
   if (!response.ok) throw new Error(`無法載入畫面元件：HTTP ${response.status}`);
 
   const source = new DOMParser().parseFromString(await response.text(), 'text/html');
@@ -12,6 +13,7 @@ async function loadApplicationView() {
 
   mount.replaceWith(document.importNode(applicationMain, true));
   await import('./main.js');
+  apiWarmup.catch(() => null);
 }
 
 loadApplicationView().catch((error) => {
