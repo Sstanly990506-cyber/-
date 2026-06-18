@@ -71,6 +71,7 @@
           <aside class="card side-menu">
             <button class="btn side-btn active" type="button" data-order-screen="list">工單列表</button>
             <button class="btn side-btn" type="button" data-order-screen="form">新增工單</button>
+            <button class="btn side-btn" type="button" data-order-screen="pricing">客人價格</button>
           </aside>
 
           <article id="ordersListScreen" class="card">
@@ -151,6 +152,37 @@
               </div>
             </form>
           </article>
+        <div id="ordersPricingScreen" class="hidden">
+          <article class="card">
+            <h3>客人價格表</h3>
+            <p class="sub">依客人、品項/上光種類與尺寸設定每張單價。新增工單時，符合的價格會自動估算總價。</p>
+            <form id="priceRuleForm" class="form-grid compact">
+              <input id="priceRuleId" type="hidden" />
+              <label>客人<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>
+              <label>品項 / 上光種類<input id="priceRuleGloss" list="glossOptions" placeholder="例如：上 A 光" /></label>
+              <label>長<input id="priceRuleLength" type="number" min="0" step="0.01" required /></label>
+              <label>寬<input id="priceRuleWidth" type="number" min="0" step="0.01" required /></label>
+              <label>尺寸單位
+                <select id="priceRuleUnit">
+                  <option value="mm">mm</option>
+                  <option value="cm">cm</option>
+                  <option value="inch">英吋</option>
+                  <option value="tai-inch">台吋</option>
+                </select>
+              </label>
+              <label>每張單價<input id="priceRuleUnitPrice" type="number" min="0" step="0.01" required /></label>
+              <label>備註<input id="priceRuleNote" placeholder="例如：常用價格、含稅或未稅" /></label>
+              <button class="btn primary" type="submit">儲存客人價格</button>
+              <button class="btn ghost" type="button" id="clearPriceRuleBtn">清空價格表單</button>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>客人</th><th>品項</th><th>尺寸</th><th>每張</th><th>操作</th></tr></thead>
+                <tbody id="priceRulesTbody"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
         </div>
         <article class="card">
           <div class="section-head">
@@ -401,7 +433,6 @@
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
             <button class="btn" type="button" data-finance-screen="workspace">發票 / 報表</button>
-            <button class="btn" type="button" data-finance-screen="pricing">客人價格</button>
             <button class="btn" type="button" data-finance-screen="main">財經主頁</button>
             <button class="btn" data-back>返回導航</button>
           </div>
@@ -496,37 +527,6 @@
           </div>
 
 
-        <div id="financePricingScreen" class="hidden">
-          <article class="card">
-            <h3>客人價格表</h3>
-            <p class="sub">依客人、品項/上光種類與尺寸設定每張單價。新增工單時，符合的價格會自動估算總價。</p>
-            <form id="priceRuleForm" class="form-grid compact">
-              <input id="priceRuleId" type="hidden" />
-              <label>客人<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>
-              <label>品項 / 上光種類<input id="priceRuleGloss" list="glossOptions" placeholder="例如：上 A 光" /></label>
-              <label>長<input id="priceRuleLength" type="number" min="0" step="0.01" required /></label>
-              <label>寬<input id="priceRuleWidth" type="number" min="0" step="0.01" required /></label>
-              <label>尺寸單位
-                <select id="priceRuleUnit">
-                  <option value="mm">mm</option>
-                  <option value="cm">cm</option>
-                  <option value="inch">英吋</option>
-                  <option value="tai-inch">台吋</option>
-                </select>
-              </label>
-              <label>每張單價<input id="priceRuleUnitPrice" type="number" min="0" step="0.01" required /></label>
-              <label>備註<input id="priceRuleNote" placeholder="例如：常用價格、含稅或未稅" /></label>
-              <button class="btn primary" type="submit">儲存客人價格</button>
-              <button class="btn ghost" type="button" id="clearPriceRuleBtn">清空價格表單</button>
-            </form>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>客人</th><th>品項</th><th>尺寸</th><th>每張</th><th>操作</th></tr></thead>
-                <tbody id="priceRulesTbody"></tbody>
-              </table>
-            </div>
-          </article>
-        </div>
         <div id="financeWorkspaceScreen" class="split finance-split hidden">
           <article id="financeInvoiceScreen" class="card">
             <h3>發票系統（左）</h3>

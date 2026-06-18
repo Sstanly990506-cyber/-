@@ -1,7 +1,7 @@
 import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js';
 const ENTITY_MAP={customers:'customers',orders:'orders',audits:'audits',receivables:'receivables',payables:'payables',priceRules:'priceRules',inventoryItems:'inventory',systemEvents:'events'};
 const REVERSE_ENTITY=Object.fromEntries(Object.entries(ENTITY_MAP).map(([key,value])=>[value,key]));
-const ROLE_KEYS={admin:Object.keys(ENTITY_MAP),ops:['customers','orders','inventoryItems','systemEvents'],finance:['receivables','payables','priceRules','systemEvents'],audit:['audits','systemEvents'],driver:[],viewer:[]};
+const ROLE_KEYS={admin:Object.keys(ENTITY_MAP),ops:['customers','orders','priceRules','inventoryItems','systemEvents'],finance:['receivables','payables','systemEvents'],audit:['audits','systemEvents'],driver:[],viewer:[]};
 const PAGER_ANCHORS={customers:'customersTbody',orders:'ordersTbody',audits:'auditTbody',inventoryItems:'inventoryTbody'};
 const SEARCH_INPUTS={customers:'customerSearch',orders:'orderSearch',inventoryItems:'inventorySearch'};
 export const state={user:null,userRole:'viewer',allowedViews:null,glossOptions:[],customers:[],orders:[],audits:[],receivables:[],payables:[],priceRules:[],systemEvents:[],settings:getDefaultSettings(),inventoryItems:[],pagination:{},serverReport:null,reportRange:{start:'',end:''},financeScreen:'main',auditFilter:{start:'',end:'',keyword:'',user:'',field:'',anomalyOnly:false},orderStatusFilter:'全部',orderScreen:'list',authToken:null};
