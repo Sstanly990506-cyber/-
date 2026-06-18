@@ -564,9 +564,10 @@ export function renderFinance(state) {
   renderMonthClose(state, reportA);
   renderPriceRules(state);
 
-  const isMain = state.financeScreen === 'main';
-  $('financeMainScreen').classList.toggle('hidden', !isMain);
-  $('financeWorkspaceScreen').classList.toggle('hidden', isMain);
+  const activeScreen = state.financeScreen || 'main';
+  $('financeMainScreen').classList.toggle('hidden', activeScreen !== 'main');
+  $('financeWorkspaceScreen').classList.toggle('hidden', activeScreen !== 'workspace');
+  $('financePricingScreen')?.classList.toggle('hidden', activeScreen !== 'pricing');
 
   document.querySelectorAll('[data-finance-screen]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.financeScreen === state.financeScreen);
