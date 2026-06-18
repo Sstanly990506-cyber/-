@@ -37,6 +37,7 @@ const ROLE_PERMS = {
   ops: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView'],
   finance: ['dashboardView', 'financeView', 'notificationsView'],
   audit: ['dashboardView', 'auditView', 'notificationsView'],
+  driver: ['dashboardView', 'tripsView'],
   viewer: ['dashboardView', 'notificationsView'],
 };
 
@@ -59,6 +60,8 @@ function applySyncUi({ badgeText, detailText, ok }) {
 }
 
 function getRolePerms() {
+  if (state.userRole === 'admin') return [...ROLE_PERMS.admin, 'settingsView'];
+  if (Array.isArray(state.allowedViews)) return ['dashboardView', ...state.allowedViews];
   return ROLE_PERMS[state.userRole || 'viewer'] || ROLE_PERMS.viewer;
 }
 
@@ -71,7 +74,7 @@ function hasViewPermission(viewId) {
   if (viewId === 'loginView' || viewId === 'dashboardView') return true;
   if (viewId === 'settingsView') return state.userRole === 'admin';
   if (!isModuleEnabled(viewId)) return false;
-  if (state.settings?.openAccess) return true;
+  if (!Array.isArray(state.allowedViews) && state.settings?.openAccess) return true;
   return getRolePerms().includes(viewId);
 }
 
@@ -115,7 +118,7 @@ function applyRoleUi() {
     const targetView = card.dataset.target;
     const enabled = isModuleEnabled(targetView);
     const allowed = hasViewPermission(targetView);
-    card.hidden = !enabled;
+    card.hidden = !enabled || !allowed;
     card.disabled = !enabled;
     card.classList.toggle('is-locked', !allowed);
     card.classList.toggle('is-hidden-module', !enabled);
@@ -311,6 +314,11 @@ function renderDashboard() {
       ['可用功能', moduleCount, null],
     ],
   };
+  summaries.driver = [
+    ['車趟系統', '可使用', 'tripsView'],
+    ['可用功能', moduleCount, null],
+    ['工單資訊', '已隱藏', null],
+  ];
   (summaries[state.userRole] || summaries.viewer).forEach(([label, value, target], index) => {
     const position = index + 1;
     if ($(`dashPriorityLabel${position}`)) $(`dashPriorityLabel${position}`).textContent = label;
@@ -448,6 +456,7 @@ function bindCoreEvents() {
     setAuthToken(token);
     state.user = account.display || account.username;
     state.userRole = account.role || 'viewer';
+    state.allowedViews = Array.isArray(account.allowedViews) ? account.allowedViews : null;
     mountInternalViews();
     const prefix = state.settings?.welcomePrefix || '你好';
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
@@ -476,6 +485,7 @@ function bindCoreEvents() {
     saveState();
     state.user = null;
     state.userRole = 'viewer';
+    state.allowedViews = null;
     financeUnlockedUntil = 0;
     setAuthToken(null);
     showView('loginView');

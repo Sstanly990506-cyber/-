@@ -54,6 +54,26 @@ BUILTIN_ACCOUNTS = [
     {'username': 'audit', 'password_env': 'INIT_AUDIT_PASSWORD', 'role': 'audit', 'display': '稽核主管'},
 ]
 
+MODULE_VIEW_IDS = (
+    'ordersView',
+    'customersView',
+    'tripsView',
+    'opsCenterView',
+    'inventoryView',
+    'notificationsView',
+    'financeView',
+    'auditView',
+)
+ROLE_DEFAULT_ALLOWED_VIEWS = {
+    'admin': list(MODULE_VIEW_IDS),
+    'ops': ['ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView'],
+    'finance': ['financeView', 'notificationsView'],
+    'audit': ['auditView', 'notificationsView'],
+    'driver': ['tripsView'],
+    'viewer': ['notificationsView'],
+}
+VALID_ROLES = set(ROLE_DEFAULT_ALLOWED_VIEWS)
+
 DB_INIT_LOCK = Lock()
 DB_INITIALIZED = False
 STORAGE_READY = False
@@ -128,12 +148,32 @@ def verify_password(password: str, encoded: str) -> bool:
     return hmac.compare_digest(str(password or ''), value)
 
 
+def normalize_allowed_views(value, role: str = 'viewer') -> list[str]:
+    role_key = str(role or 'viewer').strip() or 'viewer'
+    if isinstance(value, str):
+        source = [part.strip() for part in value.split(',')]
+    elif isinstance(value, (list, tuple, set)):
+        source = list(value)
+    else:
+        source = ROLE_DEFAULT_ALLOWED_VIEWS.get(role_key, ROLE_DEFAULT_ALLOWED_VIEWS['viewer'])
+    allowed = []
+    seen = set()
+    for view_id in source:
+        key = str(view_id or '').strip()
+        if key in MODULE_VIEW_IDS and key not in seen:
+            allowed.append(key)
+            seen.add(key)
+    return allowed
+
+
 def sanitize_account_public(user: dict) -> dict:
+    role = user.get('role') or 'viewer'
     return {
         'id': user.get('id') or '',
         'username': user.get('username') or '',
         'display': user.get('display') or user.get('username') or '',
-        'role': user.get('role') or 'viewer',
+        'role': role,
+        'allowedViews': normalize_allowed_views(user.get('allowedViews'), role),
         'createdAt': user.get('createdAt') or '',
     }
 
@@ -152,6 +192,7 @@ def normalize_user_record(user: dict, source: str = 'legacy-import') -> dict | N
         'password': encoded,
         'display': str((user or {}).get('display') or username).strip() or username,
         'role': str((user or {}).get('role') or 'viewer').strip() or 'viewer',
+        'allowedViews': normalize_allowed_views((user or {}).get('allowedViews'), (user or {}).get('role') or 'viewer'),
         'createdAt': str((user or {}).get('createdAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())),
         'source': str((user or {}).get('source') or source),
     }
@@ -190,6 +231,7 @@ def ensure_postgres_storage():
                     )
                     '''
                 )
+                cur.execute('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS allowed_views JSONB')
                 cur.execute(
                     '''
                     CREATE TABLE IF NOT EXISTS app_secrets (
@@ -296,7 +338,7 @@ def read_users():
             with conn.cursor() as cur:
                 cur.execute(
                     '''
-                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source
+                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views
                     FROM app_users
                     ORDER BY created_at DESC
                     '''
@@ -310,6 +352,7 @@ def read_users():
                 'password': row.get('password_hash'),
                 'display': row.get('display_name'),
                 'role': row.get('role'),
+                'allowedViews': row.get('allowed_views'),
                 'createdAt': row.get('created_at'),
                 'source': row.get('source'),
             }
@@ -330,8 +373,8 @@ def write_users(users):
                     for user in users:
                         cur.execute(
                             '''
-                            INSERT INTO app_users (id, username, username_key, password_hash, display_name, role, created_at, source)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            INSERT INTO app_users (id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ''',
                             (
                                 user['id'],
@@ -342,6 +385,7 @@ def write_users(users):
                                 user['role'],
                                 user['createdAt'],
                                 user['source'],
+                                Jsonb(normalize_allowed_views(user.get('allowedViews'), user.get('role'))),
                             ),
                         )
             conn.commit()
@@ -367,6 +411,7 @@ def create_session_token(account: dict) -> str:
         'sub': account.get('username') or '',
         'display': account.get('display') or account.get('username') or '',
         'role': account.get('role') or 'viewer',
+        'allowedViews': normalize_allowed_views(account.get('allowedViews'), account.get('role') or 'viewer'),
         'iat': now,
         'exp': now + SESSION_TTL_SECONDS,
     }
@@ -397,6 +442,7 @@ def verify_session_token(token: str) -> dict | None:
         'username': username,
         'display': str(payload.get('display') or username),
         'role': str(payload.get('role') or 'viewer'),
+        'allowedViews': normalize_allowed_views(payload.get('allowedViews'), payload.get('role') or 'viewer'),
         'createdAt': '',
     }
 
@@ -575,8 +621,8 @@ def migrate_legacy_users_once():
                                 continue
                             cur.execute(
                                 '''
-                                INSERT INTO app_users (id, username, username_key, password_hash, display_name, role, created_at, source)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                INSERT INTO app_users (id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                                 ON CONFLICT (username_key) DO NOTHING
                                 ''',
                                 (
@@ -588,6 +634,7 @@ def migrate_legacy_users_once():
                                     normalized['role'],
                                     normalized['createdAt'],
                                     'legacy-import',
+                                    Jsonb(normalized['allowedViews']),
                                 ),
                             )
                     if 'users' in state_json:
@@ -624,7 +671,7 @@ def migrate_legacy_users_once():
             write_local_state_file(local_state)
 
 
-def register_user(username: str, password: str, display: str, role: str = 'viewer', source: str = 'register'):
+def register_user(username: str, password: str, display: str, role: str = 'viewer', source: str = 'register', allowed_views=None):
     normalized = normalize_user_record(
         {
             'id': str(uuid.uuid4()),
@@ -632,6 +679,7 @@ def register_user(username: str, password: str, display: str, role: str = 'viewe
             'password': password,
             'display': display,
             'role': role,
+            'allowedViews': allowed_views,
             'createdAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'source': source,
         },
@@ -658,7 +706,7 @@ def authenticate_user(username: str, password: str):
             with conn.cursor() as cur:
                 cur.execute(
                     '''
-                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source
+                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views
                     FROM app_users
                     WHERE username_key = %s
                     LIMIT 1
@@ -673,6 +721,7 @@ def authenticate_user(username: str, password: str):
             'username': row.get('username'),
             'display': row.get('display_name'),
             'role': row.get('role'),
+            'allowedViews': row.get('allowed_views'),
             'createdAt': row.get('created_at'),
         })
     users = read_users()
@@ -764,7 +813,10 @@ __all__ = [
     'DEFAULT_APP_STATE',
     'LOCAL_STATE_PATH',
     'LOCAL_USERS_PATH',
+    'MODULE_VIEW_IDS',
     'PsycopgError',
+    'ROLE_DEFAULT_ALLOWED_VIEWS',
+    'VALID_ROLES',
     'authenticate_user',
     'ensure_storage',
     'get_storage_mode',
@@ -778,6 +830,7 @@ __all__ = [
     'filter_state_for_role',
     'get_environment_status',
     'merge_state_for_role',
+    'normalize_allowed_views',
     'verify_finance_module_password',
     'change_finance_module_password',
 ]

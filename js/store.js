@@ -1,10 +1,10 @@
 import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js';
 const ENTITY_MAP={customers:'customers',orders:'orders',audits:'audits',receivables:'receivables',payables:'payables',inventoryItems:'inventory',systemEvents:'events'};
 const REVERSE_ENTITY=Object.fromEntries(Object.entries(ENTITY_MAP).map(([key,value])=>[value,key]));
-const ROLE_KEYS={admin:Object.keys(ENTITY_MAP),ops:['customers','orders','inventoryItems','systemEvents'],finance:['receivables','payables','systemEvents'],audit:['audits','systemEvents'],viewer:[]};
+const ROLE_KEYS={admin:Object.keys(ENTITY_MAP),ops:['customers','orders','inventoryItems','systemEvents'],finance:['receivables','payables','systemEvents'],audit:['audits','systemEvents'],driver:[],viewer:[]};
 const PAGER_ANCHORS={customers:'customersTbody',orders:'ordersTbody',audits:'auditTbody',inventoryItems:'inventoryTbody'};
 const SEARCH_INPUTS={customers:'customerSearch',orders:'orderSearch',inventoryItems:'inventorySearch'};
-export const state={user:null,userRole:'viewer',glossOptions:[],customers:[],orders:[],audits:[],receivables:[],payables:[],systemEvents:[],settings:getDefaultSettings(),inventoryItems:[],pagination:{},serverReport:null,reportRange:{start:'',end:''},financeScreen:'main',auditFilter:{start:'',end:'',keyword:'',user:'',field:'',anomalyOnly:false},orderStatusFilter:'全部',orderScreen:'list',authToken:null};
+export const state={user:null,userRole:'viewer',allowedViews:null,glossOptions:[],customers:[],orders:[],audits:[],receivables:[],payables:[],systemEvents:[],settings:getDefaultSettings(),inventoryItems:[],pagination:{},serverReport:null,reportRange:{start:'',end:''},financeScreen:'main',auditFilter:{start:'',end:'',keyword:'',user:'',field:'',anomalyOnly:false},orderStatusFilter:'全部',orderScreen:'list',authToken:null};
 let onRefresh=()=>{},onSyncUi=()=>{},syncTimer=null,changeCursor=0,initializedRemote=false,searchBound=false;const snapshots={};
 function headers(json=false){return {...(json?{'Content-Type':'application/json'}:{}),...(state.authToken?{Authorization:`Bearer ${state.authToken}`}:{})};}
 async function jsonRequest(url,options={}){const res=await fetch(url,options);let data=null;try{data=await res.json();}catch{}if(!res.ok)throw new Error(data?.error||`HTTP ${res.status}`);return data;}

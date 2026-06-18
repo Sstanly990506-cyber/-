@@ -697,14 +697,24 @@
                   <option value="ops">作業人員</option>
                   <option value="finance">財經人員</option>
                   <option value="audit">稽核人員</option>
+                  <option value="driver">司機</option>
                   <option value="viewer">唯讀人員</option>
                   <option value="admin">管理員</option>
                 </select>
+              </label>
+              <label class="span-2">可使用功能
+                <div id="newAccountModules" class="module-permission-grid"></div>
               </label>
               <label>密碼<input id="newAccountPassword" type="password" minlength="8" required /></label>
               <label>確認密碼<input id="newAccountPasswordConfirm" type="password" minlength="8" required /></label>
               <button class="btn primary" type="submit">新增帳戶</button>
             </form>
+          </article>
+          <article class="card">
+            <h3>帳號權限管理</h3>
+            <p class="sub">可針對每個帳號設定能看的系統；例如司機只勾選車趟系統。</p>
+            <div class="actions"><button class="btn" type="button" id="refreshAccountsBtn">刷新帳號</button></div>
+            <div id="accountPermissionsList" class="account-permissions-list"></div>
           </article>
           <article class="card">
             <h3>更改財經系統密碼</h3>

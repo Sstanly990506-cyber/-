@@ -342,6 +342,31 @@ th, td {
   vertical-align: middle;
 }
 .table-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.module-permission-grid,
+.account-permissions-list {
+  display: grid;
+  gap: 10px;
+}
+.module-permission-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.permission-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+}
+.account-permission-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.42);
+}
 th {
   color: #f8fafc;
   position: sticky;

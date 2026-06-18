@@ -35,6 +35,68 @@ function moduleSettingsHtml(settings) {
   }).join('');
 }
 
+const PERMISSION_ROLE_DEFAULTS = {
+  admin: MODULE_DEFINITIONS.map((module) => module.id),
+  ops: ['ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView'],
+  finance: ['financeView', 'notificationsView'],
+  audit: ['auditView', 'notificationsView'],
+  driver: ['tripsView'],
+  viewer: ['notificationsView'],
+};
+const PERMISSION_ROLES = [
+  ['ops', '作業人員'],
+  ['finance', '財經人員'],
+  ['audit', '稽核人員'],
+  ['driver', '司機'],
+  ['viewer', '唯讀人員'],
+  ['admin', '管理員'],
+];
+const PERMISSION_MODULES = MODULE_DEFINITIONS.filter((module) => !['loginView', 'dashboardView', 'settingsView'].includes(module.id));
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
+function defaultViewsForRole(role) {
+  return PERMISSION_ROLE_DEFAULTS[role] || PERMISSION_ROLE_DEFAULTS.viewer;
+}
+
+function renderPermissionChecks(container, selected = []) {
+  if (!container) return;
+  const selectedSet = new Set(selected);
+  container.innerHTML = PERMISSION_MODULES.map((module) => {
+    const label = escapeHtml(module.label);
+    return `<label class="permission-chip"><input type="checkbox" value="${module.id}" ${selectedSet.has(module.id) ? 'checked' : ''} /> ${label}</label>`;
+  }).join('');
+}
+
+function selectedPermissionViews(container) {
+  return [...(container?.querySelectorAll('input[type="checkbox"]:checked') || [])].map((input) => input.value);
+}
+
+function roleOptionsHtml(selectedRole) {
+  return PERMISSION_ROLES.map(([value, label]) => `<option value="${value}" ${value === selectedRole ? 'selected' : ''}>${label}</option>`).join('');
+}
+
+function accountPermissionHtml(account) {
+  const allowed = new Set(account.allowedViews || defaultViewsForRole(account.role));
+  const checks = PERMISSION_MODULES.map((module) => (
+    `<label class="permission-chip"><input data-account-module type="checkbox" value="${module.id}" ${allowed.has(module.id) ? 'checked' : ''} /> ${escapeHtml(module.label)}</label>`
+  )).join('');
+  return `
+    <div class="account-permission-card" data-account-permission-row="${escapeHtml(account.id || account.username)}">
+      <div>
+        <strong>${escapeHtml(account.display || account.username)}</strong>
+        <p class="sub">${escapeHtml(account.username)}｜${escapeHtml(account.role || 'viewer')}</p>
+      </div>
+      <label>角色
+        <select data-account-role>${roleOptionsHtml(account.role || 'viewer')}</select>
+      </label>
+      <div class="module-permission-grid">${checks}</div>
+      <button class="btn small" type="button" data-save-account-permissions>儲存權限</button>
+    </div>`;
+}
+
 function fillForm(settings) {
   const map = {
     settingsAppTitle: settings.appTitle,
@@ -257,6 +319,49 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     return data;
   };
 
+  const renderNewAccountPermissions = () => {
+    const role = $('newAccountRole')?.value || 'viewer';
+    renderPermissionChecks($('newAccountModules'), defaultViewsForRole(role));
+  };
+
+  const loadAccounts = async () => {
+    if (state.userRole !== 'admin' || !$('accountPermissionsList')) return;
+    const data = await adminAction({ action: 'list_accounts' });
+    $('accountPermissionsList').innerHTML = (data.accounts || []).map(accountPermissionHtml).join('') || '<p class="sub">目前沒有帳號資料。</p>';
+  };
+
+  renderNewAccountPermissions();
+  loadAccounts().catch((err) => console.warn('account permission list failed', err));
+
+  $('newAccountRole')?.addEventListener('change', renderNewAccountPermissions);
+  $('refreshAccountsBtn')?.addEventListener('click', () => {
+    loadAccounts().catch((err) => alert(`刷新帳號失敗：${err.message}`));
+  });
+  $('accountPermissionsList')?.addEventListener('change', (e) => {
+    const select = e.target.closest('[data-account-role]');
+    if (!select) return;
+    const row = select.closest('[data-account-permission-row]');
+    const selected = defaultViewsForRole(select.value);
+    row?.querySelectorAll('[data-account-module]').forEach((input) => {
+      input.checked = selected.includes(input.value);
+    });
+  });
+  $('accountPermissionsList')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-save-account-permissions]');
+    if (!btn) return;
+    const row = btn.closest('[data-account-permission-row]');
+    if (!row) return;
+    try {
+      const role = row.querySelector('[data-account-role]')?.value || 'viewer';
+      const allowedViews = [...row.querySelectorAll('[data-account-module]:checked')].map((input) => input.value);
+      await adminAction({ action: 'update_account_permissions', id: row.dataset.accountPermissionRow, role, allowedViews });
+      alert('帳號權限已更新。下次登入會套用新權限。');
+      await loadAccounts();
+    } catch (err) {
+      alert(`更新帳號權限失敗：${err.message}`);
+    }
+  });
+
   const downloadJson = (filename, value) => {
     const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json;charset=utf-8' });
     const link = document.createElement('a');
@@ -302,9 +407,12 @@ export function bindSettingsEvents(state, saveState, renderAll) {
         username: $('newAccountUsername')?.value.trim(),
         display: $('newAccountDisplay')?.value.trim(),
         role: $('newAccountRole')?.value,
+        allowedViews: selectedPermissionViews($('newAccountModules')),
         password,
       });
       form?.reset();
+      renderNewAccountPermissions();
+      await loadAccounts();
       alert('帳戶已新增。');
     } catch (err) {
       alert(`新增帳戶失敗：${err.message}`);
