@@ -157,6 +157,23 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('getMonthCloseData', finance)
         self.assertIn('exportCustomerStatement', finance)
 
+    def test_customer_price_rules_are_present(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        finance = (ROOT / 'js' / 'finance.js').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        records = (ROOT / 'api' / 'records.py').read_text(encoding='utf-8')
+        service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
+        self.assertIn('priceRuleForm', view)
+        self.assertIn('priceRulesTbody', view)
+        self.assertIn('buildPriceRuleFromForm', finance)
+        self.assertIn('data-edit-price-rule', finance)
+        self.assertIn('findCustomerPriceRule', orders)
+        self.assertIn('estimateOrderPriceFromRule', orders)
+        self.assertIn("priceRules:'priceRules'", store)
+        self.assertIn("'priceRules': 'priceRules'", records)
+        self.assertIn("'priceRules':'financeView'", service)
+
     def test_ai_correction_center_is_present(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')

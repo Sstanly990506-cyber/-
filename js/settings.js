@@ -57,6 +57,7 @@ const CAPACITY_LABELS = {
   customers: '客戶',
   receivables: '應收款',
   payables: '應付款',
+  priceRules: '客人價格',
   inventory: '庫存',
   audits: '稽核紀錄',
   events: '通知事件',
