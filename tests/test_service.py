@@ -23,10 +23,12 @@ class ServiceTests(unittest.TestCase):
 
     def test_login_returns_session(self):
         account = {'username': 'ops', 'display': 'Ops', 'role': 'ops'}
-        with patch('api.service.authenticate_user', return_value=account), patch('api.service.create_session_token', return_value='token'):
+        bootstrap = {'scalableDataApi': True, 'initialPages': {'orders': {'items': []}}}
+        with patch('api.service.authenticate_user', return_value=account), patch('api.service.create_session_token', return_value='token'), patch('api.service.build_bootstrap_payload', return_value=bootstrap):
             result = user_action_payload('', {'action': 'login', 'username': 'ops', 'password': 'secret'})
         self.assertEqual(result['token'], 'token')
         self.assertEqual(result['account'], account)
+        self.assertEqual(result['bootstrap'], bootstrap)
 
     def test_session_verification_does_not_query_users(self):
         account = {'username': 'ops', 'display': 'Ops', 'role': 'ops'}
@@ -120,20 +122,21 @@ class ServiceTests(unittest.TestCase):
         self.assertNotIn('password', str(result['backup']).lower())
 
     def test_admin_can_read_capacity_payload(self):
-        pages = {
-            'orders': {'total': 10},
-            'customers': {'total': 3},
-            'receivables': {'total': 2},
-            'payables': {'total': 1},
-            'inventory': {'total': 4},
-            'audits': {'total': 5},
-            'events': {'total': 6},
-            'aiCorrections': {'total': 7},
+        counts = {
+            'orders': 10,
+            'customers': 3,
+            'receivables': 2,
+            'payables': 1,
+            'inventory': 4,
+            'audits': 5,
+            'events': 6,
+            'aiCorrections': 7,
         }
-        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.ensure_storage'), patch('api.service.get_storage_mode', return_value='postgresql'), patch('api.service.list_records', side_effect=lambda entity, *_args: pages[entity]):
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.ensure_storage'), patch('api.service.get_storage_mode', return_value='postgresql'), patch('api.service.count_records_by_entity', return_value=(counts, 12.3)):
             result = capacity_payload('token')
         self.assertEqual(result['totalRecords'], 38)
         self.assertEqual(result['counts']['orders'], 10)
+        self.assertEqual(result['countMs'], 12.3)
         self.assertEqual(result['status'], 'ok')
 
     def test_non_admin_cannot_read_capacity_payload(self):

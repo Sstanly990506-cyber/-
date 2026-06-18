@@ -7,6 +7,7 @@ import {
   startStoreSync,
   saveState,
   pullServerState,
+  hydrateBootstrap,
   setAuthToken,
   getIntegrityReport,
   appendSystemEvent,
@@ -95,7 +96,7 @@ async function callUserApi(payload) {
     err.status = res.status;
     throw err;
   }
-  return { account: data.account, token: data.token || '' };
+  return { account: data.account, token: data.token || '', bootstrap: data.bootstrap || null };
 }
 
 function renderDashboardNavCards() {
@@ -444,10 +445,12 @@ function bindCoreEvents() {
 
     let account = null;
     let token = '';
+    let bootstrap = null;
     try {
       const session = await callUserApi({ action: 'login', username, password });
       account = session.account;
       token = session.token;
+      bootstrap = session.bootstrap;
     } catch (err) {
       if (err?.status === 401 || err?.status === 403) return alert('伺服器拒絕登入或權限不足，請確認帳號權限設定。');
       return alert(err?.message || '登入失敗，請確認帳號密碼');
@@ -457,6 +460,7 @@ function bindCoreEvents() {
     state.user = account.display || account.username;
     state.userRole = account.role || 'viewer';
     state.allowedViews = Array.isArray(account.allowedViews) ? account.allowedViews : null;
+    if (bootstrap) hydrateBootstrap(bootstrap, '登入預載');
     mountInternalViews();
     const prefix = state.settings?.welcomePrefix || '你好';
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;

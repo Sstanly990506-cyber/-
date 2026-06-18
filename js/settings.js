@@ -112,17 +112,14 @@ function renderCapacity(payload) {
   const metrics = $('capacityMetrics');
   const warnings = $('capacityWarnings');
   if (!summary || !metrics || !warnings) return;
-  const statusText = payload.status === 'ok' ? '健康' : payload.status === 'watch' ? '需觀察' : '有錯誤';
-  summary.textContent = `${statusText}｜${payload.storageMode || '-'}｜總資料 ${Number(payload.totalRecords || 0).toLocaleString()} 筆｜檢測 ${new Date(Number(payload.checkedAt || Date.now())).toLocaleString()}`;
-  metrics.innerHTML = Object.entries(payload.counts || {}).map(([entity, count]) => {
-    const ms = payload.timingsMs?.[entity] ?? 0;
-    return `<div class="kpi"><span>${CAPACITY_LABELS[entity] || entity}</span><strong>${Number(count || 0).toLocaleString()}</strong><small>${Number(ms || 0).toLocaleString()} ms</small></div>`;
-  }).join('');
+  const statusText = payload.status === 'ok' ? '正常' : payload.status === 'watch' ? '需觀察' : '有錯誤';
+  const queryText = payload.countMs != null ? `｜批次查詢 ${Number(payload.countMs || 0).toLocaleString()} ms` : '';
+  summary.textContent = `${statusText}｜${payload.storageMode || '-'}｜總資料 ${Number(payload.totalRecords || 0).toLocaleString()} 筆${queryText}｜檢測 ${new Date(Number(payload.checkedAt || Date.now())).toLocaleString()}`;
+  metrics.innerHTML = Object.entries(payload.counts || {}).map(([entity, count]) => `<div class="kpi"><span>${CAPACITY_LABELS[entity] || entity}</span><strong>${Number(count || 0).toLocaleString()}</strong><small>已批次檢測</small></div>`).join('');
   const lines = [...(payload.warnings || [])];
   Object.entries(payload.errors || {}).forEach(([entity, message]) => lines.push(`${CAPACITY_LABELS[entity] || entity} 檢測失敗：${message}`));
-  warnings.innerHTML = lines.length ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('') : '<li>目前沒有明顯風險。</li>';
+  warnings.innerHTML = lines.length ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('') : '<li>目前沒有明顯容量警訊。</li>';
 }
-
 function fillForm(settings) {
   const map = {
     settingsAppTitle: settings.appTitle,

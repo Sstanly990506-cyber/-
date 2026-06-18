@@ -90,7 +90,11 @@ class StaticStructureTests(unittest.TestCase):
 
     def test_login_does_not_wait_for_all_entity_pages(self):
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
-        self.assertIn('loadEntityPagesInBackground(keys)', store)
+        main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
+        self.assertIn('hydrateBootstrap', store)
+        self.assertIn('initialPages', store)
+        self.assertIn('loadEntityPagesInBackground(missingKeys)', store)
+        self.assertIn('bootstrap: data.bootstrap', main)
         self.assertIn('concurrency=2', store)
         self.assertNotIn('await Promise.all(keys.map', store)
 

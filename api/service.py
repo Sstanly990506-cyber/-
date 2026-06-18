@@ -1,7 +1,7 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
 import time
 import uuid
-from api.records import changes_since, clear_records, delete_record, export_records, list_records, restore_records, upsert_record
+from api.records import changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
 from api.ai_orders import OrderRecognitionError, get_order_recognition_status, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.trip_optimizer import optimize_trip
@@ -23,6 +23,8 @@ def account_can_view(account,view_id):
     if view_id in {'loginView','dashboardView'}:return True
     if (account or {}).get('role')=='admin':return True
     return view_id in normalize_allowed_views((account or {}).get('allowedViews'),(account or {}).get('role') or 'viewer')
+def bootstrap_entities_for_account(account):
+    return [entity for entity,view_id in ENTITY_VIEW.items() if account_can_view(account,view_id)]
 def filter_state_for_account(state,account):
     payload=dict(DEFAULT_APP_STATE)
     for field in DEFAULT_APP_STATE:
@@ -56,29 +58,31 @@ def capacity_payload(token):
     if account.get('role')!='admin':raise ApiError('admin role required',403)
     started=time.perf_counter();ensure_storage();storage_ms=(time.perf_counter()-started)*1000
     entities=['orders','customers','receivables','payables','inventory','audits','events','aiCorrections']
-    counts={};timings={};errors={}
-    for entity in entities:
-        start=time.perf_counter()
-        try:
-            page=list_records(entity,1,1)
-            counts[entity]=int(page.get('total') or 0)
-            timings[entity]=round((time.perf_counter()-start)*1000,1)
-        except Exception as err:
-            counts[entity]=0;timings[entity]=round((time.perf_counter()-start)*1000,1);errors[entity]=str(err)
+    errors={};query_ms=0
+    try:
+        counts,query_ms=count_records_by_entity(entities)
+    except Exception as err:
+        counts={entity:0 for entity in entities};errors['counts']=str(err)
+    timings={entity:0 for entity in entities}
     total=sum(counts.values())
     warnings=[]
-    if get_storage_mode()!='postgresql':warnings.append('正式大量資料建議使用 PostgreSQL；本機 JSON 適合開發或少量資料。')
-    if counts.get('orders',0)>=100000:warnings.append('工單超過 100,000 筆，建議開始封存舊工單與分段報表。')
-    elif counts.get('orders',0)>=50000:warnings.append('工單超過 50,000 筆，手機列表與報表要持續觀察速度。')
-    if total>=200000:warnings.append('總資料量超過 200,000 筆，建議定期備份並拆分大型報表。')
-    slow=[entity for entity,ms in timings.items() if ms>=500]
-    if slow:warnings.append(f"以下資料讀取偏慢：{', '.join(slow)}。")
+    if get_storage_mode()!='postgresql':warnings.append('目前不是 PostgreSQL，正式多人使用建議改用 PostgreSQL。')
+    if counts.get('orders',0)>=100000:warnings.append('工單已超過 100,000 筆，建議加強搜尋索引與封存舊工單。')
+    elif counts.get('orders',0)>=50000:warnings.append('工單已超過 50,000 筆，建議開始規劃封存與查詢優化。')
+    if total>=200000:warnings.append('總資料量已超過 200,000 筆，建議拆分報表或增加資料庫索引。')
+    if query_ms>=1500:warnings.append('資料庫第一次連線偏慢，通常是 Vercel 或資料庫冷啟動；連續操作會變快。')
     status='ok'
     if warnings:status='watch'
     if errors:status='error'
-    return {'ok':True,'status':status,'storageMode':get_storage_mode(),'checkedAt':int(time.time()*1000),'storageMs':round(storage_ms,1),'counts':counts,'totalRecords':total,'timingsMs':timings,'warnings':warnings,'errors':errors}
+    return {'ok':True,'status':status,'storageMode':get_storage_mode(),'checkedAt':int(time.time()*1000),'storageMs':round(storage_ms,1),'countMs':query_ms,'counts':counts,'totalRecords':total,'timingsMs':timings,'warnings':warnings,'errors':errors}
 def bootstrap_payload(token):
-    account=require_account(token);source=filter_state_for_account(read_state(),account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True;return payload
+    return build_bootstrap_payload(require_account(token))
+def build_bootstrap_payload(account,include_pages=True):
+    source=filter_state_for_account(read_state(),account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True
+    if include_pages:
+        try:payload['initialPages']=first_pages_for_entities(bootstrap_entities_for_account(account),100)
+        except Exception as err:payload['initialPagesError']=str(err);payload['initialPages']={}
+    return payload
 def get_state_payload(token):
     account=require_account(token);return filter_state_for_account(read_state(),account)
 def update_state_payload(token,payload):
@@ -160,7 +164,7 @@ def user_action_payload(token,payload):
         if not username or not password:raise ApiError('missing login fields',400)
         account=authenticate_user(username,password)
         if not account:raise ApiError('invalid credentials',401)
-        return {'ok':True,'account':account,'token':create_session_token(account)}
+        return {'ok':True,'account':account,'token':create_session_token(account),'bootstrap':build_bootstrap_payload(account)}
     if action=='verify_finance_password':
         account=require_account(token)
         if not account_can_view(account,'financeView'):raise ApiError('finance role required',403)
