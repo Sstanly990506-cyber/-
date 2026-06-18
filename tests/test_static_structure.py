@@ -68,6 +68,19 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('restoreBackupFile', view)
         self.assertIn('restoreBackupBtn', view)
 
+    def test_capacity_monitor_exists(self):
+        flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
+        builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
+        self.assertIn('/api/admin/capacity', flask_server)
+        self.assertIn('/api/admin/capacity', builtin_server)
+        self.assertIn('capacity_payload', service)
+        self.assertIn('refreshCapacityBtn', view)
+        self.assertIn('capacityMetrics', view)
+        self.assertIn('/api/admin/capacity', settings)
+
     def test_frontend_uses_paged_incremental_storage(self):
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
         self.assertIn('pageSize=100', store)
