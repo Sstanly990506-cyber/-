@@ -1,5 +1,6 @@
 import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
+import { estimateOrderPriceFromRule, findCustomerPriceRule } from './pricing.js';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
@@ -65,6 +66,16 @@ function findSmartPriceSuggestion(state, editingId = '') {
   const sheetCount = Number($('sheetCount').value || 0);
   const area = Number($('sizeLength').value || 0) * Number($('sizeWidth').value || 0);
 
+  const priceRule = findCustomerPriceRule(state, {
+    billingCustomer,
+    glossType,
+    sizeLength: $('sizeLength').value,
+    sizeWidth: $('sizeWidth').value,
+    sizeUnit: $('sizeUnit').value || 'mm',
+  });
+  const ruleEstimate = estimateOrderPriceFromRule(priceRule, sheetCount);
+  if (ruleEstimate) return { estimated: ruleEstimate, source: 'priceRule', rule: priceRule, unitPrice: Number(priceRule.unitPrice || 0) };
+
   const candidates = state.orders.filter((o) => {
     if (editingId && o.id === editingId) return false;
     if (Number(o.totalPrice || 0) <= 0 || Number(o.sheetCount || 0) <= 0) return false;
@@ -83,7 +94,7 @@ function findSmartPriceSuggestion(state, editingId = '') {
   const areaFactor = avgArea > 0 && area > 0 ? area / avgArea : 1;
   const estimated = estBySheet ? Math.max(0, Math.round(estBySheet * areaFactor)) : null;
 
-  return { estimated, candidates: candidates.length, avgPerSheet: Math.round(avgPerSheet) };
+  return { estimated, source: 'history', candidates: candidates.length, avgPerSheet: Math.round(avgPerSheet) };
 }
 
 function updateOrderSmartHint(state) {
@@ -91,14 +102,17 @@ function updateOrderSmartHint(state) {
   if (!hint) return;
   const suggestion = findSmartPriceSuggestion(state, $('orderId').value);
   if (!suggestion || !suggestion.estimated) {
-    hint.textContent = '智能估價：填入客人、上光類型與計算張數後，系統會優先用同一個客人的歷史價格估算。';
+    hint.textContent = '智能估價：輸入客人、上光種類、尺寸與計算張數後，系統會先找客人價格表；沒有符合才用歷史工單估算。';
     return;
   }
-  const basis = $('billingCustomerInput')?.value.trim() ? '同一個客人' : '相近工單';
-  hint.textContent = `智能估價：用 ${suggestion.candidates} 筆${basis}歷史價格推估總價約 NT$ ${suggestion.estimated.toLocaleString()}，平均每張 ${suggestion.avgPerSheet.toLocaleString()}。`;
+  if (suggestion.source === 'priceRule') {
+    hint.textContent = `客人價格表：符合 ${suggestion.rule.customer} / ${suggestion.rule.glossType || '不限品項'} / 每張 NT$ ${suggestion.unitPrice.toLocaleString()}，預估總價 NT$ ${suggestion.estimated.toLocaleString()}。`;
+  } else {
+    const basis = $('billingCustomerInput')?.value.trim() ? '同一個客人' : '相近工單';
+    hint.textContent = `智能估價：使用 ${suggestion.candidates} 筆${basis}相近尺寸紀錄，預估總價約 NT$ ${suggestion.estimated.toLocaleString()}，平均每張 ${suggestion.avgPerSheet.toLocaleString()}。`;
+  }
   if (!$('totalPrice').value) $('totalPrice').value = String(suggestion.estimated);
 }
-
 
 function buildOrderFromForm(state) {
   const sheetCount = Number($('sheetCount').value || 0);

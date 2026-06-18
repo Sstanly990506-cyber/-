@@ -127,6 +127,7 @@ class ServiceTests(unittest.TestCase):
             'customers': 3,
             'receivables': 2,
             'payables': 1,
+            'priceRules': 8,
             'inventory': 4,
             'audits': 5,
             'events': 6,
@@ -134,8 +135,9 @@ class ServiceTests(unittest.TestCase):
         }
         with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.ensure_storage'), patch('api.service.get_storage_mode', return_value='postgresql'), patch('api.service.count_records_by_entity', return_value=(counts, 12.3)):
             result = capacity_payload('token')
-        self.assertEqual(result['totalRecords'], 38)
+        self.assertEqual(result['totalRecords'], 46)
         self.assertEqual(result['counts']['orders'], 10)
+        self.assertEqual(result['counts']['priceRules'], 8)
         self.assertEqual(result['countMs'], 12.3)
         self.assertEqual(result['status'], 'ok')
 

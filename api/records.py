@@ -12,6 +12,7 @@ ENTITY_FIELDS = {
     'audits': 'audits',
     'receivables': 'receivables',
     'payables': 'payables',
+    'priceRules': 'priceRules',
     'inventory': 'inventoryItems',
     'events': 'systemEvents',
     'aiCorrections': 'aiCorrections',

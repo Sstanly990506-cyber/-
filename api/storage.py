@@ -41,6 +41,7 @@ DEFAULT_APP_STATE = {
     'audits': [],
     'receivables': [],
     'payables': [],
+    'priceRules': [],
     'systemEvents': [],
     'settings': None,
     'inventoryItems': [],
@@ -454,7 +455,7 @@ def can_access_field(role: str, field: str) -> bool:
         return True
     if field in base_fields:
         return True
-    if role == 'finance' and field in {'receivables', 'payables'}:
+    if role == 'finance' and field in {'receivables', 'payables', 'priceRules'}:
         return True
     if role == 'audit' and field == 'audits':
         return True
