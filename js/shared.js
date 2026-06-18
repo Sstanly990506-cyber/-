@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
   openAccess: true, enableKeyboardShortcut: true, orderWarningDays: 3, receivableOverdueDays: 30, payableWarningDays: 14, inventoryLowStockDefault: 100,
   moduleInternals: {
     orders: { statuses: { 未完成: true, 已送出: true, 已完成: true }, quickActions: { 已送出: true, 已完成: true }, showFilters: true, showExport: true },
-    customers: { roles: { 上游: true, 下游: true, 兩者: true } },
+    customers: { roles: { 上游: true, 下游: true, 客人: true, 兩者: true } },
     trips: { stopTypes: { delivery: true, pickup: true }, showManualRoute: true, showManualStopForm: true, showOrderPool: true },
   },
   modulePageNotes: Object.fromEntries(MODULE_DEFINITIONS.map((module) => [module.id, `${module.label}的首頁說明，可依公司需求調整。`])),

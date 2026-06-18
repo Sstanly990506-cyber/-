@@ -11,7 +11,7 @@ class FakeResponse:
     def __exit__(self, *_args): return False
     def read(self):
         order = {
-            'orderNumber': 'WO-1', 'orderDate': '2026-06-15', 'upstream': '', 'downstream': 'Client',
+            'orderNumber': 'WO-1', 'orderDate': '2026-06-15', 'billingCustomer': 'Brand Client', 'upstream': '', 'downstream': 'Client',
             'address': '', 'sheetCountText': '10張', 'sheetCount': 10, 'sizeLength': 100, 'sizeWidth': 200, 'sizeUnit': 'mm',
             'glossType': 'PVA光', 'totalPrice': 500, 'confidence': 0.9, 'notes': [],
         }
@@ -45,6 +45,7 @@ class AiOrderTests(unittest.TestCase):
     def test_business_rules_match_coating_factory_workflow(self):
         self.assertIn('印刷 row', ai_orders.BUSINESS_RULES)
         self.assertIn('upstream customer', ai_orders.BUSINESS_RULES)
+        self.assertIn('billing customer', ai_orders.BUSINESS_RULES)
         self.assertIn('裁切', ai_orders.BUSINESS_RULES)
         self.assertIn('downstream customer', ai_orders.BUSINESS_RULES)
         self.assertIn('1362車+238張', ai_orders.BUSINESS_RULES)

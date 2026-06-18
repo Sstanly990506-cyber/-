@@ -58,6 +58,7 @@ function nextOrderNumber(state) {
 }
 
 function findSmartPriceSuggestion(state, editingId = '') {
+  const billingCustomer = $('billingCustomerInput')?.value.trim() || '';
   const downstream = $('downstreamInput').value.trim();
   const upstream = $('upstreamInput').value.trim();
   const glossType = $('glossType').value || '';
@@ -68,8 +69,9 @@ function findSmartPriceSuggestion(state, editingId = '') {
     if (editingId && o.id === editingId) return false;
     if (Number(o.totalPrice || 0) <= 0 || Number(o.sheetCount || 0) <= 0) return false;
     if (glossType && o.glossType !== glossType) return false;
-    if (downstream && o.downstream !== downstream) return false;
-    if (!downstream && upstream && o.upstream !== upstream) return false;
+    if (billingCustomer && (o.billingCustomer || '') !== billingCustomer) return false;
+    if (!billingCustomer && downstream && o.downstream !== downstream) return false;
+    if (!billingCustomer && !downstream && upstream && o.upstream !== upstream) return false;
     return true;
   });
 
@@ -89,10 +91,11 @@ function updateOrderSmartHint(state) {
   if (!hint) return;
   const suggestion = findSmartPriceSuggestion(state, $('orderId').value);
   if (!suggestion || !suggestion.estimated) {
-    hint.textContent = '智能建議：填入客戶 / 上光種類 / 張數後，系統會自動估算建議總價。';
+    hint.textContent = '智能估價：填入客人、上光類型與計算張數後，系統會優先用同一個客人的歷史價格估算。';
     return;
   }
-  hint.textContent = `智能建議：依 ${suggestion.candidates} 筆歷史工單估算，建議總價約 NT$ ${suggestion.estimated.toLocaleString()}（平均每張 ${suggestion.avgPerSheet.toLocaleString()}）`;
+  const basis = $('billingCustomerInput')?.value.trim() ? '同一個客人' : '相近工單';
+  hint.textContent = `智能估價：用 ${suggestion.candidates} 筆${basis}歷史價格推估總價約 NT$ ${suggestion.estimated.toLocaleString()}，平均每張 ${suggestion.avgPerSheet.toLocaleString()}。`;
   if (!$('totalPrice').value) $('totalPrice').value = String(suggestion.estimated);
 }
 
@@ -102,6 +105,7 @@ function buildOrderFromForm(state) {
   return {
     orderNumber: $('orderNumber').value.trim(),
     orderDate: $('orderDate').value,
+    billingCustomer: $('billingCustomerInput')?.value.trim() || '',
     upstream: $('upstreamInput').value.trim(),
     downstream: $('downstreamInput').value.trim(),
     address: $('orderAddress').value.trim(),
@@ -157,6 +161,7 @@ function renderOrderTable(order) {
   return `
     <table>
       <tr><th>工單編號</th><td>${order.orderNumber || '-'}</td><th>日期</th><td>${order.orderDate || '-'}</td></tr>
+      <tr><th>客人</th><td colspan="3">${order.billingCustomer || '-'}</td></tr>
       <tr><th>上游客戶</th><td>${order.upstream || '-'}</td><th>下游客戶</th><td>${order.downstream || '-'}</td></tr>
       <tr><th>地址</th><td colspan="3">${order.address || '-'}</td></tr>
       <tr><th>數量</th><td>${order.sheetCountText || order.sheetCount || '-'}</td><th>計算張數</th><td>${order.sheetCount || '-'}</td></tr>
@@ -213,6 +218,7 @@ function renderOrderFilters(state) {
 const AI_FIELD_LABELS = {
   orderNumber: '工單編號',
   orderDate: '日期',
+  billingCustomer: '客人',
   upstream: '上游客戶',
   downstream: '下游客戶',
   address: '送貨地址',
@@ -290,6 +296,7 @@ function matchesOrderSearch(order, keyword) {
   return [
     order.orderNumber,
     order.orderDate,
+    order.billingCustomer,
     order.upstream,
     order.downstream,
     order.address,
@@ -331,6 +338,7 @@ export function renderOrders(state, renderCustomerOptions) {
     tr.innerHTML = `
       <td>${order.orderNumber || '-'}</td>
       <td>${order.orderDate || '-'}</td>
+      <td>${order.billingCustomer || '-'}</td>
       <td>${order.upstream || '-'}</td>
       <td>${order.downstream || '-'}</td>
       <td>${Number(order.totalPrice || 0).toLocaleString()}</td>
@@ -361,6 +369,7 @@ export function openOrderForEdit(state, orderId) {
   $('orderId').value = order.id;
   $('orderNumber').value = order.orderNumber || '';
   $('orderDate').value = order.orderDate || '';
+  $('billingCustomerInput').value = order.billingCustomer || '';
   $('upstreamInput').value = order.upstream || '';
   $('downstreamInput').value = order.downstream || '';
   $('orderAddress').value = order.address || '';
@@ -412,7 +421,7 @@ async function prepareOrderImage(file) {
 
 function applyRecognizedOrder(state, order) {
   const fields = {
-    orderNumber: order.orderNumber, orderDate: order.orderDate, upstreamInput: order.upstream,
+    orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: order.billingCustomer, upstreamInput: order.upstream,
     downstreamInput: order.downstream, orderAddress: order.address, sheetCountText: order.sheetCountText, sheetCount: order.sheetCount,
     sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, totalPrice: order.totalPrice,
   };
@@ -609,6 +618,8 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('downstreamInput')?.addEventListener('change', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('downstreamInput')?.addEventListener('blur', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('downstreamInput')?.addEventListener('input', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
+  $('billingCustomerInput')?.addEventListener('input', () => updateOrderSmartHint(state));
+  $('billingCustomerInput')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('upstreamInput')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));

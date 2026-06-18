@@ -66,7 +66,7 @@ function updateFinanceSmartHint(state) {
 function autofillReceivableFromOrder(state) {
   const order = findOrderByNumber(state, $('recvOrderNumber')?.value || '');
   if (!order) return updateFinanceSmartHint(state);
-  if ($('recvCustomer') && !$('recvCustomer').value.trim()) $('recvCustomer').value = order.downstream || order.upstream || '';
+  if ($('recvCustomer') && !$('recvCustomer').value.trim()) $('recvCustomer').value = order.billingCustomer || order.downstream || order.upstream || '';
   if ($('recvAmount') && Number($('recvAmount').value || 0) <= 0) $('recvAmount').value = String(Number(order.totalPrice || 0));
   if ($('recvDate') && !$('recvDate').value) $('recvDate').value = order.orderDate || getTodayText();
   updateFinanceSmartHint(state);
@@ -75,7 +75,7 @@ function autofillReceivableFromOrder(state) {
 function applyInvoiceBuyerBySelection(state) {
   const selected = getSelectedInvoiceOrders(state);
   if (!selected.length) return;
-  const customerNames = selected.map((o) => o.downstream || o.upstream || '').filter(Boolean);
+  const customerNames = selected.map((o) => o.billingCustomer || o.downstream || o.upstream || '').filter(Boolean);
   if (!customerNames.length) return;
   const count = new Map();
   customerNames.forEach((n) => count.set(n, (count.get(n) || 0) + 1));
@@ -115,7 +115,7 @@ function renderInvoicePicker(state) {
     row.innerHTML = `
       <input type="checkbox" data-invoice-order-id="${order.id}" ${selectedInvoiceOrderIds.has(order.id) ? 'checked' : ''} />
       <strong>${order.orderNumber || '未填工單號'}</strong>
-      <span>${order.downstream || order.upstream || '-'}</span>
+      <span>${order.billingCustomer || order.downstream || order.upstream || '-'}</span>
       <span>${order.orderDate || '-'}</span>
       <span>NT$ ${money(order.totalPrice || 0)}</span>`;
     wrap.append(row);
@@ -135,7 +135,7 @@ function openInvoiceWindow(state) {
   const meta = getInvoiceMeta();
   const total = selected.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0);
   const rows = selected
-    .map((o, i) => `<tr><td>${i + 1}</td><td>${o.orderNumber || '-'}</td><td>${o.downstream || o.upstream || '-'}</td><td>${o.orderDate || '-'}</td><td style="text-align:right;">${money(o.totalPrice || 0)}</td></tr>`)
+    .map((o, i) => `<tr><td>${i + 1}</td><td>${o.orderNumber || '-'}</td><td>${o.billingCustomer || o.downstream || o.upstream || '-'}</td><td>${o.orderDate || '-'}</td><td style="text-align:right;">${money(o.totalPrice || 0)}</td></tr>`)
     .join('');
 
   const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>發票匯出</title>
@@ -160,7 +160,7 @@ export function getLinkedReceivablesData(state) {
       orderMap.set(key, {
         key,
         date: o.orderDate || '',
-        customer: o.downstream || o.upstream || '-',
+        customer: o.billingCustomer || o.downstream || o.upstream || '-',
         orderNumber: key,
         amount: Number(o.totalPrice || 0),
         received: 0,
@@ -200,7 +200,7 @@ function getReportBData(state) {
   return state.orders.filter((o) => inRange(state, o.orderDate)).map((o) => {
     const revenue = Number(o.totalPrice || 0);
     const cost = Math.round(revenue * 0.7);
-    return { orderNumber: o.orderNumber, customer: o.downstream || o.upstream, revenue, cost, gross: revenue - cost };
+    return { orderNumber: o.orderNumber, customer: o.billingCustomer || o.downstream || o.upstream, revenue, cost, gross: revenue - cost };
   });
 }
 
@@ -624,7 +624,7 @@ export function bindFinanceEvents(state, saveState, renderAll) {
         item.received = Number(item.amount || 0);
       } else {
         const order = state.orders.find((o) => getOrderReceivableKey(o) === key);
-        if (order) state.receivables.unshift({ id: crypto.randomUUID(), source: 'manual-close', date: getTodayText(), customer: order.downstream || order.upstream || '-', orderNumber: key, amount: Number(order.totalPrice || 0), received: Number(order.totalPrice || 0) });
+        if (order) state.receivables.unshift({ id: crypto.randomUUID(), source: 'manual-close', date: getTodayText(), customer: order.billingCustomer || order.downstream || order.upstream || '-', orderNumber: key, amount: Number(order.totalPrice || 0), received: Number(order.totalPrice || 0) });
       }
     }
     if (remove) {

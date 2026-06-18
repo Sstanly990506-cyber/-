@@ -1,8 +1,8 @@
 import { $ } from './shared.js';
 
 function getCustomerRoles(state) {
-  const roles = state.settings?.moduleInternals?.customers?.roles || { '上游': true, '下游': true, '兩者': true };
-  const items = ['上游', '下游', '兩者'].filter((role) => roles[role] !== false);
+  const roles = state.settings?.moduleInternals?.customers?.roles || { '上游': true, '下游': true, '客人': true, '兩者': true };
+  const items = ['上游', '下游', '客人', '兩者'].filter((role) => roles[role] !== false);
   return items.length ? items : ['上游'];
 }
 
@@ -32,6 +32,8 @@ function inferRoleFromHistory(state, name) {
   if (!key) return null;
   const asUp = state.orders.some((o) => (o.upstream || '').trim() === key);
   const asDown = state.orders.some((o) => (o.downstream || '').trim() === key);
+  const asBilling = state.orders.some((o) => (o.billingCustomer || '').trim() === key);
+  if (asBilling) return '客人';
   if (asUp && asDown) return '兩者';
   if (asUp) return '上游';
   if (asDown) return '下游';
@@ -67,9 +69,11 @@ function updateCustomerSmartHint(state) {
 export function renderCustomerOptions(state) {
   const upstream = $('upstreamOptions');
   const downstream = $('downstreamOptions');
+  const billing = $('billingCustomerOptions');
   if (!upstream || !downstream) return;
   upstream.innerHTML = '';
   downstream.innerHTML = '';
+  if (billing) billing.innerHTML = '';
   const active = state.customers.filter((c) => c.active !== false);
 
   active
@@ -78,6 +82,9 @@ export function renderCustomerOptions(state) {
   active
     .filter((c) => c.role === '下游' || c.role === '兩者')
     .forEach((c) => downstream.append(new Option(c.name, c.name)));
+  active
+    .filter((c) => c.role === '客人' || c.role === '兩者')
+    .forEach((c) => billing?.append(new Option(c.name, c.name)));
 }
 
 export function renderCustomers(state) {
