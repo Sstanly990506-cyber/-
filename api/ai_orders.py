@@ -10,6 +10,8 @@ MAX_IMAGE_BYTES = 2_500_000
 BUSINESS_RULES = (
     'This system is used by a coating/varnishing factory. '
     'The upstream customer is normally the printing company shown on the 印刷 row because it sends printed sheets to us. '
+    'The billing customer is the customer who gives us the price or pays us. It is often shown in the header field named 客戶, 客人, or similar, '
+    'and it is different from the upstream printing company and downstream delivery destination. '
     'The downstream customer is normally the company shown on a process after 上光, especially 裁切, 軋合, 軋型, or similar finishing rows. '
     'Do not treat the company on the 上光 row as upstream or downstream because that row commonly identifies our own factory. '
     'The address field means the delivery destination after coating, so it belongs to the downstream company. '
@@ -26,6 +28,7 @@ ORDER_SCHEMA = {
     'properties': {
         'orderNumber': {'type': 'string'},
         'orderDate': {'type': 'string'},
+        'billingCustomer': {'type': 'string'},
         'upstream': {'type': 'string'},
         'downstream': {'type': 'string'},
         'address': {'type': 'string'},
@@ -40,7 +43,7 @@ ORDER_SCHEMA = {
         'notes': {'type': 'array', 'items': {'type': 'string'}},
     },
     'required': [
-        'orderNumber', 'orderDate', 'upstream', 'downstream', 'address', 'sheetCountText', 'sheetCount',
+        'orderNumber', 'orderDate', 'billingCustomer', 'upstream', 'downstream', 'address', 'sheetCountText', 'sheetCount',
         'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType', 'totalPrice', 'confidence', 'notes',
     ],
     'additionalProperties': False,

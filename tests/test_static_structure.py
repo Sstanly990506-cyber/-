@@ -154,9 +154,13 @@ class StaticStructureTests(unittest.TestCase):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
         self.assertIn('id="aiOrderImage"', view)
+        self.assertIn('id="billingCustomerInput"', view)
+        self.assertIn('id="billingCustomerOptions"', view)
         self.assertIn("fetch('/api/orders/recognize'", orders)
         self.assertIn("fetch('/api/orders/recognize/status'", orders)
         self.assertIn('applyRecognizedOrder', orders)
+        self.assertIn('billingCustomerInput: order.billingCustomer', orders)
+        self.assertIn('billingCustomer', (ROOT / 'api' / 'ai_orders.py').read_text(encoding='utf-8'))
         self.assertIn('reportAiCorrection', orders)
         self.assertIn('id="reportAiCorrectionBtn"', view)
         self.assertIn('syncAddressFromDownstream(state)', orders)
@@ -171,6 +175,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('id="sheetCount" type="number"', view)
         self.assertIn("sheetCountText: $('sheetCountText').value.trim()", orders)
         self.assertIn("sheetCountText:String(o.sheetCountText??o.sheetCount??'')", store)
+        self.assertIn('billingCustomer:String(o.billingCustomer??', store)
 
     def test_ai_recognition_has_vercel_runtime_limits(self):
         vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')

@@ -81,7 +81,7 @@
             <div class="filter-row" id="orderStatusFilters"></div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>工單編號</th><th>日期</th><th>上游</th><th>下游</th><th>總價</th><th>狀態</th><th>最後更新</th><th></th></tr></thead>
+                <thead><tr><th>工單編號</th><th>日期</th><th>客人</th><th>上游</th><th>下游</th><th>總價</th><th>狀態</th><th>最後更新</th><th></th></tr></thead>
                 <tbody id="ordersTbody"></tbody>
               </table>
             </div>
@@ -103,6 +103,10 @@
               <input id="orderId" type="hidden" />
               <label>工單編號<input id="orderNumber" /></label>
               <label>日期<input id="orderDate" type="date" /></label>
+              <label>客人（報價對象）
+                <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="真正談價格、收款的客人" />
+                <datalist id="billingCustomerOptions"></datalist>
+              </label>
 
               <label>上游客戶（可搜尋）
                 <input id="upstreamInput" list="upstreamOptions" placeholder="輸入關鍵字，例如：彩" />
