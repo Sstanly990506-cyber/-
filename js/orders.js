@@ -364,13 +364,22 @@ function matchesOrderSearch(order, keyword) {
 }
 
 function renderGlossOptions(state) {
-  const select = $('glossType');
-  select.innerHTML = '';
-  state.glossOptions.forEach((opt) => {
-    const o = document.createElement('option');
-    o.value = opt;
-    o.textContent = opt;
-    select.append(o);
+  const savedOrderOptions = (state.orders || []).map((order) => order.glossType);
+  const savedRuleOptions = (state.priceRules || []).map((rule) => rule.glossType);
+  const options = [...new Set([...(state.glossOptions || []), ...savedOrderOptions, ...savedRuleOptions, '其他'].filter(Boolean))];
+  state.glossOptions = options;
+  ['glossType', 'priceRuleGloss'].forEach((id) => {
+    const select = $(id);
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = '';
+    options.forEach((opt) => {
+      const o = document.createElement('option');
+      o.value = opt;
+      o.textContent = opt;
+      select.append(o);
+    });
+    if (options.includes(current)) select.value = current;
   });
 }
 

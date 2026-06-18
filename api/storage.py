@@ -35,7 +35,7 @@ LOCAL_SECRETS_PATH = DATA_DIR / 'secrets.json'
 DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
 
 DEFAULT_APP_STATE = {
-    'glossOptions': ['PVA光', 'PVB光/油', '耐磨', '壓光'],
+    'glossOptions': ['PVA光', 'PVB光/油', '耐磨', '壓光', '其他'],
     'customers': [],
     'orders': [],
     'audits': [],
