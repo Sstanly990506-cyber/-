@@ -166,6 +166,7 @@
             <form id="priceRuleForm" class="form-grid compact">
               <input id="priceRuleId" type="hidden" />
               <label>客人<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>
+              <div id="priceRuleCustomerMatches" class="customer-match-list span-2"></div>
               <label>品項 / 上光種類<select id="priceRuleGloss"></select></label>
               <label>長<input id="priceRuleLength" type="number" min="0" step="0.01" required /></label>
               <label>寬<input id="priceRuleWidth" type="number" min="0" step="0.01" required /></label>
@@ -226,6 +227,7 @@
             <h3>新增客戶</h3>
             <form id="customerForm" class="form-grid compact">
               <label>客戶名稱<input id="customerName" /></label>
+              <label>統一編號<input id="customerTaxId" inputmode="numeric" maxlength="8" placeholder="8 碼統編" /></label>
               <label>電話<input id="customerPhone" /></label>
               <label>地址<input id="customerAddress" /></label>
               <label>角色
@@ -238,10 +240,10 @@
 
           <article class="card">
             <h3>客戶列表</h3>
-            <input id="customerSearch" placeholder="搜尋名稱/電話/地址" />
+            <input id="customerSearch" placeholder="搜尋名稱/統編/電話/地址" />
             <div class="table-wrap">
               <table>
-                <thead><tr><th>名稱</th><th>電話</th><th>地址</th><th>角色</th><th>狀態</th><th>操作</th></tr></thead>
+                <thead><tr><th>名稱</th><th>統編</th><th>電話</th><th>地址</th><th>角色</th><th>狀態</th><th>操作</th></tr></thead>
                 <tbody id="customersTbody"></tbody>
               </table>
             </div>

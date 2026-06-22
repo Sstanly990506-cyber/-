@@ -83,6 +83,7 @@ function applyInvoiceBuyerBySelection(state) {
   const [bestName] = [...count.entries()].sort((a, b) => b[1] - a[1])[0];
   const customer = state.customers.find((c) => (c.name || '').trim() === bestName);
   if ($('invoiceBuyerName') && !$('invoiceBuyerName').value.trim()) $('invoiceBuyerName').value = bestName;
+  if ($('invoiceBuyerTaxId') && customer?.taxId && !$('invoiceBuyerTaxId').value.trim()) $('invoiceBuyerTaxId').value = customer.taxId;
   if ($('invoiceBuyerAddress') && customer?.address && !$('invoiceBuyerAddress').value.trim()) $('invoiceBuyerAddress').value = customer.address;
 }
 

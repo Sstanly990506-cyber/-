@@ -18,6 +18,7 @@ function renderCustomerRoleOptions(state) {
 function fillCustomerForm(customer) {
   if (!customer) return;
   $('customerName').value = customer.name || '';
+  $('customerTaxId').value = customer.taxId || '';
   $('customerPhone').value = customer.phone || '';
   $('customerAddress').value = customer.address || '';
   $('customerRole').value = customer.role || $('customerRole').value;
@@ -25,6 +26,10 @@ function fillCustomerForm(customer) {
 
 function normalizePhone(phone = '') {
   return phone.replace(/[^\d+]/g, '');
+}
+
+function normalizeTaxId(taxId = '') {
+  return taxId.replace(/\D/g, '').slice(0, 8);
 }
 
 function inferRoleFromHistory(state, name) {
@@ -97,12 +102,13 @@ export function renderCustomers(state) {
   state.customers
     .filter((c) => {
       if (!keyword) return true;
-      return [c.name, c.phone || '', c.address || ''].join(' ').toLowerCase().includes(keyword);
+      return [c.name, c.taxId || '', c.phone || '', c.address || ''].join(' ').toLowerCase().includes(keyword);
     })
     .forEach((c) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
       <td>${c.name}</td>
+      <td>${c.taxId || '-'}</td>
       <td>${c.phone || '-'}</td>
       <td>${c.address || '-'}</td>
       <td>${c.role}</td>
@@ -123,14 +129,17 @@ export function bindCustomerEvents(state, saveState, renderAll) {
     const editingId = e.target.dataset.editingCustomerId || '';
     const name = $('customerName').value.trim() || '未命名客戶';
     const role = $('customerRole').value || getCustomerRoles(state)[0];
+    const taxId = normalizeTaxId($('customerTaxId')?.value.trim() || '');
     const phone = normalizePhone($('customerPhone').value.trim());
     const address = $('customerAddress').value.trim();
+    if ($('customerTaxId')?.value.trim() && taxId.length !== 8) return alert('統編需要 8 碼數字。');
 
     const duplicate = state.customers.find((c) => c.id !== editingId && (c.name || '').trim().toLowerCase() === name.toLowerCase());
     if (duplicate) {
       if (duplicate.active === false) {
         duplicate.active = true;
         duplicate.role = role || duplicate.role;
+        duplicate.taxId = taxId || duplicate.taxId;
         duplicate.phone = phone || duplicate.phone;
         duplicate.address = address || duplicate.address;
         saveState();
@@ -147,11 +156,12 @@ export function bindCustomerEvents(state, saveState, renderAll) {
       if (!target) return;
       target.name = name;
       target.role = role;
+      target.taxId = taxId;
       target.phone = phone;
       target.address = address;
       delete e.target.dataset.editingCustomerId;
     } else {
-      state.customers.push({ id: crypto.randomUUID(), name, role, phone, address, active: true });
+      state.customers.push({ id: crypto.randomUUID(), name, role, taxId, phone, address, active: true });
     }
     saveState();
     e.target.reset();
