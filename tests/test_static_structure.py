@@ -106,6 +106,20 @@ class StaticStructureTests(unittest.TestCase):
         self.assertNotIn('\n  renderCustomers(state);', render_all)
         self.assertNotIn('\n  renderSettings(state);', render_all)
 
+    def test_customer_tax_id_is_present(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        customers = (ROOT / 'js' / 'customers.js').read_text(encoding='utf-8')
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        finance = (ROOT / 'js' / 'finance.js').read_text(encoding='utf-8')
+        self.assertIn('customerTaxId', view)
+        self.assertIn('搜尋名稱/統編/電話/地址', view)
+        self.assertIn('normalizeTaxId', customers)
+        self.assertIn('taxId = normalizeTaxId', customers)
+        self.assertIn('c.taxId ||', customers)
+        self.assertIn("taxId:String(c.taxId??'')", store)
+        self.assertIn('invoiceBuyerTaxId', finance)
+        self.assertIn('customer?.taxId', finance)
+
     def test_dashboard_is_compact_and_actionable(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
@@ -167,6 +181,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('priceRuleForm', view)
         self.assertIn('data-order-screen="pricing"', view)
         self.assertIn('openPriceRulesFromOrderBtn', view)
+        self.assertIn('priceRuleCustomerMatches', view)
         self.assertNotIn('side-btn" type="button" data-order-screen="pricing"', view)
         self.assertIn('data-order-screen="form">返回新增工單', view)
         self.assertIn('<label>品項 / 上光種類<select id="priceRuleGloss"></select></label>', view)
@@ -180,6 +195,9 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('priceRuleForm', orders_block)
         self.assertNotIn('priceRuleForm', finance_block)
         self.assertIn('buildPriceRuleFromForm', orders)
+        self.assertIn('getPriceRuleCustomerMatches', orders)
+        self.assertIn('data-price-rule-customer', orders)
+        self.assertIn('customer.taxId', orders)
         self.assertIn("['glossType', 'priceRuleGloss']", orders)
         self.assertIn("'其他'", orders)
         self.assertIn("'其他'", store)

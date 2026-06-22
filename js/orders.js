@@ -155,6 +155,33 @@ function renderPriceRules(state) {
     </tr>`).join('') : '<tr><td colspan="5">尚未建立客人價格。</td></tr>';
 }
 
+function getPriceRuleCustomerMatches(state) {
+  const keyword = ($('priceRuleCustomer')?.value || '').trim().toLowerCase();
+  if (!keyword) return [];
+  return (state.customers || [])
+    .filter((customer) => customer.active !== false)
+    .filter((customer) => [customer.name, customer.taxId, customer.phone, customer.address]
+      .some((value) => String(value || '').toLowerCase().includes(keyword)))
+    .sort((a, b) => {
+      const aName = String(a.name || '').toLowerCase();
+      const bName = String(b.name || '').toLowerCase();
+      return Number(!aName.startsWith(keyword)) - Number(!bName.startsWith(keyword))
+        || aName.localeCompare(bName, 'zh-Hant');
+    })
+    .slice(0, 8);
+}
+
+function renderPriceRuleCustomerMatches(state) {
+  const box = $('priceRuleCustomerMatches');
+  if (!box) return;
+  const matches = getPriceRuleCustomerMatches(state);
+  box.innerHTML = matches.length ? matches.map((customer) => `
+    <button class="btn small customer-match-btn" type="button" data-price-rule-customer="${escapeHtml(customer.name || '')}">
+      ${escapeHtml(customer.name || '-')}
+      ${customer.taxId ? `<span>${escapeHtml(customer.taxId)}</span>` : ''}
+    </button>`).join('') : '';
+}
+
 function buildOrderFromForm(state) {
   const sheetCount = Number($('sheetCount').value || 0);
   return {
@@ -236,6 +263,7 @@ export function renderOrderScreen(state) {
 
   updateOrderSmartHint(state);
   renderPriceRules(state);
+  renderPriceRuleCustomerMatches(state);
   $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
@@ -715,7 +743,17 @@ export function bindOrderEvents(state, saveState, renderAll) {
     renderAll();
   });
 
-  $('clearPriceRuleBtn')?.addEventListener('click', clearPriceRuleForm);
+  $('priceRuleCustomer')?.addEventListener('input', () => renderPriceRuleCustomerMatches(state));
+  $('priceRuleCustomerMatches')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-price-rule-customer]');
+    if (!btn) return;
+    $('priceRuleCustomer').value = btn.dataset.priceRuleCustomer || '';
+    $('priceRuleCustomerMatches').innerHTML = '';
+  });
+  $('clearPriceRuleBtn')?.addEventListener('click', () => {
+    clearPriceRuleForm();
+    renderPriceRuleCustomerMatches(state);
+  });
   $('priceRulesTbody')?.addEventListener('click', (e) => {
     const edit = e.target.closest('[data-edit-price-rule]');
     const remove = e.target.closest('[data-delete-price-rule]');
@@ -732,6 +770,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       $('priceRuleUnit').value = rule.sizeUnit || 'mm';
       $('priceRuleUnitPrice').value = rule.unitPrice || '';
       $('priceRuleNote').value = rule.note || '';
+      renderPriceRuleCustomerMatches(state);
       $('priceRuleCustomer')?.focus();
       return;
     }

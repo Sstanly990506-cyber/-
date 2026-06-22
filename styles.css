@@ -329,6 +329,21 @@ input[type="checkbox"] { width: auto; }
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
+.customer-match-list {
+  display: grid;
+  gap: 8px;
+}
+.customer-match-btn {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+}
+.customer-match-btn span {
+  color: var(--muted);
+  font-size: 12px;
+}
 .table-wrap {
   overflow: auto;
   max-height: 460px;
