@@ -239,6 +239,8 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('applyRecognizedOrder', orders)
         self.assertIn('syncBillingAndUpstream', orders)
         self.assertIn('billingCustomerInput: billingAndUpstream', orders)
+        self.assertIn("if (!value && sourceId) target.value = ''", orders)
+        self.assertNotIn("target.value.trim()) source.value = target.value.trim()", orders)
         ai_orders = (ROOT / 'api' / 'ai_orders.py').read_text(encoding='utf-8')
         self.assertIn('delivery date / handover date', ai_orders)
         self.assertIn('upstream vendor is who we bill', ai_orders)

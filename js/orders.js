@@ -54,7 +54,7 @@ function syncBillingAndUpstream(sourceId = '') {
   const target = sourceId === 'billingCustomerInput' ? upstream : billing;
   const value = source.value.trim();
   if (value && target.value !== value) target.value = value;
-  if (!value && target.value.trim()) source.value = target.value.trim();
+  if (!value && sourceId) target.value = '';
   return upstream.value.trim() || billing.value.trim();
 }
 
