@@ -728,9 +728,9 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('downstreamInput')?.addEventListener('change', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('downstreamInput')?.addEventListener('blur', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('downstreamInput')?.addEventListener('input', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
-  $('billingCustomerInput')?.addEventListener('input', () => { syncBillingAndUpstream('billingCustomerInput'); updateOrderSmartHint(state); });
+  $('billingCustomerInput')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('billingCustomerInput')?.addEventListener('change', () => { syncBillingAndUpstream('billingCustomerInput'); updateOrderSmartHint(state); });
-  $('upstreamInput')?.addEventListener('input', () => { syncBillingAndUpstream('upstreamInput'); updateOrderSmartHint(state); });
+  $('upstreamInput')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('upstreamInput')?.addEventListener('change', () => { syncBillingAndUpstream('upstreamInput'); updateOrderSmartHint(state); });
   $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
