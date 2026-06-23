@@ -56,6 +56,14 @@ class AiOrderTests(unittest.TestCase):
         self.assertEqual(content[1]['detail'], 'auto')
         self.assertEqual(CapturingResponse.payload['max_output_tokens'], 1200)
 
+    def test_prompt_includes_known_billing_vendors(self):
+        image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}, clear=True), patch('api.ai_orders.urlopen', side_effect=capture_request):
+            ai_orders.recognize_order_image(image, ['PVA光'], customer_names=['富盛'])
+        prompt = CapturingResponse.payload['input'][0]['content'][0]['text']
+        self.assertIn('Known billing/upstream vendors', prompt)
+        self.assertIn('富盛', prompt)
+
     def test_allows_high_detail_when_configured(self):
         image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
         with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key', 'OPENAI_ORDER_IMAGE_DETAIL': 'high'}, clear=True), patch('api.ai_orders.urlopen', side_effect=capture_request):
@@ -75,6 +83,9 @@ class AiOrderTests(unittest.TestCase):
         self.assertIn('billing customer', ai_orders.BUSINESS_RULES)
         self.assertIn('upstream vendor is who we bill', ai_orders.BUSINESS_RULES)
         self.assertIn('Set billingCustomer and upstream to the same value', ai_orders.BUSINESS_RULES)
+        self.assertIn('HC003', ai_orders.BUSINESS_RULES)
+        self.assertIn('富盛', ai_orders.BUSINESS_RULES)
+        self.assertIn('客戶代號', ai_orders.BUSINESS_RULES)
         self.assertIn('裁切', ai_orders.BUSINESS_RULES)
         self.assertIn('downstream customer', ai_orders.BUSINESS_RULES)
         self.assertIn('1362車+238張', ai_orders.BUSINESS_RULES)
@@ -83,6 +94,17 @@ class AiOrderTests(unittest.TestCase):
         result = ai_orders.normalize_recognized_order({'billingCustomer': '客人A', 'upstream': '上游B'})
         self.assertEqual(result['billingCustomer'], '上游B')
         self.assertEqual(result['upstream'], '上游B')
+
+    def test_customer_code_does_not_override_real_vendor(self):
+        result = ai_orders.normalize_recognized_order({'billingCustomer': '富盛', 'upstream': 'H C003', 'notes': []})
+        self.assertEqual(result['billingCustomer'], '富盛')
+        self.assertEqual(result['upstream'], '富盛')
+
+    def test_customer_code_is_cleared_when_no_real_vendor_exists(self):
+        result = ai_orders.normalize_recognized_order({'billingCustomer': 'HC003', 'upstream': '', 'notes': []})
+        self.assertEqual(result['billingCustomer'], '')
+        self.assertEqual(result['upstream'], '')
+        self.assertIn('內部代號', result['notes'][0])
 
     def test_business_rules_do_not_calculate_quantity_expression(self):
         self.assertIn('Do not calculate or simplify quantity expressions', ai_orders.BUSINESS_RULES)

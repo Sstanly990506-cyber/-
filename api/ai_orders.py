@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -13,7 +14,10 @@ BUSINESS_RULES = (
     'If only 發單日期/issue date is visible and no delivery date is visible, leave orderDate empty. '
     'The billing customer and upstream customer must be the same printing factory/vendor because the upstream vendor is who we bill. '
     'Set billingCustomer and upstream to the same value. Prefer the upstream/printing company/vendor that sends printed sheets to us, '
-    'or the visible customer field when it clearly identifies who should be billed. '
+    'or the visible customer field when it clearly identifies a real company name that should be billed. '
+    'Do not use alphanumeric customer codes or item codes such as HC003, H C003, CLNT001, or similar 客戶代號 as billingCustomer/upstream. '
+    'On outsourced processing forms such as 鼎易/鼎義 委外加工單, the 客戶 field can be the issuer printer/vendor customer, not our customer. '
+    'For those forms, if 富盛 is visible, use 富盛 as billingCustomer and upstream instead of HC003. '
     'The downstream customer is normally the company shown on a process after 上光, especially 裁切, 軋合, 軋型, or similar finishing rows. '
     'Do not treat the company on the 上光 row as upstream or downstream because that row commonly identifies our own factory. '
     'The address field means the delivery destination after coating, so it belongs to the downstream company. '
@@ -26,12 +30,41 @@ BUSINESS_RULES = (
 )
 
 
+CUSTOMER_CODE_PATTERN = re.compile(r'^[A-Z]{1,5}[-_ ]*\d{2,}$', re.IGNORECASE)
+
+
+def _looks_like_customer_code(value):
+    compact = re.sub(r'\s+', '', str(value or '')).strip()
+    if not compact:
+        return False
+    if CUSTOMER_CODE_PATTERN.fullmatch(compact):
+        return True
+    has_letter = any(ch.isalpha() for ch in compact)
+    has_digit = any(ch.isdigit() for ch in compact)
+    has_chinese = any('\u4e00' <= ch <= '\u9fff' for ch in compact)
+    return has_letter and has_digit and not has_chinese and len(compact) <= 12
+
+
 def normalize_recognized_order(recognized):
     if not isinstance(recognized, dict):
         return recognized
     billing = str(recognized.get('billingCustomer') or '').strip()
     upstream = str(recognized.get('upstream') or '').strip()
-    customer = upstream or billing
+    billing_is_code = _looks_like_customer_code(billing)
+    upstream_is_code = _looks_like_customer_code(upstream)
+    if upstream_is_code and billing and not billing_is_code:
+        customer = billing
+    elif billing_is_code and upstream and not upstream_is_code:
+        customer = upstream
+    elif billing_is_code or upstream_is_code:
+        customer = ''
+        notes = recognized.get('notes')
+        if not isinstance(notes, list):
+            notes = []
+        notes.append('客人/上游客戶像內部代號，已留空，請改選真正交紙給我們的上游廠商。')
+        recognized['notes'] = notes
+    else:
+        customer = upstream or billing
     recognized['billingCustomer'] = customer
     recognized['upstream'] = customer
     return recognized
@@ -117,7 +150,7 @@ def _correction_examples(corrections):
     return json.dumps(examples, ensure_ascii=False, separators=(',', ':'))
 
 
-def recognize_order_image(data_url, gloss_options=None, corrections=None):
+def recognize_order_image(data_url, gloss_options=None, corrections=None, customer_names=None):
     api_key = os.environ.get('OPENAI_API_KEY', '').strip()
     if not api_key:
         raise OrderRecognitionError('AI 尚未啟用：請先在 Vercel 設定 OPENAI_API_KEY，然後重新部署。')
@@ -127,6 +160,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
     if image_detail not in {'auto', 'low', 'high'}:
         image_detail = 'auto'
     gloss_text = ', '.join(str(item) for item in (gloss_options or [])[:30])
+    customer_text = ', '.join(str(item) for item in (customer_names or [])[:80] if str(item or '').strip())
     prompt = (
         'Extract a single factory work order from this image. Do not invent unreadable values. '
         'Use an empty string or zero when uncertain. orderDate must be YYYY-MM-DD when visible. '
@@ -135,6 +169,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
         f'{BUSINESS_RULES}'
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
         f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '
+        f'Known billing/upstream vendors from our customer system, when visible in the image: {customer_text or "none supplied"}. '
         'Use the following recent human corrections as hints for recurring recognition mistakes, '
         'but only apply them when supported by the current image: '
         f'{_correction_examples(corrections) or "none supplied"}.'
