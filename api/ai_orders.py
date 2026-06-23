@@ -123,6 +123,9 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
         raise OrderRecognitionError('AI 尚未啟用：請先在 Vercel 設定 OPENAI_API_KEY，然後重新部署。')
     image = _validate_image_data_url(data_url)
     model = os.environ.get('OPENAI_ORDER_MODEL', '').strip() or 'gpt-5.4-mini'
+    image_detail = os.environ.get('OPENAI_ORDER_IMAGE_DETAIL', '').strip().lower() or 'auto'
+    if image_detail not in {'auto', 'low', 'high'}:
+        image_detail = 'auto'
     gloss_text = ', '.join(str(item) for item in (gloss_options or [])[:30])
     prompt = (
         'Extract a single factory work order from this image. Do not invent unreadable values. '
@@ -143,9 +146,10 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
             'role': 'user',
             'content': [
                 {'type': 'input_text', 'text': prompt},
-                {'type': 'input_image', 'image_url': image, 'detail': 'high'},
+                {'type': 'input_image', 'image_url': image, 'detail': image_detail},
             ],
         }],
+        'max_output_tokens': 1200,
         'text': {
             'format': {
                 'type': 'json_schema',

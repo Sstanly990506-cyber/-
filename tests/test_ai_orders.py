@@ -18,6 +18,15 @@ class FakeResponse:
         return json.dumps({'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': json.dumps(order)}]}]}).encode()
 
 
+class CapturingResponse(FakeResponse):
+    payload = None
+
+
+def capture_request(request, timeout=None):
+    CapturingResponse.payload = json.loads(request.data.decode('utf-8'))
+    return CapturingResponse()
+
+
 class AiOrderTests(unittest.TestCase):
     def test_rejects_invalid_image(self):
         with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
@@ -38,6 +47,21 @@ class AiOrderTests(unittest.TestCase):
         self.assertEqual(result['billingCustomer'], 'Brand Client')
         self.assertEqual(result['upstream'], 'Brand Client')
         self.assertEqual(result['model'], 'gpt-5.4-mini')
+
+    def test_uses_fast_image_detail_by_default(self):
+        image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}, clear=True), patch('api.ai_orders.urlopen', side_effect=capture_request):
+            ai_orders.recognize_order_image(image, ['PVA光'])
+        content = CapturingResponse.payload['input'][0]['content']
+        self.assertEqual(content[1]['detail'], 'auto')
+        self.assertEqual(CapturingResponse.payload['max_output_tokens'], 1200)
+
+    def test_allows_high_detail_when_configured(self):
+        image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key', 'OPENAI_ORDER_IMAGE_DETAIL': 'high'}, clear=True), patch('api.ai_orders.urlopen', side_effect=capture_request):
+            ai_orders.recognize_order_image(image, ['PVA光'])
+        content = CapturingResponse.payload['input'][0]['content']
+        self.assertEqual(content[1]['detail'], 'high')
 
     def test_correction_examples_only_include_changed_fields(self):
         value = ai_orders._correction_examples([{'changes': {'address': {'wrong': 'A', 'correct': 'B'}, 'sheetCount': {'wrong': 5, 'correct': 5}}}])

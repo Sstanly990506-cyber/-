@@ -511,8 +511,8 @@ async function prepareOrderImage(file) {
     value.onerror = () => reject(new Error('圖片格式無法解析。'));
     value.src = source;
   });
-  let maxDimension = 1600;
-  let quality = 0.82;
+  let maxDimension = 1280;
+  let quality = 0.74;
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
     const canvas = document.createElement('canvas');
@@ -520,7 +520,7 @@ async function prepareOrderImage(file) {
     canvas.height = Math.max(1, Math.round(image.height * scale));
     canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
     const encoded = canvas.toDataURL('image/jpeg', quality);
-    if (encoded.length <= 3_200_000) return encoded;
+    if (encoded.length <= 1_600_000) return encoded;
     maxDimension = Math.round(maxDimension * 0.82);
     quality = Math.max(0.55, quality - 0.06);
   }
@@ -592,15 +592,8 @@ async function recognizeOrderFromImage(state) {
   const button = $('recognizeOrderBtn');
   const status = $('aiOrderStatus');
   button.disabled = true;
-  status.textContent = '正在檢查 AI 設定…';
+  status.textContent = '正在壓縮圖片並識別，通常需要 5 至 30 秒…';
   try {
-    const statusResponse = await fetch('/api/orders/recognize/status', {
-      headers: { Authorization: `Bearer ${state.authToken || ''}` },
-    });
-    const aiStatus = await statusResponse.json().catch(() => ({}));
-    if (!statusResponse.ok || !aiStatus.ok) throw new Error(aiStatus.error || `HTTP ${statusResponse.status}`);
-    if (!aiStatus.configured) throw new Error('AI 尚未啟用：請先在 Vercel 設定 OPENAI_API_KEY，然後重新部署。');
-    status.textContent = '正在壓縮圖片並識別，通常需要 10 至 60 秒…';
     const image = await prepareOrderImage(file);
     const response = await fetch('/api/orders/recognize', {
       method: 'POST',

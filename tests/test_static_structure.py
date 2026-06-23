@@ -235,7 +235,9 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('id="billingCustomerInput"', view)
         self.assertIn('id="billingCustomerOptions"', view)
         self.assertIn("fetch('/api/orders/recognize'", orders)
-        self.assertIn("fetch('/api/orders/recognize/status'", orders)
+        self.assertNotIn("fetch('/api/orders/recognize/status'", orders)
+        self.assertIn("encoded.length <= 1_600_000", orders)
+        self.assertIn("maxDimension = 1280", orders)
         self.assertIn('applyRecognizedOrder', orders)
         self.assertIn('syncBillingAndUpstream', orders)
         self.assertIn('billingCustomerInput: billingAndUpstream', orders)
@@ -256,6 +258,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('syncAddressFromDownstream(state)', orders)
         self.assertIn('送貨地址已使用下游客戶系統地址', orders)
         self.assertIn('送貨地址（下游）', view)
+        self.assertIn("path=='/api/orders/recognize/status'", (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8'))
 
     def test_order_quantity_supports_text_and_calculation_value(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
@@ -271,7 +274,7 @@ class StaticStructureTests(unittest.TestCase):
         vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
         self.assertIn('"maxDuration": 60', vercel)
-        self.assertIn('encoded.length <= 3_200_000', orders)
+        self.assertIn('encoded.length <= 1_600_000', orders)
 
 
 if __name__ == '__main__':
