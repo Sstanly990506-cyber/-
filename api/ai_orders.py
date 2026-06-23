@@ -9,9 +9,11 @@ ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
 MAX_IMAGE_BYTES = 2_500_000
 BUSINESS_RULES = (
     'This system is used by a coating/varnishing factory. '
-    'The upstream customer is normally the printing company shown on the 印刷 row because it sends printed sheets to us. '
-    'The billing customer is the customer who gives us the price or pays us. It is often shown in the header field named 客戶, 客人, or similar, '
-    'and it is different from the upstream printing company and downstream delivery destination. '
+    'The orderDate field means delivery date / handover date, not issue date. Prefer labels such as 交貨日期, 到貨, 完成寄出, or delivery date. '
+    'If only 發單日期/issue date is visible and no delivery date is visible, leave orderDate empty. '
+    'The billing customer and upstream customer must be the same company because the upstream customer is who we bill. '
+    'Set billingCustomer and upstream to the same value. Prefer the upstream/printing company that sends printed sheets to us, '
+    'or the visible customer field when it clearly identifies who should be billed. '
     'The downstream customer is normally the company shown on a process after 上光, especially 裁切, 軋合, 軋型, or similar finishing rows. '
     'Do not treat the company on the 上光 row as upstream or downstream because that row commonly identifies our own factory. '
     'The address field means the delivery destination after coating, so it belongs to the downstream company. '
@@ -22,6 +24,17 @@ BUSINESS_RULES = (
     'unless the document separately shows one explicit numeric calculation quantity. '
     'Do not prefer 訂購數量 or 紙張 row quantity when a more specific 印刷 row quantity exists. '
 )
+
+
+def normalize_recognized_order(recognized):
+    if not isinstance(recognized, dict):
+        return recognized
+    billing = str(recognized.get('billingCustomer') or '').strip()
+    upstream = str(recognized.get('upstream') or '').strip()
+    customer = upstream or billing
+    recognized['billingCustomer'] = customer
+    recognized['upstream'] = customer
+    return recognized
 
 ORDER_SCHEMA = {
     'type': 'object',
@@ -170,5 +183,6 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None):
         recognized = json.loads(_extract_output_text(result))
     except json.JSONDecodeError as err:
         raise OrderRecognitionError('AI returned invalid order data') from err
+    recognized = normalize_recognized_order(recognized)
     recognized['model'] = model
     return recognized

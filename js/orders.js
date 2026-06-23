@@ -46,6 +46,18 @@ function syncAddressFromDownstream(state, onlyWhenEmpty = false) {
   return true;
 }
 
+function syncBillingAndUpstream(sourceId = '') {
+  const billing = $('billingCustomerInput');
+  const upstream = $('upstreamInput');
+  if (!billing || !upstream) return '';
+  const source = sourceId === 'billingCustomerInput' ? billing : upstream;
+  const target = sourceId === 'billingCustomerInput' ? upstream : billing;
+  const value = source.value.trim();
+  if (value && target.value !== value) target.value = value;
+  if (!value && target.value.trim()) source.value = target.value.trim();
+  return upstream.value.trim() || billing.value.trim();
+}
+
 
 function nextOrderNumber(state) {
   const d = getTodayText().replaceAll('-', '');
@@ -184,11 +196,12 @@ function renderPriceRuleCustomerMatches(state) {
 
 function buildOrderFromForm(state) {
   const sheetCount = Number($('sheetCount').value || 0);
+  const billingAndUpstream = syncBillingAndUpstream();
   return {
     orderNumber: $('orderNumber').value.trim(),
     orderDate: $('orderDate').value,
-    billingCustomer: $('billingCustomerInput')?.value.trim() || '',
-    upstream: $('upstreamInput').value.trim(),
+    billingCustomer: billingAndUpstream,
+    upstream: billingAndUpstream,
     downstream: $('downstreamInput').value.trim(),
     address: $('orderAddress').value.trim(),
     sheetCount,
@@ -242,7 +255,7 @@ function renderOrderTable(order) {
   const taiInchText = taiInch && taiInchW ? `${taiInch.toFixed(2)} × ${taiInchW.toFixed(2)} 台吋` : '-';
   return `
     <table>
-      <tr><th>工單編號</th><td>${order.orderNumber || '-'}</td><th>日期</th><td>${order.orderDate || '-'}</td></tr>
+      <tr><th>工單編號</th><td>${order.orderNumber || '-'}</td><th>交貨日期</th><td>${order.orderDate || '-'}</td></tr>
       <tr><th>客人</th><td colspan="3">${order.billingCustomer || '-'}</td></tr>
       <tr><th>上游客戶</th><td>${order.upstream || '-'}</td><th>下游客戶</th><td>${order.downstream || '-'}</td></tr>
       <tr><th>地址</th><td colspan="3">${order.address || '-'}</td></tr>
@@ -303,7 +316,7 @@ function renderOrderFilters(state) {
 
 const AI_FIELD_LABELS = {
   orderNumber: '工單編號',
-  orderDate: '日期',
+  orderDate: '交貨日期',
   billingCustomer: '客人',
   upstream: '上游客戶',
   downstream: '下游客戶',
@@ -464,8 +477,8 @@ export function openOrderForEdit(state, orderId) {
   $('orderId').value = order.id;
   $('orderNumber').value = order.orderNumber || '';
   $('orderDate').value = order.orderDate || '';
-  $('billingCustomerInput').value = order.billingCustomer || '';
-  $('upstreamInput').value = order.upstream || '';
+  $('billingCustomerInput').value = order.upstream || order.billingCustomer || '';
+  $('upstreamInput').value = order.upstream || order.billingCustomer || '';
   $('downstreamInput').value = order.downstream || '';
   $('orderAddress').value = order.address || '';
   $('sheetCountText').value = order.sheetCountText || (order.sheetCount ? String(order.sheetCount) : '');
@@ -515,8 +528,9 @@ async function prepareOrderImage(file) {
 }
 
 function applyRecognizedOrder(state, order) {
+  const billingAndUpstream = order.upstream || order.billingCustomer || '';
   const fields = {
-    orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: order.billingCustomer, upstreamInput: order.upstream,
+    orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: billingAndUpstream, upstreamInput: billingAndUpstream,
     downstreamInput: order.downstream, orderAddress: order.address, sheetCountText: order.sheetCountText, sheetCount: order.sheetCount,
     sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, totalPrice: order.totalPrice,
   };
@@ -531,6 +545,7 @@ function applyRecognizedOrder(state, order) {
     $('glossType').value = order.glossType;
   }
   const addressFilledFromCustomer = syncAddressFromDownstream(state);
+  syncBillingAndUpstream();
   updateTaiInchPreview();
   updateOrderSmartHint(state);
   lastRecognizedOrder = { ...order, address: $('orderAddress')?.value.trim() || '' };
@@ -713,9 +728,10 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('downstreamInput')?.addEventListener('change', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('downstreamInput')?.addEventListener('blur', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('downstreamInput')?.addEventListener('input', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
-  $('billingCustomerInput')?.addEventListener('input', () => updateOrderSmartHint(state));
-  $('billingCustomerInput')?.addEventListener('change', () => updateOrderSmartHint(state));
-  $('upstreamInput')?.addEventListener('input', () => updateOrderSmartHint(state));
+  $('billingCustomerInput')?.addEventListener('input', () => { syncBillingAndUpstream('billingCustomerInput'); updateOrderSmartHint(state); });
+  $('billingCustomerInput')?.addEventListener('change', () => { syncBillingAndUpstream('billingCustomerInput'); updateOrderSmartHint(state); });
+  $('upstreamInput')?.addEventListener('input', () => { syncBillingAndUpstream('upstreamInput'); updateOrderSmartHint(state); });
+  $('upstreamInput')?.addEventListener('change', () => { syncBillingAndUpstream('upstreamInput'); updateOrderSmartHint(state); });
   $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('exportOrderBtn')?.addEventListener('click', () => {

@@ -80,16 +80,13 @@ export function renderCustomerOptions(state) {
   downstream.innerHTML = '';
   if (billing) billing.innerHTML = '';
   const active = state.customers.filter((c) => c.active !== false);
+  const billingAndUpstream = active.filter((c) => ['上游', '客人', '兩者'].includes(c.role));
 
-  active
-    .filter((c) => c.role === '上游' || c.role === '兩者')
-    .forEach((c) => upstream.append(new Option(c.name, c.name)));
+  billingAndUpstream.forEach((c) => upstream.append(new Option(c.name, c.name)));
   active
     .filter((c) => c.role === '下游' || c.role === '兩者')
     .forEach((c) => downstream.append(new Option(c.name, c.name)));
-  active
-    .filter((c) => c.role === '客人' || c.role === '兩者')
-    .forEach((c) => billing?.append(new Option(c.name, c.name)));
+  billingAndUpstream.forEach((c) => billing?.append(new Option(c.name, c.name)));
 }
 
 export function renderCustomers(state) {
