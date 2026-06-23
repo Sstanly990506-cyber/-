@@ -35,6 +35,8 @@ class AiOrderTests(unittest.TestCase):
         with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}), patch('api.ai_orders.urlopen', return_value=FakeResponse()):
             result = ai_orders.recognize_order_image(image, ['PVA光'])
         self.assertEqual(result['orderNumber'], 'WO-1')
+        self.assertEqual(result['billingCustomer'], 'Brand Client')
+        self.assertEqual(result['upstream'], 'Brand Client')
         self.assertEqual(result['model'], 'gpt-5.4-mini')
 
     def test_correction_examples_only_include_changed_fields(self):
@@ -43,12 +45,19 @@ class AiOrderTests(unittest.TestCase):
         self.assertNotIn('"sheetCount"', value)
 
     def test_business_rules_match_coating_factory_workflow(self):
-        self.assertIn('印刷 row', ai_orders.BUSINESS_RULES)
+        self.assertIn('delivery date / handover date', ai_orders.BUSINESS_RULES)
+        self.assertIn('leave orderDate empty', ai_orders.BUSINESS_RULES)
         self.assertIn('upstream customer', ai_orders.BUSINESS_RULES)
         self.assertIn('billing customer', ai_orders.BUSINESS_RULES)
+        self.assertIn('Set billingCustomer and upstream to the same value', ai_orders.BUSINESS_RULES)
         self.assertIn('裁切', ai_orders.BUSINESS_RULES)
         self.assertIn('downstream customer', ai_orders.BUSINESS_RULES)
         self.assertIn('1362車+238張', ai_orders.BUSINESS_RULES)
+
+    def test_normalizes_billing_customer_to_upstream(self):
+        result = ai_orders.normalize_recognized_order({'billingCustomer': '客人A', 'upstream': '上游B'})
+        self.assertEqual(result['billingCustomer'], '上游B')
+        self.assertEqual(result['upstream'], '上游B')
 
     def test_business_rules_do_not_calculate_quantity_expression(self):
         self.assertIn('Do not calculate or simplify quantity expressions', ai_orders.BUSINESS_RULES)

@@ -2,7 +2,7 @@
 import time
 import uuid
 from api.records import changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
-from api.ai_orders import OrderRecognitionError, get_order_recognition_status, recognize_order_image
+from api.ai_orders import OrderRecognitionError, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.trip_optimizer import optimize_trip
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
@@ -218,7 +218,7 @@ def recognize_order_payload(token,payload):
     if not account_can_view(account,'ordersView'):raise ApiError('permission denied',403)
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     corrections=list_records('aiCorrections',1,20).get('items') or []
-    try:recognized=_fill_recognized_customer_address(recognize_order_image(payload.get('image'),payload.get('glossOptions'),corrections))
+    try:recognized=_fill_recognized_customer_address(normalize_recognized_order(recognize_order_image(payload.get('image'),payload.get('glossOptions'),corrections)))
     except ValueError as err:raise ApiError(str(err),400) from err
     except OrderRecognitionError as err:raise ApiError(str(err),503) from err
     return {'ok':True,'order':recognized}
