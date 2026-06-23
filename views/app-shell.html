@@ -103,8 +103,8 @@
               <input id="orderId" type="hidden" />
               <label>工單編號<input id="orderNumber" /></label>
               <label>交貨日期<input id="orderDate" type="date" /></label>
-              <label>客人（報價對象）
-                <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="真正談價格、收款的客人" />
+              <label>客人（同上游客戶）
+                <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="請選上游印刷廠／請款廠商" />
                 <datalist id="billingCustomerOptions"></datalist>
               </label>
               <div class="actions span-2">
@@ -165,7 +165,7 @@
             </div>
             <form id="priceRuleForm" class="form-grid compact">
               <input id="priceRuleId" type="hidden" />
-              <label>客人<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>
+              <label>客人（上游印刷廠）<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>
               <div id="priceRuleCustomerMatches" class="customer-match-list span-2"></div>
               <label>品項 / 上光種類<select id="priceRuleGloss"></select></label>
               <label>長<input id="priceRuleLength" type="number" min="0" step="0.01" required /></label>

@@ -49,6 +49,7 @@ class AiOrderTests(unittest.TestCase):
         self.assertIn('leave orderDate empty', ai_orders.BUSINESS_RULES)
         self.assertIn('upstream customer', ai_orders.BUSINESS_RULES)
         self.assertIn('billing customer', ai_orders.BUSINESS_RULES)
+        self.assertIn('upstream vendor is who we bill', ai_orders.BUSINESS_RULES)
         self.assertIn('Set billingCustomer and upstream to the same value', ai_orders.BUSINESS_RULES)
         self.assertIn('裁切', ai_orders.BUSINESS_RULES)
         self.assertIn('downstream customer', ai_orders.BUSINESS_RULES)

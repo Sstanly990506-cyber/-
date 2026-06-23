@@ -1,9 +1,13 @@
 import { $ } from './shared.js';
 
 function getCustomerRoles(state) {
-  const roles = state.settings?.moduleInternals?.customers?.roles || { '上游': true, '下游': true, '客人': true, '兩者': true };
-  const items = ['上游', '下游', '客人', '兩者'].filter((role) => roles[role] !== false);
+  const roles = state.settings?.moduleInternals?.customers?.roles || { '上游': true, '下游': true, '兩者': true };
+  const items = ['上游', '下游', '兩者'].filter((role) => roles[role] !== false);
   return items.length ? items : ['上游'];
+}
+
+function normalizeCustomerRole(role) {
+  return role === '客人' ? '上游' : role;
 }
 
 function renderCustomerRoleOptions(state) {
@@ -21,7 +25,7 @@ function fillCustomerForm(customer) {
   $('customerTaxId').value = customer.taxId || '';
   $('customerPhone').value = customer.phone || '';
   $('customerAddress').value = customer.address || '';
-  $('customerRole').value = customer.role || $('customerRole').value;
+  $('customerRole').value = normalizeCustomerRole(customer.role) || $('customerRole').value;
 }
 
 function normalizePhone(phone = '') {
@@ -38,9 +42,8 @@ function inferRoleFromHistory(state, name) {
   const asUp = state.orders.some((o) => (o.upstream || '').trim() === key);
   const asDown = state.orders.some((o) => (o.downstream || '').trim() === key);
   const asBilling = state.orders.some((o) => (o.billingCustomer || '').trim() === key);
-  if (asBilling) return '客人';
-  if (asUp && asDown) return '兩者';
-  if (asUp) return '上游';
+  if ((asUp || asBilling) && asDown) return '兩者';
+  if (asUp || asBilling) return '上游';
   if (asDown) return '下游';
   return null;
 }
@@ -80,11 +83,11 @@ export function renderCustomerOptions(state) {
   downstream.innerHTML = '';
   if (billing) billing.innerHTML = '';
   const active = state.customers.filter((c) => c.active !== false);
-  const billingAndUpstream = active.filter((c) => ['上游', '客人', '兩者'].includes(c.role));
+  const billingAndUpstream = active.filter((c) => ['上游', '兩者'].includes(normalizeCustomerRole(c.role)));
 
   billingAndUpstream.forEach((c) => upstream.append(new Option(c.name, c.name)));
   active
-    .filter((c) => c.role === '下游' || c.role === '兩者')
+    .filter((c) => normalizeCustomerRole(c.role) === '下游' || normalizeCustomerRole(c.role) === '兩者')
     .forEach((c) => downstream.append(new Option(c.name, c.name)));
   billingAndUpstream.forEach((c) => billing?.append(new Option(c.name, c.name)));
 }
@@ -108,7 +111,7 @@ export function renderCustomers(state) {
       <td>${c.taxId || '-'}</td>
       <td>${c.phone || '-'}</td>
       <td>${c.address || '-'}</td>
-      <td>${c.role}</td>
+      <td>${normalizeCustomerRole(c.role)}</td>
       <td><span class="tag ${c.active === false ? 'off' : ''}">${c.active === false ? '停用' : '啟用'}</span></td>
       <td class="actions">
         <button class="btn" data-edit-customer="${c.id}">編輯</button>
