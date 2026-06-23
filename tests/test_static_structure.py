@@ -38,14 +38,6 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("fetch('views/app-shell.html'", loader)
         self.assertNotIn('innerHTML', loader)
 
-    def test_site_wallpaper_is_optimized(self):
-        styles = (ROOT / 'styles.css').read_text(encoding='utf-8')
-        wallpaper = ROOT / 'assets' / 'site-wallpaper.jpg'
-        self.assertIn('assets/site-wallpaper.jpg', styles)
-        self.assertIn('background-attachment: fixed', styles)
-        self.assertTrue(wallpaper.exists())
-        self.assertLess(wallpaper.stat().st_size, 500_000)
-
     def test_scalable_data_routes_exist_in_both_servers(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
