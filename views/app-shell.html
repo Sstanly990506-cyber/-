@@ -103,11 +103,11 @@
               <input id="orderId" type="hidden" />
               <label>工單編號<input id="orderNumber" /></label>
               <label>交貨日期<input id="orderDate" type="date" /></label>
-              <label>客人
-                <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="請選印刷廠／請款客人" />
-                <datalist id="billingCustomerOptions"></datalist>
-              </label>
-              <div class="actions span-2">
+              <div class="customer-price-row span-2">
+                <label>客人
+                  <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="請選印刷廠／請款客人" />
+                  <datalist id="billingCustomerOptions"></datalist>
+                </label>
                 <button id="openPriceRulesFromOrderBtn" class="btn" type="button" data-order-screen="pricing">設定客人價格</button>
               </div>
 
@@ -141,13 +141,7 @@
                 </select>
               </label>
               <label>換算台吋<input id="sizeTaiInch" readonly /></label>
-              <label class="span-2">上光種類
-                <div class="row">
-                  <select id="glossType"></select>
-                  <input id="newGlossType" placeholder="新增種類" />
-                  <button type="button" id="addGlossBtn" class="btn">加入</button>
-                </div>
-              </label>
+              <label class="span-2">上光種類<select id="glossType"></select></label>
               <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
               <p id="orderSmartHint" class="sub span-2"></p>
               <label>狀態
@@ -169,6 +163,15 @@
               </div>
               <button class="btn" type="button" data-order-screen="form">返回新增工單</button>
             </div>
+            <article class="pricing-formula-card">
+              <strong>三青上光報價公式</strong>
+              <p id="priceRuleFormulaText" class="sub"></p>
+              <div class="kpi-grid kpi-grid-2">
+                <div class="kpi"><span>目前工單計算價</span><strong id="priceRuleCalculatedPrice">請輸入完整資料</strong></div>
+                <div class="kpi"><span>最低收費後報價</span><strong id="priceRuleFinalPrice">請輸入完整資料</strong></div>
+              </div>
+              <p id="priceRuleFormulaNote" class="sub">會使用新增工單目前的計算張數進行試算。</p>
+            </article>
             <form id="priceRuleForm" class="form-grid compact">
               <input id="priceRuleId" type="hidden" />
               <label>客人（上游印刷廠）<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>

@@ -184,6 +184,54 @@ function clearPriceRuleForm() {
   if ($('priceRuleUnit')) $('priceRuleUnit').value = 'mm';
 }
 
+function populatePriceRuleFromOrder() {
+  const customer = $('billingCustomerInput')?.value.trim() || '';
+  $('priceRuleCustomer').value = customer;
+  $('priceRuleGloss').value = $('glossType')?.value || '';
+  $('priceRuleLength').value = $('sizeLength')?.value || '';
+  $('priceRuleWidth').value = $('sizeWidth')?.value || '';
+  $('priceRuleUnit').value = $('sizeUnit')?.value || 'mm';
+  $('priceRuleMachine').value = $('machineType')?.value || 'ANY';
+}
+
+function updatePriceRuleFormulaPreview(state) {
+  const pricing = state.settings?.moduleInternals?.orders?.pricingRules || {};
+  const divisor = Number(pricing.divisor || 4680);
+  const formula = $('priceRuleFormulaText');
+  if (formula) formula.textContent = `總價＝寬台吋 × 長台吋 × 張數 × 單價 ÷（${divisor.toLocaleString()} × 100）`;
+
+  const quantity = Number($('sheetCount')?.value || 0);
+  const previewState = {
+    ...state,
+    priceRules: [{
+      customer: $('priceRuleCustomer')?.value.trim() || '',
+      glossType: $('priceRuleGloss')?.value || '',
+      sizeLength: Number($('priceRuleLength')?.value || 0),
+      sizeWidth: Number($('priceRuleWidth')?.value || 0),
+      sizeUnit: $('priceRuleUnit')?.value || 'mm',
+      machineType: $('priceRuleMachine')?.value || 'ANY',
+      pricingMode: 'formula',
+      unitPrice: Number($('priceRuleUnitPrice')?.value || 0),
+    }],
+  };
+  const quote = calculateOrderQuote(previewState, {
+    billingCustomer: $('priceRuleCustomer')?.value.trim() || '',
+    glossType: $('priceRuleGloss')?.value || '',
+    sizeLength: $('priceRuleLength')?.value,
+    sizeWidth: $('priceRuleWidth')?.value,
+    sizeUnit: $('priceRuleUnit')?.value || 'mm',
+    machineType: $('priceRuleMachine')?.value === 'SMALL' ? 'SMALL' : 'BIG',
+    sheetCount: quantity,
+  });
+  $('priceRuleCalculatedPrice').textContent = quote ? `NT$ ${quote.calculatedPrice.toLocaleString()}` : '請輸入完整資料';
+  $('priceRuleFinalPrice').textContent = quote ? `NT$ ${quote.finalPrice.toLocaleString()}` : '請輸入完整資料';
+  if ($('priceRuleFormulaNote')) {
+    $('priceRuleFormulaNote').textContent = quote
+      ? `張數 ${quantity.toLocaleString()}，單價 ${quote.unitPrice.toLocaleString()} 元／令${quote.minimumApplied ? '，已套用最低收費' : ''}${quote.smallDiscountApplied ? '，已套用小尺寸折扣' : ''}。`
+      : '請先在新增工單填入計算張數，並補齊客人、品項、尺寸與單價。';
+  }
+}
+
 function buildPriceRuleFromForm() {
   const sizeLength = Number($('priceRuleLength')?.value || 0);
   const sizeWidth = Number($('priceRuleWidth')?.value || 0);
@@ -334,6 +382,7 @@ export function renderOrderScreen(state) {
   updateOrderSmartHint(state);
   renderPriceRules(state);
   renderPriceRuleCustomerMatches(state);
+  updatePriceRuleFormulaPreview(state);
   $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
@@ -723,16 +772,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
     await loadAiCorrections(state);
   });
   loadAiCorrections(state).catch(() => renderAiCorrectionCenter());
-  $('addGlossBtn')?.addEventListener('click', () => {
-    const input = $('newGlossType');
-    const val = input.value.trim();
-    if (!val) return;
-    if (!state.glossOptions.includes(val)) state.glossOptions.push(val);
-    input.value = '';
-    saveState();
-    renderAll();
-  });
-
   $('orderForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const id = $('orderId').value || crypto.randomUUID();
@@ -858,7 +897,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('priceRuleForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const rule = buildPriceRuleFromForm();
-    if (!rule.customer || !rule.sizeLength || !rule.sizeWidth || !rule.unitPrice) return alert('請填客人、尺寸與每張單價。');
+    if (!rule.customer || !rule.sizeLength || !rule.sizeWidth || !rule.unitPrice) return alert('請填客人、尺寸與元／令單價。');
     const ruleLength = toTaiInch(rule.sizeLength, rule.sizeUnit);
     const ruleWidth = toTaiInch(rule.sizeWidth, rule.sizeUnit);
     const duplicated = state.priceRules.find((item) => item.id !== rule.id
@@ -877,12 +916,18 @@ export function bindOrderEvents(state, saveState, renderAll) {
     renderAll();
   });
 
-  $('priceRuleCustomer')?.addEventListener('input', () => renderPriceRuleCustomerMatches(state));
+  $('priceRuleForm')?.addEventListener('input', () => updatePriceRuleFormulaPreview(state));
+  $('priceRuleForm')?.addEventListener('change', () => updatePriceRuleFormulaPreview(state));
+  $('priceRuleCustomer')?.addEventListener('input', () => {
+    renderPriceRuleCustomerMatches(state);
+    updatePriceRuleFormulaPreview(state);
+  });
   $('priceRuleCustomerMatches')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-price-rule-customer]');
     if (!btn) return;
     $('priceRuleCustomer').value = btn.dataset.priceRuleCustomer || '';
     $('priceRuleCustomerMatches').innerHTML = '';
+    updatePriceRuleFormulaPreview(state);
   });
   $('clearPriceRuleBtn')?.addEventListener('click', () => {
     clearPriceRuleForm();
@@ -906,6 +951,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       $('priceRuleUnitPrice').value = rule.unitPrice || '';
       $('priceRuleNote').value = rule.note || '';
       renderPriceRuleCustomerMatches(state);
+      updatePriceRuleFormulaPreview(state);
       $('priceRuleCustomer')?.focus();
       return;
     }
@@ -921,6 +967,9 @@ export function bindOrderEvents(state, saveState, renderAll) {
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (btn.id === 'openPriceRulesFromOrderBtn') {
+        populatePriceRuleFromOrder();
+      }
       state.orderScreen = btn.dataset.orderScreen;
       renderOrderScreen(state);
     });

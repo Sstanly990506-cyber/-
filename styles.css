@@ -113,6 +113,22 @@ input[type="color"] {
 }
 input[type="checkbox"] { width: auto; }
 .row { display: grid; gap: 8px; grid-template-columns: 1fr 1fr auto; }
+.customer-price-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+.customer-price-row .btn { min-height: 44px; }
+.pricing-formula-card {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .section-head {
   display: flex;
@@ -649,6 +665,7 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .module-form-grid { grid-template-columns: 1fr; }
   .span-2 { grid-column: span 2; }
   .row { grid-template-columns: 1fr; }
+  .customer-price-row { grid-template-columns: 1fr; }
   .hero-badges { justify-content: flex-start; }
   .settings-brand-card { grid-column: auto; }
 }
