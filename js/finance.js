@@ -491,6 +491,74 @@ function openLineReminder(state, reportA) {
   window.open(url, '_blank', 'noopener');
 }
 
+function getFinanceConcernCount(state, reportA) {
+  const receivableDays = Number(state.settings?.receivableOverdueDays || 30);
+  const payableDays = Number(state.settings?.payableWarningDays || 14);
+  const overdueReceivables = reportA.filter((row) => row.remain > 0 && row.age >= receivableDays).length;
+  const overduePayables = state.payables.filter((row) => {
+    const unpaid = Math.max(0, Number(row.amount || 0) - Number(row.paid || 0));
+    const age = row.date ? Math.floor((Date.now() - new Date(row.date).getTime()) / 86400000) : 0;
+    return unpaid > 0 && age >= payableDays;
+  }).length;
+  return overdueReceivables + overduePayables;
+}
+
+function ensureFinanceOverview(state, reportA) {
+  const main = $('financeMainScreen');
+  if (!main) return;
+  const heading = main.querySelector(':scope > h3');
+  if (heading) heading.textContent = state.financeScreen === 'concerns' ? '疑慮待辦' : '財經重點';
+
+  if (!$('financeOverviewIntro')) {
+    const intro = document.createElement('div');
+    intro.id = 'financeOverviewIntro';
+    intro.className = 'finance-overview-intro';
+    intro.innerHTML = `
+      <div>
+        <strong>先看重點，需要時再深入</strong>
+        <p class="sub">首頁只顯示重要金額與疑慮數量，完整資料仍保留在各功能頁。</p>
+      </div>
+      <div class="finance-overview-actions">
+        <button class="finance-action-card" type="button" data-finance-screen="concerns"><strong>疑慮待辦</strong><span>逾期應收、待付款與近期異動</span></button>
+        <button class="finance-action-card" type="button" data-finance-screen="entry"><strong>新增收付款</strong><span>登錄應收或應付資料</span></button>
+        <button class="finance-action-card" type="button" data-finance-screen="workspace"><strong>發票與報表</strong><span>發票、月結與客戶對帳</span></button>
+      </div>`;
+    heading?.after(intro);
+
+    const kpiGrid = $('kpiReceivable')?.closest('.kpi-grid');
+    if (kpiGrid) {
+      const concern = document.createElement('div');
+      concern.className = 'kpi finance-concern-kpi';
+      concern.innerHTML = '<span>需要注意</span><strong id="financeConcernCount">0</strong>';
+      kpiGrid.append(concern);
+    }
+  }
+
+  if ($('financeConcernCount')) $('financeConcernCount').textContent = String(getFinanceConcernCount(state, reportA));
+}
+
+function applyFinanceScreen(state) {
+  const active = state.financeScreen || 'main';
+  const main = $('financeMainScreen');
+  const workspace = $('financeWorkspaceScreen');
+  const entry = $('receivableForm')?.closest('.split.finance-split');
+  if (entry) entry.id = 'financeEntryScreen';
+
+  main?.classList.toggle('hidden', !['main', 'concerns'].includes(active));
+  workspace?.classList.toggle('hidden', active !== 'workspace');
+  entry?.classList.toggle('hidden', active !== 'entry');
+
+  const detailNodes = [
+    $('financeRecvSummary')?.closest('.kpi-grid'),
+    $('sendLineReminderBtn')?.closest('.filter-row'),
+    $('financeTodayAlerts')?.closest('.split.finance-split'),
+    $('financeChartBars')?.closest('article.card'),
+    $('financeReceivableActions')?.closest('.split.finance-split'),
+  ].filter(Boolean);
+  detailNodes.forEach((node) => node.classList.toggle('hidden', active !== 'concerns'));
+  $('financeOverviewIntro')?.classList.toggle('finance-concerns-open', active === 'concerns');
+}
+
 
 
 export function renderFinance(state) {
@@ -523,12 +591,11 @@ export function renderFinance(state) {
   renderFinanceQuickActions(state, reportA);
   renderMonthClose(state, reportA);
 
-  const activeScreen = state.financeScreen || 'main';
-  $('financeMainScreen').classList.toggle('hidden', activeScreen !== 'main');
-  $('financeWorkspaceScreen').classList.toggle('hidden', activeScreen !== 'workspace');
+  ensureFinanceOverview(state, reportA);
+  applyFinanceScreen(state);
 
   document.querySelectorAll('[data-finance-screen]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.financeScreen === state.financeScreen);
+    btn.classList.toggle('active', btn.dataset.financeScreen === (state.financeScreen || 'main'));
   });
 }
 
@@ -659,10 +726,10 @@ export function bindFinanceEvents(state, saveState, renderAll) {
   $('recvCustomer')?.addEventListener('input', () => updateFinanceSmartHint(state));
   updateFinanceSmartHint(state);
 
-  document.querySelectorAll('[data-finance-screen]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.financeScreen = btn.dataset.financeScreen;
-      renderFinance(state);
-    });
+  $('financeView')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-finance-screen]');
+    if (!btn) return;
+    state.financeScreen = btn.dataset.financeScreen;
+    renderFinance(state);
   });
 }

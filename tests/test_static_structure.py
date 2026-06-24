@@ -169,6 +169,21 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('escapeHtml(value)', finance)
         self.assertIn('.table-actions', styles)
 
+    def test_finance_home_is_progressively_disclosed(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        finance = (ROOT / 'js' / 'finance.js').read_text(encoding='utf-8')
+        styles = (ROOT / 'styles.css').read_text(encoding='utf-8')
+        self.assertIn('data-finance-screen="concerns"', view)
+        self.assertIn('data-finance-screen="entry"', view)
+        self.assertIn('財經重點', view)
+        self.assertIn('getFinanceConcernCount', finance)
+        self.assertIn('ensureFinanceOverview', finance)
+        self.assertIn('applyFinanceScreen', finance)
+        self.assertIn("entry.id = 'financeEntryScreen'", finance)
+        self.assertIn("state.financeScreen = 'main'", (ROOT / 'js' / 'main.js').read_text(encoding='utf-8'))
+        self.assertIn('.finance-overview-actions', styles)
+        self.assertIn('.finance-action-card', styles)
+
     def test_finance_month_close_and_statement_are_present(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         finance = (ROOT / 'js' / 'finance.js').read_text(encoding='utf-8')

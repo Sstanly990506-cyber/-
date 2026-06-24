@@ -399,6 +399,9 @@ function showView(id) {
   if (id === 'ordersView') {
     state.orderScreen = 'list';
   }
+  if (id === 'financeView') {
+    state.financeScreen = 'main';
+  }
   renderAll();
 }
 
