@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
+from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -67,6 +67,20 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result['account'], created)
         self.assertEqual(register.call_args.kwargs['allowed_views'], ['tripsView'])
 
+    def test_admin_can_update_shared_settings(self):
+        current = {'settings': None, 'syncTick': 4}
+        settings = {'moduleInternals': {'orders': {'pricingRules': {'divisor': 4680}}}}
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_state', return_value=current), patch('api.service.write_state', return_value=(True, 5)) as write:
+            result = user_action_payload('token', {'action': 'update_settings', 'settings': settings})
+        self.assertEqual(result['syncTick'], 5)
+        self.assertEqual(write.call_args.args[0]['settings'], settings)
+
+    def test_non_admin_cannot_update_shared_settings(self):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}):
+            with self.assertRaises(ApiError) as caught:
+                user_action_payload('token', {'action': 'update_settings', 'settings': {}})
+        self.assertEqual(caught.exception.status, 403)
+
     def test_admin_can_list_and_update_account_permissions(self):
         users = [{'id': 'u1', 'username': 'driver1', 'usernameKey': 'driver1', 'display': 'Driver', 'role': 'viewer', 'allowedViews': []}]
         with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_users', return_value=users), patch('api.service.write_users') as write:
@@ -87,6 +101,24 @@ class ServiceTests(unittest.TestCase):
             result = optimize_trip_payload('token', {'stops': []})
         self.assertEqual(result, {'ok': True})
         optimize.assert_called_once_with({'stops': []})
+
+    def test_ops_can_request_pricing_quote(self):
+        payload = {'width': 26, 'height': 18, 'quantity': 1000, 'coatingType': 'PVA', 'machineType': 'SMALL'}
+        state = {'settings': {'moduleInternals': {'orders': {'pricingRules': {'divisor': 4680}}}}}
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.read_state', return_value=state):
+            result = pricing_quote_payload('token', payload)
+        self.assertEqual(result['calculatedPrice'], 900)
+        self.assertEqual(result['finalPrice'], 900)
+        self.assertFalse(result['minimumApplied'])
+
+    def test_pricing_quote_uses_customer_override(self):
+        payload = {'width': 26, 'height': 18, 'quantity': 1000, 'coatingType': 'PVB', 'machineType': 'BIG', 'customer': '三青'}
+        rules = [{'id': 'p1', 'customer': '三青', 'glossType': 'PVB光/油', 'pricingMode': 'formula', 'sizeWidthTai': 26, 'sizeLengthTai': 18, 'unitPrice': 800}]
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.read_state', return_value={'settings': None}), patch('api.service._all_records', return_value=rules):
+            result = pricing_quote_payload('token', payload)
+        self.assertEqual(result['unitPrice'], 800)
+        self.assertEqual(result['calculatedPrice'], 800)
+        self.assertEqual(result['finalPrice'], 1000)
 
     def test_deleting_order_also_deletes_linked_auto_receivable(self):
         records = {

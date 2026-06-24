@@ -24,7 +24,20 @@ const DEFAULT_SETTINGS = {
   welcomePrefix: '你好', defaultLandingView: 'dashboardView', themePrimary: '#f59e0b', themeAccent: '#8b5cf6', themePanel: '#1f2937',
   openAccess: true, enableKeyboardShortcut: true, orderWarningDays: 3, receivableOverdueDays: 30, payableWarningDays: 14, inventoryLowStockDefault: 100,
   moduleInternals: {
-    orders: { statuses: { 未完成: true, 已送出: true, 已完成: true }, quickActions: { 已送出: true, 已完成: true }, showFilters: true, showExport: true },
+    orders: {
+      statuses: { 未完成: true, 已送出: true, 已完成: true },
+      quickActions: { 已送出: true, 已完成: true },
+      showFilters: true,
+      showExport: true,
+      pricingRules: {
+        divisor: 4680,
+        basePrices: { PVA: 900, PVB: 700, WEAR: 900, PRESS: 850 },
+        smallAreaThreshold: 340,
+        smallSizes: ['12x26', '13x18', '14x21', '18x26'],
+        smallDiscounts: { PVA: 0.7, PVB: 0.6 },
+        minimumCharges: { BIG: 1000, SMALL: 600 },
+      },
+    },
     customers: { roles: { 上游: true, 下游: true, 兩者: true } },
     trips: { stopTypes: { delivery: true, pickup: true }, showManualRoute: true, showManualStopForm: true, showOrderPool: true },
   },
@@ -58,7 +71,19 @@ export function mergeSettings(raw = {}) {
   merged.modulePageNotes = sanitizeMap(raw.modulePageNotes, defaults.modulePageNotes, 300);
   merged.moduleEnabled = { ...defaults.moduleEnabled, ...(raw.moduleEnabled || {}) };
   merged.moduleInternals = {
-    orders: { ...defaults.moduleInternals.orders, ...(raw.moduleInternals?.orders || {}), statuses: { ...defaults.moduleInternals.orders.statuses, ...(raw.moduleInternals?.orders?.statuses || {}) }, quickActions: { ...defaults.moduleInternals.orders.quickActions, ...(raw.moduleInternals?.orders?.quickActions || {}) } },
+    orders: {
+      ...defaults.moduleInternals.orders,
+      ...(raw.moduleInternals?.orders || {}),
+      statuses: { ...defaults.moduleInternals.orders.statuses, ...(raw.moduleInternals?.orders?.statuses || {}) },
+      quickActions: { ...defaults.moduleInternals.orders.quickActions, ...(raw.moduleInternals?.orders?.quickActions || {}) },
+      pricingRules: {
+        ...defaults.moduleInternals.orders.pricingRules,
+        ...(raw.moduleInternals?.orders?.pricingRules || {}),
+        basePrices: { ...defaults.moduleInternals.orders.pricingRules.basePrices, ...(raw.moduleInternals?.orders?.pricingRules?.basePrices || {}) },
+        smallDiscounts: { ...defaults.moduleInternals.orders.pricingRules.smallDiscounts, ...(raw.moduleInternals?.orders?.pricingRules?.smallDiscounts || {}) },
+        minimumCharges: { ...defaults.moduleInternals.orders.pricingRules.minimumCharges, ...(raw.moduleInternals?.orders?.pricingRules?.minimumCharges || {}) },
+      },
+    },
     customers: { ...defaults.moduleInternals.customers, ...(raw.moduleInternals?.customers || {}), roles: { ...defaults.moduleInternals.customers.roles, ...(raw.moduleInternals?.customers?.roles || {}) } },
     trips: { ...defaults.moduleInternals.trips, ...(raw.moduleInternals?.trips || {}), stopTypes: { ...defaults.moduleInternals.trips.stopTypes, ...(raw.moduleInternals?.trips?.stopTypes || {}) } },
   };

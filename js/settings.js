@@ -122,6 +122,7 @@ function renderCapacity(payload) {
   warnings.innerHTML = lines.length ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('') : '<li>目前沒有明顯容量警訊。</li>';
 }
 function fillForm(settings) {
+  const pricing = settings.moduleInternals.orders.pricingRules;
   const map = {
     settingsAppTitle: settings.appTitle,
     settingsLoginTitle: settings.loginTitle,
@@ -145,6 +146,17 @@ function fillForm(settings) {
     settingsPayableWarningDays: settings.payableWarningDays,
     settingsInventoryLowStockDefault: settings.inventoryLowStockDefault,
     settingsDefaultLandingView: settings.defaultLandingView,
+    settingsPricingDivisor: pricing.divisor,
+    settingsPricingPva: pricing.basePrices.PVA,
+    settingsPricingPvb: pricing.basePrices.PVB,
+    settingsPricingWear: pricing.basePrices.WEAR,
+    settingsPricingPress: pricing.basePrices.PRESS,
+    settingsPricingSmallArea: pricing.smallAreaThreshold,
+    settingsPricingSmallSizes: pricing.smallSizes.join(','),
+    settingsPricingPvaDiscount: pricing.smallDiscounts.PVA,
+    settingsPricingPvbDiscount: pricing.smallDiscounts.PVB,
+    settingsPricingBigMinimum: pricing.minimumCharges.BIG,
+    settingsPricingSmallMinimum: pricing.minimumCharges.SMALL,
   };
   Object.entries(map).forEach(([id, value]) => {
     const el = $(id);
@@ -174,6 +186,11 @@ function fillForm(settings) {
 function toPositiveInt(value, fallback) {
   const num = Number(value);
   return Number.isFinite(num) && num > 0 ? Math.round(num) : fallback;
+}
+
+function toPositiveNumber(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
 }
 
 function collectSettings() {
@@ -215,6 +232,25 @@ function collectSettings() {
         quickActions: {
           '已送出': !!$('settingsOrderQuickSent')?.checked,
           '已完成': !!$('settingsOrderQuickDone')?.checked,
+        },
+        pricingRules: {
+          divisor: toPositiveNumber($('settingsPricingDivisor')?.value, defaults.moduleInternals.orders.pricingRules.divisor),
+          basePrices: {
+            PVA: toPositiveNumber($('settingsPricingPva')?.value, defaults.moduleInternals.orders.pricingRules.basePrices.PVA),
+            PVB: toPositiveNumber($('settingsPricingPvb')?.value, defaults.moduleInternals.orders.pricingRules.basePrices.PVB),
+            WEAR: toPositiveNumber($('settingsPricingWear')?.value, defaults.moduleInternals.orders.pricingRules.basePrices.WEAR),
+            PRESS: toPositiveNumber($('settingsPricingPress')?.value, defaults.moduleInternals.orders.pricingRules.basePrices.PRESS),
+          },
+          smallAreaThreshold: toPositiveNumber($('settingsPricingSmallArea')?.value, defaults.moduleInternals.orders.pricingRules.smallAreaThreshold),
+          smallSizes: ($('settingsPricingSmallSizes')?.value || '').split(/[,，]/).map((item) => item.trim()).filter(Boolean),
+          smallDiscounts: {
+            PVA: toPositiveNumber($('settingsPricingPvaDiscount')?.value, defaults.moduleInternals.orders.pricingRules.smallDiscounts.PVA),
+            PVB: toPositiveNumber($('settingsPricingPvbDiscount')?.value, defaults.moduleInternals.orders.pricingRules.smallDiscounts.PVB),
+          },
+          minimumCharges: {
+            BIG: toPositiveNumber($('settingsPricingBigMinimum')?.value, defaults.moduleInternals.orders.pricingRules.minimumCharges.BIG),
+            SMALL: toPositiveNumber($('settingsPricingSmallMinimum')?.value, defaults.moduleInternals.orders.pricingRules.minimumCharges.SMALL),
+          },
         },
       },
       customers: {
@@ -517,20 +553,30 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     }
   });
 
-  $('settingsForm')?.addEventListener('submit', (e) => {
+  $('settingsForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     state.settings = collectSettings();
     state.settings.defaultLandingView = normalizeLandingView(state.settings);
+    try {
+      await adminAction({ action: 'update_settings', settings: state.settings });
       saveState();
-    renderAll();
-    alert('設定已儲存，畫面、模組與警示門檻已立即更新。');
+      renderAll();
+      alert('設定已儲存到伺服器，所有裝置會使用最新報價規則。');
+    } catch (err) {
+      alert(`儲存設定失敗：${err.message}`);
+    }
   });
 
-  $('resetSettingsBtn')?.addEventListener('click', () => {
+  $('resetSettingsBtn')?.addEventListener('click', async () => {
     state.settings = getDefaultSettings();
+    try {
+      await adminAction({ action: 'update_settings', settings: state.settings });
       saveState();
-    renderAll();
-    alert('已恢復預設設定。');
+      renderAll();
+      alert('已恢復並同步預設設定。');
+    } catch (err) {
+      alert(`恢復預設設定失敗：${err.message}`);
+    }
   });
 
   $('settingsForm')?.addEventListener('input', () => {

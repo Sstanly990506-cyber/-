@@ -2,7 +2,7 @@
 import errno
 import socket
 from api.http_server import create_server, is_blocked_static_path
-from api.service import ApiError, backup_payload, bootstrap_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, report_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
+from api.service import ApiError, backup_payload, bootstrap_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, report_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
 from api.storage import BASE_DIR, DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
 try:
     from flask import Flask, abort, jsonify, request, send_from_directory
@@ -48,6 +48,8 @@ if app is not None:
     @app.post('/api/trips/optimize')
     @app.post('/trips/optimize')
     def post_optimize_trip():return service_response(optimize_trip_payload,bearer_token(),request.get_json(silent=True))
+    @app.post('/api/pricing/quote')
+    def post_pricing_quote():return service_response(pricing_quote_payload,bearer_token(),request.get_json(silent=True))
     @app.post('/api/orders/recognize')
     def post_recognize_order():return service_response(recognize_order_payload,bearer_token(),request.get_json(silent=True))
     @app.get('/api/orders/recognize/status')

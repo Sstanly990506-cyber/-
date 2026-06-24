@@ -1,9 +1,10 @@
 import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
-import { estimateOrderPriceFromRule, findCustomerPriceRule } from './pricing.js';
+import { calculateOrderQuote, coatingTypeCode, toTaiInch } from './pricing.js';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
+let lastAutoPrice = 0;
 const ORDER_ENTRY_FIELD_IDS = [
   'orderNumber',
   'orderDate',
@@ -16,6 +17,7 @@ const ORDER_ENTRY_FIELD_IDS = [
   'sizeLength',
   'sizeWidth',
   'sizeUnit',
+  'machineType',
   'glossType',
   'totalPrice',
   'orderStatus',
@@ -29,13 +31,6 @@ function escapeHtml(value) {
     '"': '&quot;',
     "'": '&#39;',
   }[char]));
-}
-
-function toTaiInch(value, unit) {
-  const num = Number(value || 0);
-  if (!num) return 0;
-  const mm = unit === 'cm' ? num * 10 : unit === 'inch' ? num * 25.4 : unit === 'tai-inch' ? num * 30.3 : num;
-  return mm / 30.3;
 }
 
 function updateTaiInchPreview() {
@@ -122,15 +117,16 @@ function findSmartPriceSuggestion(state, editingId = '') {
   const sheetCount = Number($('sheetCount').value || 0);
   const area = Number($('sizeLength').value || 0) * Number($('sizeWidth').value || 0);
 
-  const priceRule = findCustomerPriceRule(state, {
+  const formulaQuote = calculateOrderQuote(state, {
     billingCustomer,
     glossType,
     sizeLength: $('sizeLength').value,
     sizeWidth: $('sizeWidth').value,
     sizeUnit: $('sizeUnit').value || 'mm',
+    machineType: $('machineType')?.value || 'BIG',
+    sheetCount,
   });
-  const ruleEstimate = estimateOrderPriceFromRule(priceRule, sheetCount);
-  if (ruleEstimate) return { estimated: ruleEstimate, source: 'priceRule', rule: priceRule, unitPrice: Number(priceRule.unitPrice || 0) };
+  if (formulaQuote) return { ...formulaQuote, estimated: formulaQuote.finalPrice };
 
   const candidates = state.orders.filter((o) => {
     if (editingId && o.id === editingId) return false;
@@ -160,13 +156,22 @@ function updateOrderSmartHint(state) {
     hint.textContent = '智能估價：輸入客人、上光種類、尺寸與計算張數後，系統會先找客人價格表；沒有符合才用歷史工單估算。';
     return;
   }
-  if (suggestion.source === 'priceRule') {
-    hint.textContent = `客人價格表：符合 ${suggestion.rule.customer} / ${suggestion.rule.glossType || '不限品項'} / 每張 NT$ ${suggestion.unitPrice.toLocaleString()}，預估總價 NT$ ${suggestion.estimated.toLocaleString()}。`;
+  if (suggestion.source !== 'history') {
+    const source = suggestion.customerRule ? `客人專屬單價 ${suggestion.unitPrice.toLocaleString()} 元／令` : `預設單價 ${suggestion.unitPrice.toLocaleString()} 元／令`;
+    const adjustments = [
+      suggestion.smallDiscountApplied ? '已套用小尺寸折扣' : '',
+      suggestion.minimumApplied ? '已套用最低收費' : '',
+    ].filter(Boolean).join('、');
+    hint.textContent = `公式報價：${source}，計算價 NT$ ${suggestion.calculatedPrice.toLocaleString()}，最終報價 NT$ ${suggestion.finalPrice.toLocaleString()}${adjustments ? `（${adjustments}）` : ''}。`;
   } else {
     const basis = $('billingCustomerInput')?.value.trim() ? '同一個客人' : '相近工單';
     hint.textContent = `智能估價：使用 ${suggestion.candidates} 筆${basis}相近尺寸紀錄，預估總價約 NT$ ${suggestion.estimated.toLocaleString()}，平均每張 ${suggestion.avgPerSheet.toLocaleString()}。`;
   }
-  if (!$('totalPrice').value) $('totalPrice').value = String(suggestion.estimated);
+  const currentPrice = Number($('totalPrice').value || 0);
+  if (!currentPrice || currentPrice === lastAutoPrice) {
+    $('totalPrice').value = String(suggestion.estimated);
+    lastAutoPrice = suggestion.estimated;
+  }
 }
 
 function formatRuleSize(rule) {
@@ -180,13 +185,20 @@ function clearPriceRuleForm() {
 }
 
 function buildPriceRuleFromForm() {
+  const sizeLength = Number($('priceRuleLength')?.value || 0);
+  const sizeWidth = Number($('priceRuleWidth')?.value || 0);
+  const sizeUnit = $('priceRuleUnit')?.value || 'mm';
   return {
     id: $('priceRuleId')?.value || crypto.randomUUID(),
     customer: $('priceRuleCustomer')?.value.trim() || '',
     glossType: $('priceRuleGloss')?.value.trim() || '',
-    sizeLength: Number($('priceRuleLength')?.value || 0),
-    sizeWidth: Number($('priceRuleWidth')?.value || 0),
-    sizeUnit: $('priceRuleUnit')?.value || 'mm',
+    sizeLength,
+    sizeWidth,
+    sizeUnit,
+    sizeLengthTai: toTaiInch(sizeLength, sizeUnit),
+    sizeWidthTai: toTaiInch(sizeWidth, sizeUnit),
+    machineType: $('priceRuleMachine')?.value || 'ANY',
+    pricingMode: 'formula',
     unitPrice: Number($('priceRuleUnitPrice')?.value || 0),
     note: $('priceRuleNote')?.value.trim() || '',
     updatedAt: new Date().toLocaleString(),
@@ -202,12 +214,13 @@ function renderPriceRules(state) {
       <td>${escapeHtml(rule.customer || '-')}</td>
       <td>${escapeHtml(rule.glossType || '不限')}</td>
       <td>${escapeHtml(formatRuleSize(rule))}</td>
-      <td>NT$ ${Number(rule.unitPrice || 0).toLocaleString()}</td>
+      <td>${rule.machineType === 'BIG' ? '大台' : rule.machineType === 'SMALL' ? '小台' : '全部'}</td>
+      <td>${rule.pricingMode === 'formula' ? '元／令' : '舊制每張'} NT$ ${Number(rule.unitPrice || 0).toLocaleString()}</td>
       <td>
         <button class="btn small" type="button" data-edit-price-rule="${escapeHtml(rule.id)}">編輯</button>
         <button class="btn small ghost" type="button" data-delete-price-rule="${escapeHtml(rule.id)}">刪除</button>
       </td>
-    </tr>`).join('') : '<tr><td colspan="5">尚未建立客人價格。</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="6">尚未建立客人價格。</td></tr>';
 }
 
 function getPriceRuleCustomerMatches(state) {
@@ -252,6 +265,7 @@ function buildOrderFromForm(state) {
     sizeLength: Number($('sizeLength').value || 0),
     sizeWidth: Number($('sizeWidth').value || 0),
     sizeUnit: $('sizeUnit').value || 'mm',
+    machineType: $('machineType')?.value || 'BIG',
     glossType: $('glossType').value || '',
     totalPrice: Number($('totalPrice').value || 0),
     status: $('orderStatus').value || getEnabledOrderStatuses(state)[0],
@@ -514,6 +528,7 @@ export function clearOrderForm() {
   $('orderId').value = '';
   $('orderDate').value = getTodayText();
   $('sizeTaiInch').value = '';
+  lastAutoPrice = 0;
   lastRecognizedOrder = null;
   $('reportAiCorrectionBtn')?.classList.add('hidden');
   document.querySelectorAll('.ai-review-required').forEach((input) => input.classList.remove('ai-review-required'));
@@ -534,6 +549,7 @@ export function openOrderForEdit(state, orderId) {
   $('sizeLength').value = order.sizeLength || '';
   $('sizeWidth').value = order.sizeWidth || '';
   $('sizeUnit').value = order.sizeUnit || 'mm';
+  $('machineType').value = order.machineType || 'BIG';
   $('glossType').value = order.glossType || '';
   $('totalPrice').value = order.totalPrice || '';
   $('orderStatus').value = order.status || '未完成';
@@ -559,6 +575,7 @@ function copyOrderAsNew(state, orderId) {
   $('sizeLength').value = order.sizeLength || '';
   $('sizeWidth').value = order.sizeWidth || '';
   $('sizeUnit').value = order.sizeUnit || 'mm';
+  $('machineType').value = order.machineType || 'BIG';
   $('glossType').value = order.glossType || '';
   $('totalPrice').value = order.totalPrice || '';
   $('orderStatus').value = '未完成';
@@ -606,7 +623,7 @@ function applyRecognizedOrder(state, order) {
   const fields = {
     orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: billingCustomer, upstreamInput: order.upstream,
     downstreamInput: order.downstream, orderAddress: order.address, sheetCountText: order.sheetCountText, sheetCount: order.sheetCount,
-    sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, totalPrice: order.totalPrice,
+    sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, machineType: order.machineType, totalPrice: order.totalPrice,
   };
   Object.entries(fields).forEach(([id, value]) => {
     if (value === '' || value === null || value === undefined || value === 0) return;
@@ -820,7 +837,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });
   bindOrderEnterNavigation();
 
-  ['sizeLength', 'sizeWidth', 'sizeUnit'].forEach((id) => {
+  ['sizeLength', 'sizeWidth', 'sizeUnit', 'machineType'].forEach((id) => {
     $(id)?.addEventListener('input', () => { updateTaiInchPreview(); updateOrderSmartHint(state); });
     $(id)?.addEventListener('change', () => { updateTaiInchPreview(); updateOrderSmartHint(state); });
   });
@@ -846,7 +863,8 @@ export function bindOrderEvents(state, saveState, renderAll) {
     const ruleWidth = toTaiInch(rule.sizeWidth, rule.sizeUnit);
     const duplicated = state.priceRules.find((item) => item.id !== rule.id
       && String(item.customer || '').trim() === rule.customer
-      && String(item.glossType || '').trim() === rule.glossType
+      && coatingTypeCode(item.glossType) === coatingTypeCode(rule.glossType)
+      && (item.machineType || 'ANY') === rule.machineType
       && Math.abs(toTaiInch(item.sizeLength, item.sizeUnit) - ruleLength) <= 0.15
       && Math.abs(toTaiInch(item.sizeWidth, item.sizeUnit) - ruleWidth) <= 0.15);
     if (duplicated && !window.confirm('這個客人、品項與尺寸已經有價格，要覆蓋那筆嗎？')) return;
@@ -884,6 +902,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       $('priceRuleLength').value = rule.sizeLength || '';
       $('priceRuleWidth').value = rule.sizeWidth || '';
       $('priceRuleUnit').value = rule.sizeUnit || 'mm';
+      $('priceRuleMachine').value = rule.machineType || 'ANY';
       $('priceRuleUnitPrice').value = rule.unitPrice || '';
       $('priceRuleNote').value = rule.note || '';
       renderPriceRuleCustomerMatches(state);

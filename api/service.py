@@ -5,6 +5,7 @@ from api.records import changes_since, clear_records, count_records_by_entity, d
 from api.ai_orders import OrderRecognitionError, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.trip_optimizer import optimize_trip
+from api.pricing import calculate_quote, normalize_coating_type
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
 ENTITY_VIEW={'orders':'ordersView','customers':'customersView','inventory':'inventoryView','events':'notificationsView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','aiCorrections':'ordersView'}
 STATE_FIELD_VIEW={'glossOptions':'ordersView','customers':'customersView','orders':'ordersView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','systemEvents':'notificationsView','inventoryItems':'inventoryView'}
@@ -29,7 +30,7 @@ def filter_state_for_account(state,account):
     payload=dict(DEFAULT_APP_STATE)
     for field in DEFAULT_APP_STATE:
         if field=='settings':
-            payload[field]=state.get(field) if (account or {}).get('role')=='admin' else None
+            payload[field]=state.get(field)
         elif field in STATE_FIELD_VIEW and account_can_view(account,STATE_FIELD_VIEW[field]):
             payload[field]=state.get(field,payload[field])
         elif field in {'syncTick'}:
@@ -231,12 +232,41 @@ def user_action_payload(token,payload):
         try:change_finance_module_password(password)
         except ValueError as err:raise ApiError(str(err),400) from err
         return {'ok':True}
+    if action=='update_settings':
+        account=require_account(token)
+        if account.get('role')!='admin':raise ApiError('admin role required',403)
+        settings=payload.get('settings')
+        if not isinstance(settings,dict):raise ApiError('invalid settings',400)
+        current=read_state();current['settings']=settings
+        ok,tick=write_state(current)
+        if not ok:raise ApiError('settings changed on another device; retry',409,serverSyncTick=tick)
+        return {'ok':True,'syncTick':tick}
     raise ApiError('unsupported action',400)
 def optimize_trip_payload(token,payload):
     account=require_account(token)
     if not account_can_view(account,'tripsView'):raise ApiError('permission denied',403)
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     try:return optimize_trip(payload)
+    except ValueError as err:raise ApiError(str(err),400) from err
+def pricing_quote_payload(token,payload):
+    account=require_account(token)
+    if not account_can_view(account,'ordersView'):raise ApiError('permission denied',403)
+    if not isinstance(payload,dict):raise ApiError('invalid json',400)
+    try:
+        settings=(read_state().get('settings') or {}).get('moduleInternals',{}).get('orders',{}).get('pricingRules')
+        customer=str(payload.get('customer') or '').strip().lower()
+        customer_price=None
+        if customer:
+            width=float(payload.get('width') or 0);height=float(payload.get('height') or 0)
+            for rule in _all_records('priceRules'):
+                if str(rule.get('customer') or '').strip().lower()!=customer or rule.get('pricingMode')!='formula':continue
+                if normalize_coating_type(rule.get('glossType'))!=normalize_coating_type(payload.get('coatingType')):continue
+                if rule.get('machineType') not in {None,'','ANY',payload.get('machineType')}:continue
+                rule_width=float(rule.get('sizeWidthTai') or rule.get('sizeWidth') or 0)
+                rule_height=float(rule.get('sizeLengthTai') or rule.get('sizeLength') or 0)
+                if (abs(rule_width-width)<=0.15 and abs(rule_height-height)<=0.15) or (abs(rule_width-height)<=0.15 and abs(rule_height-width)<=0.15):
+                    customer_price=rule.get('unitPrice');break
+        return {'ok':True,**calculate_quote(payload,settings,customer_price)}
     except ValueError as err:raise ApiError(str(err),400) from err
 def recognize_order_payload(token,payload):
     account=require_account(token)
