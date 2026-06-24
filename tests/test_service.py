@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
+from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -87,6 +87,23 @@ class ServiceTests(unittest.TestCase):
             result = optimize_trip_payload('token', {'stops': []})
         self.assertEqual(result, {'ok': True})
         optimize.assert_called_once_with({'stops': []})
+
+    def test_deleting_order_also_deletes_linked_auto_receivable(self):
+        records = {
+            'orders': [{'id': 'o-1', 'orderNumber': 'WO-1'}],
+            'receivables': [
+                {'id': 'r-1', 'source': 'auto-order', 'orderNumber': 'WO-1'},
+                {'id': 'r-2', 'source': 'manual', 'orderNumber': 'WO-1'},
+            ],
+        }
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), \
+                patch('api.service._all_records', side_effect=lambda entity: records[entity]), \
+                patch('api.service.delete_record', return_value={'ok': True}) as remove:
+            result = delete_entity_payload('token', 'orders', 'o-1')
+        self.assertEqual(remove.call_args_list[0].args, ('orders', 'o-1'))
+        self.assertEqual(remove.call_args_list[1].args, ('receivables', 'r-1'))
+        self.assertEqual(remove.call_count, 2)
+        self.assertEqual(result['deletedLinkedReceivables'], 1)
 
     def test_non_admin_cannot_change_finance_password(self):
         with patch('api.service.verify_session_token', return_value={'role': 'finance'}):

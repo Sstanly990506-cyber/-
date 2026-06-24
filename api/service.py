@@ -101,7 +101,21 @@ def upsert_entity_payload(token,entity,record_id,payload):
     require_entity_access(token,entity)
     try:return upsert_record(entity,record_id,payload)
     except ValueError as err:raise ApiError(str(err),400) from err
-def delete_entity_payload(token,entity,record_id):require_entity_access(token,entity);return delete_record(entity,record_id)
+def delete_entity_payload(token,entity,record_id):
+    require_entity_access(token,entity)
+    linked_receivables=0
+    order_number=''
+    if entity=='orders':
+        order=next((row for row in _all_records('orders') if str(row.get('id') or '')==str(record_id or '')),None)
+        order_number=str((order or {}).get('orderNumber') or '').strip()
+    result=delete_record(entity,record_id)
+    if order_number:
+        for receivable in _all_records('receivables'):
+            if receivable.get('source')=='auto-order' and str(receivable.get('orderNumber') or '').strip()==order_number:
+                delete_record('receivables',receivable.get('id'))
+                linked_receivables+=1
+    if entity=='orders':result['deletedLinkedReceivables']=linked_receivables
+    return result
 def clear_test_data_payload(token,payload):
     account=require_account(token)
     if account.get('role')!='admin':raise ApiError('admin role required',403)

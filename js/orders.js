@@ -4,6 +4,21 @@ import { estimateOrderPriceFromRule, findCustomerPriceRule } from './pricing.js'
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
+const ORDER_ENTRY_FIELD_IDS = [
+  'orderNumber',
+  'orderDate',
+  'billingCustomerInput',
+  'downstreamInput',
+  'orderAddress',
+  'sheetCountText',
+  'sheetCount',
+  'sizeLength',
+  'sizeWidth',
+  'sizeUnit',
+  'glossType',
+  'totalPrice',
+  'orderStatus',
+];
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -27,6 +42,19 @@ function updateTaiInchPreview() {
   const l = toTaiInch($('sizeLength').value, unit);
   const w = toTaiInch($('sizeWidth').value, unit);
   $('sizeTaiInch').value = l && w ? `${l.toFixed(2)} × ${w.toFixed(2)} 台吋` : '';
+}
+
+function bindOrderEnterNavigation() {
+  const controls = ORDER_ENTRY_FIELD_IDS.map((id) => $(id)).filter(Boolean);
+  controls.forEach((control, index) => {
+    control.enterKeyHint = index === controls.length - 1 ? 'done' : 'next';
+    control.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+      event.preventDefault();
+      const next = controls[index + 1] || $('saveOrderBtn');
+      next?.focus();
+    });
+  });
 }
 
 
@@ -432,13 +460,13 @@ export function renderOrders(state, renderCustomerOptions) {
       <td>${order.orderNumber || '-'}</td>
       <td>${order.orderDate || '-'}</td>
       <td>${order.billingCustomer || '-'}</td>
-      <td>${order.upstream || '-'}</td>
       <td>${order.downstream || '-'}</td>
       <td>${Number(order.totalPrice || 0).toLocaleString()}</td>
       <td>${order.status || '未完成'}</td>
       <td>${order.updatedAt || '-'}</td>
       <td>
         <button class="btn" data-edit="${order.id}">編輯</button>
+        <button class="btn danger" data-delete-order="${order.id}">刪除</button>
         ${settings.quickActions?.['已完成'] && visibleStatuses.has('已完成') ? `<button class="btn" data-quick-status="已完成" data-id="${order.id}">已完成</button>` : ''}
         ${settings.quickActions?.['已送出'] && visibleStatuses.has('已送出') ? `<button class="btn" data-quick-status="已送出" data-id="${order.id}">已送出</button>` : ''}
       </td>`;
@@ -666,6 +694,25 @@ export function bindOrderEvents(state, saveState, renderAll) {
   });
 
   $('ordersTbody')?.addEventListener('click', (e) => {
+    const deleteBtn = e.target.closest('button[data-delete-order]');
+    if (deleteBtn) {
+      const index = state.orders.findIndex((order) => order.id === deleteBtn.dataset.deleteOrder);
+      if (index < 0) return;
+      const order = state.orders[index];
+      const label = order.orderNumber || '未命名工單';
+      if (!window.confirm(`確定要刪除工單「${label}」嗎？刪除後無法復原。`)) return;
+      state.orders.splice(index, 1);
+      for (let i = state.receivables.length - 1; i >= 0; i -= 1) {
+        const receivable = state.receivables[i];
+        if (receivable.source === 'auto-order' && receivable.orderNumber === order.orderNumber) {
+          state.receivables.splice(i, 1);
+        }
+      }
+      saveState();
+      renderAll();
+      return;
+    }
+
     const quickBtn = e.target.closest('button[data-quick-status]');
     if (quickBtn) {
       const order = state.orders.find((o) => o.id === quickBtn.dataset.id);
@@ -694,6 +741,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   });
 
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });
+  bindOrderEnterNavigation();
 
   ['sizeLength', 'sizeWidth', 'sizeUnit'].forEach((id) => {
     $(id)?.addEventListener('input', () => { updateTaiInchPreview(); updateOrderSmartHint(state); });

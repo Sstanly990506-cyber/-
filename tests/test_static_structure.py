@@ -268,6 +268,20 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("sheetCountText:String(o.sheetCountText??o.sheetCount??'')", store)
         self.assertIn('billingCustomer:String(o.billingCustomer??', store)
 
+    def test_orders_can_be_deleted_and_enter_moves_between_fields(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
+        self.assertIn('data-delete-order', orders)
+        self.assertIn('確定要刪除工單', orders)
+        self.assertIn("receivable.source === 'auto-order'", orders)
+        self.assertIn('id="saveOrderBtn"', view)
+        self.assertIn('ORDER_ENTRY_FIELD_IDS', orders)
+        self.assertIn('bindOrderEnterNavigation', orders)
+        self.assertIn("event.key !== 'Enter'", orders)
+        self.assertIn('event.isComposing', orders)
+        self.assertIn("linked_receivables", service)
+
     def test_ai_recognition_has_vercel_runtime_limits(self):
         vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
