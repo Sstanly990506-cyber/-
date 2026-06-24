@@ -81,7 +81,7 @@
             <div class="filter-row" id="orderStatusFilters"></div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>工單編號</th><th>日期</th><th>客人</th><th>下游</th><th>總價</th><th>狀態</th><th>最後更新</th><th></th></tr></thead>
+                <thead><tr><th>順序</th><th>工單編號（雙擊複製）</th><th>日期</th><th>客人</th><th>上游</th><th>下游</th><th>總價</th><th>狀態</th><th>最後更新</th><th></th></tr></thead>
                 <tbody id="ordersTbody"></tbody>
               </table>
             </div>
@@ -110,6 +110,11 @@
               <div class="actions span-2">
                 <button id="openPriceRulesFromOrderBtn" class="btn" type="button" data-order-screen="pricing">設定客人價格</button>
               </div>
+
+              <label>上游客戶（可搜尋）
+                <input id="upstreamInput" list="upstreamOptions" placeholder="請選交紙給我們的印刷廠" />
+                <datalist id="upstreamOptions"></datalist>
+              </label>
 
               <label>下游客戶（可搜尋）
                 <input id="downstreamInput" list="downstreamOptions" placeholder="輸入關鍵字，例如：彩" />

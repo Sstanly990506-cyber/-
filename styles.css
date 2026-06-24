@@ -357,6 +357,8 @@ th, td {
   vertical-align: middle;
 }
 .table-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.order-number-copy { cursor: copy; user-select: none; font-weight: 700; }
+.order-number-copy:hover { color: #fbbf24; text-decoration: underline; }
 .module-permission-grid,
 .account-permissions-list {
   display: grid;

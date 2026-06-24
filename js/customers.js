@@ -75,14 +75,17 @@ function updateCustomerSmartHint(state) {
 }
 
 export function renderCustomerOptions(state) {
+  const upstream = $('upstreamOptions');
   const downstream = $('downstreamOptions');
   const billing = $('billingCustomerOptions');
-  if (!downstream || !billing) return;
+  if (!upstream || !downstream || !billing) return;
+  upstream.innerHTML = '';
   downstream.innerHTML = '';
   billing.innerHTML = '';
   const active = state.customers.filter((c) => c.active !== false);
   const billingAndUpstream = active.filter((c) => ['上游', '兩者'].includes(normalizeCustomerRole(c.role)));
 
+  billingAndUpstream.forEach((c) => upstream.append(new Option(c.name, c.name)));
   active
     .filter((c) => normalizeCustomerRole(c.role) === '下游' || normalizeCustomerRole(c.role) === '兩者')
     .forEach((c) => downstream.append(new Option(c.name, c.name)));

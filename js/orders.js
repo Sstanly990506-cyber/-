@@ -8,6 +8,7 @@ const ORDER_ENTRY_FIELD_IDS = [
   'orderNumber',
   'orderDate',
   'billingCustomerInput',
+  'upstreamInput',
   'downstreamInput',
   'orderAddress',
   'sheetCountText',
@@ -83,6 +84,35 @@ function nextOrderNumber(state) {
     .map((n) => Number(n.slice(prefix.length)) || 0);
   const next = (Math.max(0, ...seq) + 1).toString().padStart(3, '0');
   return `${prefix}${next}`;
+}
+
+function sortedOrders(state) {
+  return state.orders
+    .map((order, index) => ({ order, index }))
+    .sort((a, b) => {
+      const aOrder = Number.isFinite(a.order.sortOrder) ? a.order.sortOrder : a.index;
+      const bOrder = Number.isFinite(b.order.sortOrder) ? b.order.sortOrder : b.index;
+      return aOrder - bOrder || a.index - b.index;
+    })
+    .map(({ order }) => order);
+}
+
+function normalizeOrderPositions(state) {
+  sortedOrders(state).forEach((order, index) => {
+    order.sortOrder = index;
+  });
+}
+
+function moveOrder(state, orderId, direction) {
+  normalizeOrderPositions(state);
+  const ordered = sortedOrders(state);
+  const index = ordered.findIndex((order) => order.id === orderId);
+  const targetIndex = index + direction;
+  if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return false;
+  const current = ordered[index];
+  const target = ordered[targetIndex];
+  [current.sortOrder, target.sortOrder] = [target.sortOrder, current.sortOrder];
+  return true;
 }
 
 function findSmartPriceSuggestion(state, editingId = '') {
@@ -214,7 +244,7 @@ function buildOrderFromForm(state) {
     orderNumber: $('orderNumber').value.trim(),
     orderDate: $('orderDate').value,
     billingCustomer,
-    upstream: billingCustomer,
+    upstream: $('upstreamInput')?.value.trim() || '',
     downstream: $('downstreamInput').value.trim(),
     address: $('orderAddress').value.trim(),
     sheetCount,
@@ -449,7 +479,7 @@ export function renderOrders(state, renderCustomerOptions) {
   const settings = getOrderModuleSettings(state);
   const visibleStatuses = new Set(getEnabledOrderStatuses(state));
   const keyword = getOrderSearchKeyword();
-  const filtered = state.orders
+  const filtered = sortedOrders(state)
     .filter((order) => visibleStatuses.has(order.status || '未完成'))
     .filter((order) => (state.orderStatusFilter === '全部' ? true : order.status === state.orderStatusFilter))
     .filter((order) => matchesOrderSearch(order, keyword));
@@ -457,9 +487,14 @@ export function renderOrders(state, renderCustomerOptions) {
   filtered.forEach((order) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${order.orderNumber || '-'}</td>
+      <td class="table-actions">
+        <button class="btn small" type="button" data-move-order="-1" data-id="${order.id}" title="上移">↑</button>
+        <button class="btn small" type="button" data-move-order="1" data-id="${order.id}" title="下移">↓</button>
+      </td>
+      <td class="order-number-copy" data-copy-order="${order.id}" title="雙擊複製成新工單">${order.orderNumber || '-'}</td>
       <td>${order.orderDate || '-'}</td>
       <td>${order.billingCustomer || '-'}</td>
+      <td>${order.upstream || '-'}</td>
       <td>${order.downstream || '-'}</td>
       <td>${Number(order.totalPrice || 0).toLocaleString()}</td>
       <td>${order.status || '未完成'}</td>
@@ -491,6 +526,7 @@ export function openOrderForEdit(state, orderId) {
   $('orderNumber').value = order.orderNumber || '';
   $('orderDate').value = order.orderDate || '';
   $('billingCustomerInput').value = order.billingCustomer || order.upstream || '';
+  $('upstreamInput').value = order.upstream || '';
   $('downstreamInput').value = order.downstream || '';
   $('orderAddress').value = order.address || '';
   $('sheetCountText').value = order.sheetCountText || (order.sheetCount ? String(order.sheetCount) : '');
@@ -505,6 +541,32 @@ export function openOrderForEdit(state, orderId) {
   renderOrderScreen(state);
   updateOrderSmartHint(state);
   $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
+  return true;
+}
+
+function copyOrderAsNew(state, orderId) {
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) return false;
+  clearOrderForm();
+  $('orderNumber').value = '';
+  $('orderDate').value = order.orderDate || getTodayText();
+  $('billingCustomerInput').value = order.billingCustomer || '';
+  $('upstreamInput').value = order.upstream || '';
+  $('downstreamInput').value = order.downstream || '';
+  $('orderAddress').value = order.address || '';
+  $('sheetCountText').value = order.sheetCountText || (order.sheetCount ? String(order.sheetCount) : '');
+  $('sheetCount').value = order.sheetCount || '';
+  $('sizeLength').value = order.sizeLength || '';
+  $('sizeWidth').value = order.sizeWidth || '';
+  $('sizeUnit').value = order.sizeUnit || 'mm';
+  $('glossType').value = order.glossType || '';
+  $('totalPrice').value = order.totalPrice || '';
+  $('orderStatus').value = '未完成';
+  state.orderScreen = 'form';
+  renderOrderScreen(state);
+  updateTaiInchPreview();
+  updateOrderSmartHint(state);
+  $('orderNumber')?.focus();
   return true;
 }
 
@@ -540,9 +602,9 @@ async function prepareOrderImage(file) {
 }
 
 function applyRecognizedOrder(state, order) {
-  const billingAndUpstream = order.upstream || order.billingCustomer || '';
+  const billingCustomer = order.billingCustomer || order.upstream || '';
   const fields = {
-    orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: billingAndUpstream,
+    orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: billingCustomer, upstreamInput: order.upstream,
     downstreamInput: order.downstream, orderAddress: order.address, sheetCountText: order.sheetCountText, sheetCount: order.sheetCount,
     sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, totalPrice: order.totalPrice,
   };
@@ -661,6 +723,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     const payload = {
       id,
       ...buildOrderFromForm(state),
+      sortOrder: existing?.sortOrder ?? Math.min(0, ...state.orders.map((order) => Number(order.sortOrder) || 0)) - 1,
       updatedAt: new Date().toLocaleString(),
     };
 
@@ -694,6 +757,15 @@ export function bindOrderEvents(state, saveState, renderAll) {
   });
 
   $('ordersTbody')?.addEventListener('click', (e) => {
+    const moveBtn = e.target.closest('button[data-move-order]');
+    if (moveBtn) {
+      if (moveOrder(state, moveBtn.dataset.id, Number(moveBtn.dataset.moveOrder))) {
+        saveState();
+        renderAll();
+      }
+      return;
+    }
+
     const deleteBtn = e.target.closest('button[data-delete-order]');
     if (deleteBtn) {
       const index = state.orders.findIndex((order) => order.id === deleteBtn.dataset.deleteOrder);
@@ -739,6 +811,11 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (!btn) return;
     openOrderForEdit(state, btn.dataset.edit);
   });
+  $('ordersTbody')?.addEventListener('dblclick', (e) => {
+    const cell = e.target.closest('[data-copy-order]');
+    if (!cell) return;
+    copyOrderAsNew(state, cell.dataset.copyOrder);
+  });
 
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });
   bindOrderEnterNavigation();
@@ -754,6 +831,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('downstreamInput')?.addEventListener('input', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('billingCustomerInput')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('billingCustomerInput')?.addEventListener('change', () => updateOrderSmartHint(state));
+  $('upstreamInput')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('exportOrderBtn')?.addEventListener('click', () => {
