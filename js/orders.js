@@ -46,19 +46,6 @@ function syncAddressFromDownstream(state, onlyWhenEmpty = false) {
   return true;
 }
 
-function syncBillingAndUpstream(sourceId = '') {
-  const billing = $('billingCustomerInput');
-  const upstream = $('upstreamInput');
-  if (!billing || !upstream) return '';
-  const source = sourceId === 'billingCustomerInput' ? billing : upstream;
-  const target = sourceId === 'billingCustomerInput' ? upstream : billing;
-  const value = source.value.trim();
-  if (value && target.value !== value) target.value = value;
-  if (!value && sourceId) target.value = '';
-  return upstream.value.trim() || billing.value.trim();
-}
-
-
 function nextOrderNumber(state) {
   const d = getTodayText().replaceAll('-', '');
   const prefix = `WO-${d}-`;
@@ -73,7 +60,6 @@ function nextOrderNumber(state) {
 function findSmartPriceSuggestion(state, editingId = '') {
   const billingCustomer = $('billingCustomerInput')?.value.trim() || '';
   const downstream = $('downstreamInput').value.trim();
-  const upstream = $('upstreamInput').value.trim();
   const glossType = $('glossType').value || '';
   const sheetCount = Number($('sheetCount').value || 0);
   const area = Number($('sizeLength').value || 0) * Number($('sizeWidth').value || 0);
@@ -94,7 +80,6 @@ function findSmartPriceSuggestion(state, editingId = '') {
     if (glossType && o.glossType !== glossType) return false;
     if (billingCustomer && (o.billingCustomer || '') !== billingCustomer) return false;
     if (!billingCustomer && downstream && o.downstream !== downstream) return false;
-    if (!billingCustomer && !downstream && upstream && o.upstream !== upstream) return false;
     return true;
   });
 
@@ -196,12 +181,12 @@ function renderPriceRuleCustomerMatches(state) {
 
 function buildOrderFromForm(state) {
   const sheetCount = Number($('sheetCount').value || 0);
-  const billingAndUpstream = syncBillingAndUpstream();
+  const billingCustomer = $('billingCustomerInput')?.value.trim() || '';
   return {
     orderNumber: $('orderNumber').value.trim(),
     orderDate: $('orderDate').value,
-    billingCustomer: billingAndUpstream,
-    upstream: billingAndUpstream,
+    billingCustomer,
+    upstream: billingCustomer,
     downstream: $('downstreamInput').value.trim(),
     address: $('orderAddress').value.trim(),
     sheetCount,
@@ -477,8 +462,7 @@ export function openOrderForEdit(state, orderId) {
   $('orderId').value = order.id;
   $('orderNumber').value = order.orderNumber || '';
   $('orderDate').value = order.orderDate || '';
-  $('billingCustomerInput').value = order.upstream || order.billingCustomer || '';
-  $('upstreamInput').value = order.upstream || order.billingCustomer || '';
+  $('billingCustomerInput').value = order.billingCustomer || order.upstream || '';
   $('downstreamInput').value = order.downstream || '';
   $('orderAddress').value = order.address || '';
   $('sheetCountText').value = order.sheetCountText || (order.sheetCount ? String(order.sheetCount) : '');
@@ -530,7 +514,7 @@ async function prepareOrderImage(file) {
 function applyRecognizedOrder(state, order) {
   const billingAndUpstream = order.upstream || order.billingCustomer || '';
   const fields = {
-    orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: billingAndUpstream, upstreamInput: billingAndUpstream,
+    orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: billingAndUpstream,
     downstreamInput: order.downstream, orderAddress: order.address, sheetCountText: order.sheetCountText, sheetCount: order.sheetCount,
     sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, totalPrice: order.totalPrice,
   };
@@ -545,7 +529,6 @@ function applyRecognizedOrder(state, order) {
     $('glossType').value = order.glossType;
   }
   const addressFilledFromCustomer = syncAddressFromDownstream(state);
-  syncBillingAndUpstream();
   updateTaiInchPreview();
   updateOrderSmartHint(state);
   lastRecognizedOrder = { ...order, address: $('orderAddress')?.value.trim() || '' };
@@ -722,9 +705,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('downstreamInput')?.addEventListener('blur', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('downstreamInput')?.addEventListener('input', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('billingCustomerInput')?.addEventListener('input', () => updateOrderSmartHint(state));
-  $('billingCustomerInput')?.addEventListener('change', () => { syncBillingAndUpstream('billingCustomerInput'); updateOrderSmartHint(state); });
-  $('upstreamInput')?.addEventListener('input', () => updateOrderSmartHint(state));
-  $('upstreamInput')?.addEventListener('change', () => { syncBillingAndUpstream('upstreamInput'); updateOrderSmartHint(state); });
+  $('billingCustomerInput')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('exportOrderBtn')?.addEventListener('click', () => {

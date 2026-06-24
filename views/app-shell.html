@@ -103,18 +103,13 @@
               <input id="orderId" type="hidden" />
               <label>工單編號<input id="orderNumber" /></label>
               <label>交貨日期<input id="orderDate" type="date" /></label>
-              <label>客人（同上游客戶）
-                <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="請選上游印刷廠／請款廠商" />
+              <label>客人
+                <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="請選印刷廠／請款客人" />
                 <datalist id="billingCustomerOptions"></datalist>
               </label>
               <div class="actions span-2">
                 <button id="openPriceRulesFromOrderBtn" class="btn" type="button" data-order-screen="pricing">設定客人價格</button>
               </div>
-
-              <label>上游客戶（可搜尋）
-                <input id="upstreamInput" list="upstreamOptions" placeholder="輸入關鍵字，例如：彩" />
-                <datalist id="upstreamOptions"></datalist>
-              </label>
 
               <label>下游客戶（可搜尋）
                 <input id="downstreamInput" list="downstreamOptions" placeholder="輸入關鍵字，例如：彩" />
