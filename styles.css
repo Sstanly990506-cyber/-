@@ -662,9 +662,76 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
 .settings-switch span { color: #e2e8f0; }
 .settings-modules-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
 }
+.settings-module-nav-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 112px;
+  padding: 16px;
+  color: var(--text);
+  text-align: left;
+  background: rgba(15, 23, 42, 0.58);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  cursor: pointer;
+}
+.settings-module-nav-card:hover {
+  border-color: rgba(245, 158, 11, 0.58);
+  transform: translateY(-1px);
+}
+.settings-module-nav-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  color: #fff7ed;
+  background: linear-gradient(135deg, var(--primary-dark), var(--accent));
+  font-size: 20px;
+  font-weight: 800;
+}
+.settings-module-nav-copy {
+  display: grid;
+  gap: 5px;
+}
+.settings-module-nav-copy strong { font-size: 16px; }
+.settings-module-nav-copy small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+.settings-module-arrow {
+  grid-column: 2 / -1;
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 700;
+}
+.settings-module-detail {
+  display: grid;
+  gap: 14px;
+}
+.settings-module-back {
+  width: fit-content;
+}
+.settings-module-editor {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.46);
+}
+.settings-module-editor-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.settings-module-editor-head h3,
+.settings-module-editor-head p { margin: 0; }
 .settings-internal-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -756,6 +823,21 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .actions { flex-direction: column; }
   .btn { width: 100%; }
   .finance-overview-actions { grid-template-columns: 1fr; }
+  .settings-module-nav-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .settings-module-nav-card .toggle-pill {
+    grid-column: 2;
+    width: fit-content;
+  }
+  .settings-module-arrow { grid-column: 2; }
+  .settings-module-editor-head {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .settings-module-editor-head .toggle-pill {
+    grid-column: 2;
+    width: fit-content;
+  }
   .orders-table-wrap {
     overflow: visible;
     max-height: none;

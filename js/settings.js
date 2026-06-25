@@ -5,34 +5,69 @@ function ensureSettings(state) {
   return state.settings;
 }
 
+let activeSettingsModuleId = null;
+let settingsDraft = null;
+
 function moduleSettingsHtml(settings) {
   return MODULE_DEFINITIONS.map((module) => {
     const label = settings.moduleLabels[module.id] || module.label;
     const description = settings.moduleDescriptions[module.id] || module.description;
     const icon = settings.moduleIcons[module.id] || module.icon;
-    const pageNote = settings.modulePageNotes[module.id] || `${label} 的頁面說明`;
     const enabled = isModuleEnabledInSettings(settings, module.id);
     return `
-      <label class="settings-module-card">
-        <div class="settings-module-head">
-          <div>
-            <strong>${icon} ${label}</strong>
-            <p class="sub">${description}</p>
-          </div>
-          <span class="toggle-pill ${enabled ? 'on' : 'off'}">${enabled ? '啟用中' : '已停用'}</span>
-        </div>
-        <div class="form-grid module-form-grid">
-          <label>圖示<input data-settings-module-icon="${module.id}" value="${icon}" maxlength="4" /></label>
-          <label>名稱<input data-settings-module-label="${module.id}" value="${label}" placeholder="模組名稱" /></label>
-          <label class="span-2">描述<input data-settings-module-description="${module.id}" value="${description}" placeholder="模組說明" /></label>
-          <label class="span-2">頁面說明<input data-settings-module-page-note="${module.id}" value="${pageNote}" placeholder="模組頁面內說明" /></label>
-        </div>
-        <span class="check-row">
-          <input data-settings-module-enabled="${module.id}" type="checkbox" ${enabled ? 'checked' : ''} />
-          顯示並開放此模組
+      <button class="settings-module-nav-card" type="button" data-settings-open-module="${module.id}">
+        <span class="settings-module-nav-icon">${escapeHtml(icon)}</span>
+        <span class="settings-module-nav-copy">
+          <strong>${escapeHtml(label)}</strong>
+          <small>${escapeHtml(description)}</small>
         </span>
-      </label>`;
+        <span class="toggle-pill ${enabled ? 'on' : 'off'}">${enabled ? '啟用中' : '已停用'}</span>
+        <span class="settings-module-arrow">進入設定 ›</span>
+      </button>`;
   }).join('');
+}
+
+function moduleEditorHtml(settings, moduleId) {
+  const module = getModuleMeta(moduleId);
+  if (!module) return '';
+  const label = settings.moduleLabels[moduleId] || module.label;
+  const description = settings.moduleDescriptions[moduleId] || module.description;
+  const icon = settings.moduleIcons[moduleId] || module.icon;
+  const pageNote = settings.modulePageNotes[moduleId] || `${label} 的頁面說明`;
+  const enabled = isModuleEnabledInSettings(settings, moduleId);
+  return `
+    <div class="settings-module-editor-head">
+      <span class="settings-module-nav-icon">${escapeHtml(icon)}</span>
+      <div>
+        <h3>${escapeHtml(label)}</h3>
+        <p class="sub">${escapeHtml(description)}</p>
+      </div>
+      <span class="toggle-pill ${enabled ? 'on' : 'off'}">${enabled ? '啟用中' : '已停用'}</span>
+    </div>
+    <div class="form-grid module-form-grid">
+      <label>圖示<input data-settings-module-icon="${moduleId}" value="${escapeHtml(icon)}" maxlength="4" /></label>
+      <label>名稱<input data-settings-module-label="${moduleId}" value="${escapeHtml(label)}" placeholder="模組名稱" /></label>
+      <label class="span-2">描述<input data-settings-module-description="${moduleId}" value="${escapeHtml(description)}" placeholder="模組說明" /></label>
+      <label class="span-2">頁面說明<input data-settings-module-page-note="${moduleId}" value="${escapeHtml(pageNote)}" placeholder="模組頁面內說明" /></label>
+      <label class="settings-switch span-2">
+        <input data-settings-module-enabled="${moduleId}" type="checkbox" ${enabled ? 'checked' : ''} />
+        <span>顯示並開放此模組</span>
+      </label>
+    </div>`;
+}
+
+function renderModuleSettingsNavigator(settings) {
+  const list = $('settingsModulesList');
+  if (list) {
+    list.innerHTML = moduleSettingsHtml(settings);
+    list.classList.toggle('hidden', !!activeSettingsModuleId);
+  }
+  $('settingsModuleDetail')?.classList.toggle('hidden', !activeSettingsModuleId);
+  if ($('settingsModuleEditor')) $('settingsModuleEditor').innerHTML = activeSettingsModuleId ? moduleEditorHtml(settings, activeSettingsModuleId) : '';
+  document.querySelectorAll('[data-settings-internal-module]').forEach((section) => {
+    section.classList.toggle('hidden', section.dataset.settingsInternalModule !== activeSettingsModuleId);
+  });
+  $('settingsModuleNoInternals')?.classList.toggle('hidden', !activeSettingsModuleId || ['ordersView', 'customersView', 'tripsView'].includes(activeSettingsModuleId));
 }
 
 const PERMISSION_ROLE_DEFAULTS = {
@@ -122,6 +157,7 @@ function renderCapacity(payload) {
   warnings.innerHTML = lines.length ? lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('') : '<li>目前沒有明顯容量警訊。</li>';
 }
 function fillForm(settings) {
+  settingsDraft = mergeSettings(settings);
   const pricing = settings.moduleInternals.orders.pricingRules;
   const map = {
     settingsAppTitle: settings.appTitle,
@@ -180,7 +216,7 @@ function fillForm(settings) {
   if ($('settingsTripShowOrderPool')) $('settingsTripShowOrderPool').checked = !!settings.moduleInternals.trips.showOrderPool;
   if ($('settingsTripShowManualRoute')) $('settingsTripShowManualRoute').checked = !!settings.moduleInternals.trips.showManualRoute;
   if ($('settingsEnableKeyboardShortcut')) $('settingsEnableKeyboardShortcut').checked = !!settings.enableKeyboardShortcut;
-  if ($('settingsModulesList')) $('settingsModulesList').innerHTML = moduleSettingsHtml(settings);
+  renderModuleSettingsNavigator(settings);
   updateSettingsPreview(settings);
 }
 
@@ -197,6 +233,7 @@ function toPositiveNumber(value, fallback) {
 function collectSettings() {
   const defaults = getDefaultSettings();
   const next = mergeSettings({
+    ...(settingsDraft || defaults),
     appTitle: $('settingsAppTitle')?.value.trim() || defaults.appTitle,
     loginTitle: $('settingsLoginTitle')?.value.trim() || defaults.loginTitle,
     companyName: $('settingsCompanyName')?.value.trim() || defaults.companyName,
@@ -298,6 +335,7 @@ function collectSettings() {
     next.moduleEnabled[input.dataset.settingsModuleEnabled] = input.checked;
   });
 
+  settingsDraft = next;
   return next;
 }
 
@@ -361,6 +399,7 @@ export function applyUiSettings(state) {
 
 export function renderSettings(state) {
   const settings = ensureSettings(state);
+  activeSettingsModuleId = null;
   fillForm(settings);
 }
 
@@ -408,6 +447,16 @@ export function bindSettingsEvents(state, saveState, renderAll) {
   });
 
   $('newAccountRole')?.addEventListener('change', renderNewAccountPermissions);
+  $('settingsModulesList')?.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-settings-open-module]');
+    if (!button) return;
+    activeSettingsModuleId = button.dataset.settingsOpenModule;
+    renderModuleSettingsNavigator(collectSettings());
+  });
+  $('settingsModulesBack')?.addEventListener('click', () => {
+    activeSettingsModuleId = null;
+    renderModuleSettingsNavigator(collectSettings());
+  });
   $('refreshAccountsBtn')?.addEventListener('click', () => {
     loadAccounts().catch((err) => alert(`刷新帳號失敗：${err.message}`));
   });
@@ -590,6 +639,6 @@ export function bindSettingsEvents(state, saveState, renderAll) {
   $('settingsForm')?.addEventListener('change', () => {
     const preview = collectSettings();
     updateSettingsPreview(preview);
-    if ($('settingsModulesList')) $('settingsModulesList').innerHTML = moduleSettingsHtml(preview);
+    if (!activeSettingsModuleId) renderModuleSettingsNavigator(preview);
   });
 }

@@ -104,7 +104,7 @@ function renderDashboardNavCards() {
   if (!grid) return;
   const visibleModules = MODULE_DEFINITIONS
     .filter((module) => module.id !== 'settingsView' && module.id !== 'dashboardView' && module.id !== 'loginView')
-    .filter((module) => isModuleEnabled(module.id));
+    .filter((module) => isModuleEnabled(module.id) && hasViewPermission(module.id));
 
   grid.innerHTML = visibleModules.map((module) => {
     const label = state.settings?.moduleLabels?.[module.id] || module.label;
@@ -115,6 +115,8 @@ function renderDashboardNavCards() {
 
 function applyRoleUi() {
   renderDashboardNavCards();
+  $('settingsBtn')?.classList.toggle('hidden', state.userRole !== 'admin');
+  $('dashboardPriorities')?.classList.toggle('hidden', state.userRole === 'driver');
   document.querySelectorAll('.nav-card').forEach((card) => {
     const targetView = card.dataset.target;
     const enabled = isModuleEnabled(targetView);

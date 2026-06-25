@@ -158,6 +158,38 @@ class StaticStructureTests(unittest.TestCase):
         self.assertGreater(view.index('id="createAccountForm"'), settings_close)
         self.assertGreater(view.index('id="financePasswordForm"'), settings_close)
 
+    def test_dashboard_only_renders_modules_allowed_for_account(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        self.assertIn("isModuleEnabled(module.id) && hasViewPermission(module.id)", main)
+        self.assertIn('id="dashboardPriorities"', view)
+        self.assertIn("state.userRole === 'driver'", main)
+        self.assertIn("state.userRole !== 'admin'", main)
+        self.assertIn("!state.allowedViews.includes('notificationsView')", store)
+
+    def test_trip_accounts_load_read_only_order_dependencies(self):
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
+        self.assertIn("driver:['customers','orders']", store)
+        self.assertIn("tripsView:['customers','orders']", store)
+        self.assertIn('account_can_read_entity', service)
+        self.assertIn("entity in {'orders','customers'} and account_can_view(account,'tripsView')", service)
+        self.assertIn('require_entity_read_access(token,entity)', service)
+
+    def test_module_settings_use_two_level_navigation(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
+        styles = (ROOT / 'styles.css').read_text(encoding='utf-8')
+        self.assertIn('id="settingsModuleDetail"', view)
+        self.assertIn('id="settingsModulesBack"', view)
+        self.assertIn('data-settings-internal-module="ordersView"', view)
+        self.assertIn('data-settings-internal-module="customersView"', view)
+        self.assertIn('data-settings-internal-module="tripsView"', view)
+        self.assertIn('data-settings-open-module', settings)
+        self.assertIn('renderModuleSettingsNavigator', settings)
+        self.assertIn('.settings-module-nav-card', styles)
+
     def test_finance_quick_actions_are_present(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         finance = (ROOT / 'js' / 'finance.js').read_text(encoding='utf-8')

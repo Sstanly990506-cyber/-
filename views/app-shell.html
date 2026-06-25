@@ -30,7 +30,7 @@
           </div>
         </header>
 
-        <section class="card dashboard-priorities">
+        <section id="dashboardPriorities" class="card dashboard-priorities">
           <h2>待辦重點</h2>
           <div class="dashboard-priority-grid">
             <button class="dashboard-priority" type="button" data-dashboard-target>
@@ -711,16 +711,18 @@
           </div>
 
           <article class="card">
-            <h3>功能模組設定</h3>
-            <p class="sub">可以重新命名每個模組，並決定是否對全站顯示。</p>
+            <div class="section-head">
+              <div>
+                <h3>功能模組設定</h3>
+                <p class="sub">先選擇要調整的系統，再進入該系統的名稱、顯示方式與內部功能設定。</p>
+              </div>
+            </div>
             <div id="settingsModulesList" class="settings-modules-list"></div>
-          </article>
-
-          <article class="card">
-            <h3>模組內部細節設定</h3>
-            <p class="sub">工單、客戶與車趟的細項開關統一集中在設定頁管理。</p>
-            <div class="settings-internal-grid">
-              <div class="settings-subgroup">
+            <div id="settingsModuleDetail" class="settings-module-detail hidden">
+              <button id="settingsModulesBack" class="btn settings-module-back" type="button">← 返回所有系統</button>
+              <div id="settingsModuleEditor" class="settings-module-editor"></div>
+              <div class="settings-internal-grid">
+              <div class="settings-subgroup" data-settings-internal-module="ordersView">
                 <h4>工單系統</h4>
                 <label class="settings-switch"><input id="settingsOrderShowFilters" type="checkbox" /><span>顯示狀態篩選按鈕</span></label>
                 <label class="settings-switch"><input id="settingsOrderShowExport" type="checkbox" /><span>顯示工單匯出按鈕</span></label>
@@ -731,7 +733,7 @@
                 <label class="settings-switch"><input id="settingsOrderQuickSent" type="checkbox" /><span>顯示快速動作「已送出」</span></label>
                 <label class="settings-switch"><input id="settingsOrderQuickDone" type="checkbox" /><span>顯示快速動作「已完成」</span></label>
               </div>
-              <div class="settings-subgroup pricing-settings-group">
+              <div class="settings-subgroup pricing-settings-group" data-settings-internal-module="ordersView">
                 <h4>報價公式</h4>
                 <p class="sub">總價＝寬台吋×長台吋×張數×單價÷（公式除數×100）。預設 4680 可讓 26×18×1000×900 算出 900 元。</p>
                 <label>公式除數<input id="settingsPricingDivisor" type="number" min="1" step="0.01" /></label>
@@ -746,19 +748,24 @@
                 <label>大台最低收費<input id="settingsPricingBigMinimum" type="number" min="1" step="1" /></label>
                 <label>小台最低收費<input id="settingsPricingSmallMinimum" type="number" min="1" step="1" /></label>
               </div>
-              <div class="settings-subgroup">
+              <div class="settings-subgroup" data-settings-internal-module="customersView">
                 <h4>客戶資料系統</h4>
                 <label class="settings-switch"><input id="settingsCustomerRoleUpstream" type="checkbox" /><span>顯示角色「上游」</span></label>
                 <label class="settings-switch"><input id="settingsCustomerRoleDownstream" type="checkbox" /><span>顯示角色「下游」</span></label>
                 <label class="settings-switch"><input id="settingsCustomerRoleBoth" type="checkbox" /><span>顯示角色「兩者」</span></label>
               </div>
-              <div class="settings-subgroup">
+              <div class="settings-subgroup" data-settings-internal-module="tripsView">
                 <h4>車趟系統</h4>
                 <label class="settings-switch"><input id="settingsTripTypeDelivery" type="checkbox" /><span>顯示類型「送貨」</span></label>
                 <label class="settings-switch"><input id="settingsTripTypePickup" type="checkbox" /><span>顯示類型「載貨」</span></label>
                 <label class="settings-switch"><input id="settingsTripShowManualStopForm" type="checkbox" /><span>顯示手動新增站點區塊</span></label>
                 <label class="settings-switch"><input id="settingsTripShowOrderPool" type="checkbox" /><span>顯示工單勾選區塊</span></label>
                 <label class="settings-switch"><input id="settingsTripShowManualRoute" type="checkbox" /><span>顯示手動路線調整區塊</span></label>
+              </div>
+              <div id="settingsModuleNoInternals" class="settings-subgroup hidden">
+                <h4>此系統目前沒有額外細節</h4>
+                <p class="sub">你仍可在上方調整名稱、圖示、說明，以及是否顯示此模組。</p>
+              </div>
               </div>
             </div>
           </article>

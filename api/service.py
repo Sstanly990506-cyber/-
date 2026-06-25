@@ -20,12 +20,20 @@ def require_entity_access(token,entity):
     if entity not in ENTITY_VIEW:raise ApiError('unsupported entity',404)
     if not account_can_view(account,ENTITY_VIEW[entity]):raise ApiError('permission denied',403)
     return account
+def require_entity_read_access(token,entity):
+    account=require_account(token)
+    if entity not in ENTITY_VIEW:raise ApiError('unsupported entity',404)
+    if not account_can_read_entity(account,entity):raise ApiError('permission denied',403)
+    return account
 def account_can_view(account,view_id):
     if view_id in {'loginView','dashboardView'}:return True
     if (account or {}).get('role')=='admin':return True
     return view_id in normalize_allowed_views((account or {}).get('allowedViews'),(account or {}).get('role') or 'viewer')
+def account_can_read_entity(account,entity):
+    if account_can_view(account,ENTITY_VIEW.get(entity,'')):return True
+    return entity in {'orders','customers'} and account_can_view(account,'tripsView')
 def bootstrap_entities_for_account(account):
-    return [entity for entity,view_id in ENTITY_VIEW.items() if account_can_view(account,view_id)]
+    return [entity for entity in ENTITY_VIEW if account_can_read_entity(account,entity)]
 def filter_state_for_account(state,account):
     payload=dict(DEFAULT_APP_STATE)
     for field in DEFAULT_APP_STATE:
@@ -95,7 +103,7 @@ def update_state_payload(token,payload):
     if not ok:raise ApiError('stale syncTick',409,serverSyncTick=tick)
     return {'ok':True,'syncTick':tick}
 def list_entity_payload(token,entity,page=1,page_size=100,query=''):
-    require_entity_access(token,entity)
+    require_entity_read_access(token,entity)
     try:return list_records(entity,page,page_size,query)
     except ValueError as err:raise ApiError(str(err),400) from err
 def upsert_entity_payload(token,entity,record_id,payload):
@@ -143,7 +151,7 @@ def restore_backup_payload(token,payload):
     result=restore_records(backup.get('records'))
     return {'ok':True,'restored':result.get('restored') or {},'syncTick':tick,'message':'備份已還原；帳號、財務密碼與系統設定安全資訊已保留。'}
 def changes_payload(token,since=0,limit=1000):
-    account=require_account(token);result=changes_since(since,limit);result['changes']=[row for row in result['changes'] if account_can_view(account,ENTITY_VIEW.get(row.get('entity'),''))];return result
+    account=require_account(token);result=changes_since(since,limit);result['changes']=[row for row in result['changes'] if account_can_read_entity(account,row.get('entity'))];return result
 def _all_records(entity):
     first=list_records(entity,1,500);rows=list(first['items'])
     for page in range(2,first['pages']+1):rows.extend(list_records(entity,page,500)['items'])

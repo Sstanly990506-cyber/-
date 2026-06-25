@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, user_action_payload
+from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -91,11 +91,14 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(updated['account']['allowedViews'], ['tripsView'])
         write.assert_called_once()
 
-    def test_driver_cannot_list_orders_but_can_optimize_trip(self):
+    def test_driver_can_read_trip_dependencies_but_cannot_modify_orders(self):
         driver = {'role': 'driver', 'allowedViews': ['tripsView']}
+        with patch('api.service.verify_session_token', return_value=driver), patch('api.service.list_records', return_value={'ok': True, 'items': []}):
+            result = list_entity_payload('token', 'orders')
+        self.assertEqual(result['items'], [])
         with patch('api.service.verify_session_token', return_value=driver):
             with self.assertRaises(ApiError) as caught:
-                list_entity_payload('token', 'orders')
+                upsert_entity_payload('token', 'orders', 'o1', {'orderNumber': 'WO-1'})
         self.assertEqual(caught.exception.status, 403)
         with patch('api.service.verify_session_token', return_value=driver), patch('api.service.optimize_trip', return_value={'ok': True}) as optimize:
             result = optimize_trip_payload('token', {'stops': []})
