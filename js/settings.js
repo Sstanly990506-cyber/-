@@ -165,6 +165,7 @@ function fillForm(settings) {
   if ($('settingsOpenAccess')) $('settingsOpenAccess').checked = !!settings.openAccess;
   if ($('settingsOrderShowFilters')) $('settingsOrderShowFilters').checked = !!settings.moduleInternals.orders.showFilters;
   if ($('settingsOrderShowExport')) $('settingsOrderShowExport').checked = !!settings.moduleInternals.orders.showExport;
+  if ($('settingsOrderShowAiTools')) $('settingsOrderShowAiTools').checked = settings.moduleInternals.orders.showAiTools !== false;
   if ($('settingsOrderStatusPending')) $('settingsOrderStatusPending').checked = !!settings.moduleInternals.orders.statuses['未完成'];
   if ($('settingsOrderStatusSent')) $('settingsOrderStatusSent').checked = !!settings.moduleInternals.orders.statuses['已送出'];
   if ($('settingsOrderStatusDone')) $('settingsOrderStatusDone').checked = !!settings.moduleInternals.orders.statuses['已完成'];
@@ -224,6 +225,7 @@ function collectSettings() {
       orders: {
         showFilters: !!$('settingsOrderShowFilters')?.checked,
         showExport: !!$('settingsOrderShowExport')?.checked,
+        showAiTools: !!$('settingsOrderShowAiTools')?.checked,
         statuses: {
           '未完成': !!$('settingsOrderStatusPending')?.checked,
           '已送出': !!$('settingsOrderStatusSent')?.checked,

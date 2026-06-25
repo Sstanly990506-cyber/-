@@ -259,6 +259,31 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('exportAiCorrections', orders)
         self.assertIn("'aiCorrections':'ordersView'", service)
 
+    def test_ai_order_tools_can_be_disabled_from_settings(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        shared = (ROOT / 'js' / 'shared.js').read_text(encoding='utf-8')
+        settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        self.assertIn('id="settingsOrderShowAiTools"', view)
+        self.assertIn('id="aiOrderRecognizer"', view)
+        self.assertIn('id="aiCorrectionCenter"', view)
+        self.assertIn('showAiTools: true', shared)
+        self.assertIn("showAiTools: !!$('settingsOrderShowAiTools')?.checked", settings)
+        self.assertIn("orderSettings.showAiTools === false", orders)
+        self.assertIn("getOrderModuleSettings(state).showAiTools === false", orders)
+
+    def test_order_list_has_compact_responsive_layout(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        styles = (ROOT / 'styles.css').read_text(encoding='utf-8')
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        self.assertIn('id="ordersListSummary"', view)
+        self.assertIn('class="orders-table"', view)
+        self.assertIn('data-label="客人 / 流程"', orders)
+        self.assertIn('order-status-badge', orders)
+        self.assertIn('.orders-table thead { display: none; }', styles)
+        self.assertIn('const displayTotal=', store)
+
     def test_ai_order_recognition_fills_existing_form(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')

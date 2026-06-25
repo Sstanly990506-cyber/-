@@ -384,6 +384,68 @@ th, td {
   background: rgba(15, 23, 42, 0.46);
   border: 1px solid rgba(148, 163, 184, 0.18);
 }
+.orders-list-head {
+  display: grid;
+  grid-template-columns: minmax(180px, auto) minmax(260px, 520px);
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.orders-list-head h3,
+.orders-list-head p { margin: 0; }
+.orders-list-head input { width: 100%; }
+.orders-table-wrap { max-height: 620px; }
+.orders-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card-strong);
+  white-space: nowrap;
+}
+.orders-table tbody tr:hover { background: rgba(255,255,255,0.035); }
+.order-number-copy {
+  min-width: 150px;
+}
+.order-number-copy strong,
+.order-number-copy small,
+.order-route-cell strong,
+.order-route-cell small {
+  display: block;
+}
+.order-number-copy small,
+.order-route-cell small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.order-price-cell {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.order-status-badge {
+  display: inline-flex;
+  padding: 5px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.1);
+  white-space: nowrap;
+}
+.order-status-badge[data-status="未完成"] { color: #fcd34d; border-color: rgba(245, 158, 11, 0.42); }
+.order-status-badge[data-status="已送出"] { color: #93c5fd; border-color: rgba(59, 130, 246, 0.42); }
+.order-status-badge[data-status="已完成"] { color: #86efac; border-color: rgba(34, 197, 94, 0.42); }
+.order-row-actions {
+  display: flex;
+  gap: 6px;
+  min-width: 200px;
+  flex-wrap: wrap;
+}
+.order-row-actions .btn { padding: 7px 10px; }
+.orders-empty-row td {
+  padding: 36px 16px;
+  color: var(--muted);
+  text-align: center;
+}
 .finance-overview-intro > div:first-child { display: grid; gap: 4px; }
 .finance-overview-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .finance-action-card {
@@ -668,6 +730,7 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .customer-price-row { grid-template-columns: 1fr; }
   .hero-badges { justify-content: flex-start; }
   .settings-brand-card { grid-column: auto; }
+  .orders-list-head { grid-template-columns: 1fr; align-items: stretch; }
 }
 
 
@@ -693,4 +756,57 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .actions { flex-direction: column; }
   .btn { width: 100%; }
   .finance-overview-actions { grid-template-columns: 1fr; }
+  .orders-table-wrap {
+    overflow: visible;
+    max-height: none;
+    border-radius: 0;
+  }
+  .orders-table,
+  .orders-table tbody { display: block; }
+  .orders-table thead { display: none; }
+  .orders-table tr {
+    display: grid;
+    gap: 0;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.42);
+  }
+  .orders-table td {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  }
+  .orders-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .orders-table td:last-child { border-bottom: 0; }
+  .orders-table .order-position-actions,
+  .orders-table .order-row-actions {
+    display: flex;
+    min-width: 0;
+  }
+  .orders-table .order-position-actions::before,
+  .orders-table .order-row-actions::before {
+    width: 78px;
+    flex: 0 0 78px;
+  }
+  .orders-table .order-position-actions .btn { width: 48px; }
+  .orders-table .order-row-actions .btn {
+    width: auto;
+    flex: 1 1 78px;
+  }
+  .orders-table .orders-empty-row { padding: 0; }
+  .orders-table .orders-empty-row td {
+    display: block;
+    padding: 28px 12px;
+  }
+  .orders-table .orders-empty-row td::before { content: none; }
 }

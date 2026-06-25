@@ -383,7 +383,10 @@ export function renderOrderScreen(state) {
   renderPriceRules(state);
   renderPriceRuleCustomerMatches(state);
   updatePriceRuleFormulaPreview(state);
-  $('exportOrderBtn')?.classList.toggle('hidden', getOrderModuleSettings(state).showExport === false);
+  const orderSettings = getOrderModuleSettings(state);
+  $('exportOrderBtn')?.classList.toggle('hidden', orderSettings.showExport === false);
+  $('aiOrderRecognizer')?.classList.toggle('hidden', orderSettings.showAiTools === false);
+  $('aiCorrectionCenter')?.classList.toggle('hidden', orderSettings.showAiTools === false);
 
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.orderScreen === activeScreen);
@@ -391,7 +394,7 @@ export function renderOrderScreen(state) {
 }
 
 function getOrderModuleSettings(state) {
-  return state.settings?.moduleInternals?.orders || { statuses: { '未完成': true, '已送出': true, '已完成': true }, quickActions: { '已送出': true, '已完成': true }, showFilters: true, showExport: true };
+  return state.settings?.moduleInternals?.orders || { statuses: { '未完成': true, '已送出': true, '已完成': true }, quickActions: { '已送出': true, '已完成': true }, showFilters: true, showExport: true, showAiTools: true };
 }
 
 function getEnabledOrderStatuses(state) {
@@ -468,6 +471,7 @@ function renderAiCorrectionCenter(rows = aiCorrectionsCache) {
 }
 
 async function loadAiCorrections(state) {
+  if (getOrderModuleSettings(state).showAiTools === false) return;
   const body = $('aiCorrectionsTbody');
   if (body) body.innerHTML = '<tr><td colspan="7">正在載入修正紀錄…</td></tr>';
   const res = await fetch('/api/data/aiCorrections?page=1&pageSize=100', {
@@ -535,11 +539,14 @@ export function renderOrders(state, renderCustomerOptions) {
   renderCustomerOptions(state);
   renderOrderStatusOptions(state);
   renderOrderFilters(state);
-  renderAiCorrectionCenter();
+  const settings = getOrderModuleSettings(state);
+  const aiEnabled = settings.showAiTools !== false;
+  $('aiOrderRecognizer')?.classList.toggle('hidden', !aiEnabled);
+  $('aiCorrectionCenter')?.classList.toggle('hidden', !aiEnabled);
+  if (aiEnabled) renderAiCorrectionCenter();
   const body = $('ordersTbody');
   body.innerHTML = '';
 
-  const settings = getOrderModuleSettings(state);
   const visibleStatuses = new Set(getEnabledOrderStatuses(state));
   const keyword = getOrderSearchKeyword();
   const filtered = sortedOrders(state)
@@ -547,22 +554,35 @@ export function renderOrders(state, renderCustomerOptions) {
     .filter((order) => (state.orderStatusFilter === '全部' ? true : order.status === state.orderStatusFilter))
     .filter((order) => matchesOrderSearch(order, keyword));
 
+  const summary = $('ordersListSummary');
+  if (summary) summary.textContent = `顯示 ${filtered.length} 筆，共 ${state.orders.length} 筆工單`;
+
+  if (!filtered.length) {
+    body.innerHTML = '<tr class="orders-empty-row"><td colspan="7">目前沒有符合條件的工單。</td></tr>';
+    return;
+  }
+
   filtered.forEach((order) => {
     const tr = document.createElement('tr');
+    const status = order.status || '未完成';
     tr.innerHTML = `
-      <td class="table-actions">
+      <td class="table-actions order-position-actions" data-label="順序">
         <button class="btn small" type="button" data-move-order="-1" data-id="${order.id}" title="上移">↑</button>
         <button class="btn small" type="button" data-move-order="1" data-id="${order.id}" title="下移">↓</button>
       </td>
-      <td class="order-number-copy" data-copy-order="${order.id}" title="雙擊複製成新工單">${order.orderNumber || '-'}</td>
-      <td>${order.orderDate || '-'}</td>
-      <td>${order.billingCustomer || '-'}</td>
-      <td>${order.upstream || '-'}</td>
-      <td>${order.downstream || '-'}</td>
-      <td>${Number(order.totalPrice || 0).toLocaleString()}</td>
-      <td>${order.status || '未完成'}</td>
-      <td>${order.updatedAt || '-'}</td>
-      <td>
+      <td class="order-number-copy" data-label="工單編號" data-copy-order="${order.id}" title="雙擊複製成新工單">
+        <strong>${escapeHtml(order.orderNumber || '-')}</strong>
+        <small>雙擊可複製新增</small>
+      </td>
+      <td data-label="交貨日期"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
+      <td data-label="客人 / 流程" class="order-route-cell">
+        <strong>${escapeHtml(order.billingCustomer || '-')}</strong>
+        <small>上游：${escapeHtml(order.upstream || '-')}</small>
+        <small>下游：${escapeHtml(order.downstream || '-')}</small>
+      </td>
+      <td data-label="金額" class="order-price-cell">NT$ ${Number(order.totalPrice || 0).toLocaleString()}</td>
+      <td data-label="狀態"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+      <td data-label="操作" class="order-row-actions">
         <button class="btn" data-edit="${order.id}">編輯</button>
         <button class="btn danger" data-delete-order="${order.id}">刪除</button>
         ${settings.quickActions?.['已完成'] && visibleStatuses.has('已完成') ? `<button class="btn" data-quick-status="已完成" data-id="${order.id}">已完成</button>` : ''}
@@ -771,7 +791,9 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (!res.ok || !data.ok) return alert(`刪除失敗：${data.error || `HTTP ${res.status}`}`);
     await loadAiCorrections(state);
   });
-  loadAiCorrections(state).catch(() => renderAiCorrectionCenter());
+  if (getOrderModuleSettings(state).showAiTools !== false) {
+    loadAiCorrections(state).catch(() => renderAiCorrectionCenter());
+  }
   $('orderForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const id = $('orderId').value || crypto.randomUUID();

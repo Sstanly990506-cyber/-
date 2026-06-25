@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
       quickActions: { 已送出: true, 已完成: true },
       showFilters: true,
       showExport: true,
+      showAiTools: true,
       pricingRules: {
         divisor: 4680,
         basePrices: { PVA: 900, PVB: 700, WEAR: 900, PRESS: 850 },

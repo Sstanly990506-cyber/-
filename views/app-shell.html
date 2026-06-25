@@ -74,14 +74,17 @@
           </aside>
 
           <article id="ordersListScreen" class="card">
-            <h3>工單列表</h3>
-            <div class="filter-row">
+            <div class="orders-list-head">
+              <div>
+                <h3>工單列表</h3>
+                <p class="sub"><span id="ordersListSummary">共 0 筆工單</span>｜雙擊複製：工單編號可快速帶入新工單</p>
+              </div>
               <input id="orderSearch" placeholder="搜尋工單編號 / 客戶 / 地址 / 狀態" />
             </div>
             <div class="filter-row" id="orderStatusFilters"></div>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>順序</th><th>工單編號（雙擊複製）</th><th>日期</th><th>客人</th><th>上游</th><th>下游</th><th>總價</th><th>狀態</th><th>最後更新</th><th></th></tr></thead>
+            <div class="table-wrap orders-table-wrap">
+              <table class="orders-table">
+                <thead><tr><th>順序</th><th>工單編號</th><th>交貨日期</th><th>客人 / 流程</th><th>金額</th><th>狀態</th><th>操作</th></tr></thead>
                 <tbody id="ordersTbody"></tbody>
               </table>
             </div>
@@ -89,7 +92,7 @@
 
           <article id="ordersFormScreen" class="card hidden">
             <h3>新增 / 編輯工單</h3>
-            <section class="ai-order-recognizer">
+            <section id="aiOrderRecognizer" class="ai-order-recognizer">
               <div>
                 <strong>AI 識別工單</strong>
                 <p class="sub">拍照或上傳工單，AI 只會填入下方表單，確認後再儲存。</p>
@@ -208,7 +211,7 @@
           </article>
         </div>
         </div>
-        <article class="card">
+        <article id="aiCorrectionCenter" class="card">
           <div class="section-head">
             <div>
               <h3>AI 修正中心</h3>
@@ -721,6 +724,7 @@
                 <h4>工單系統</h4>
                 <label class="settings-switch"><input id="settingsOrderShowFilters" type="checkbox" /><span>顯示狀態篩選按鈕</span></label>
                 <label class="settings-switch"><input id="settingsOrderShowExport" type="checkbox" /><span>顯示工單匯出按鈕</span></label>
+                <label class="settings-switch"><input id="settingsOrderShowAiTools" type="checkbox" /><span>開啟 AI 識別工單與 AI 修正中心</span></label>
                 <label class="settings-switch"><input id="settingsOrderStatusPending" type="checkbox" /><span>顯示「未完成」狀態</span></label>
                 <label class="settings-switch"><input id="settingsOrderStatusSent" type="checkbox" /><span>顯示「已送出」狀態</span></label>
                 <label class="settings-switch"><input id="settingsOrderStatusDone" type="checkbox" /><span>顯示「已完成」狀態</span></label>
