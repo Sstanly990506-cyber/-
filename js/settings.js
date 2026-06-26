@@ -184,8 +184,10 @@ function fillForm(settings) {
     settingsInventoryLowStockDefault: settings.inventoryLowStockDefault,
     settingsDefaultLandingView: settings.defaultLandingView,
     settingsPricingDivisor: pricing.divisor,
-    settingsPricingSmallMaxArea: pricing.areaThresholds.smallMax,
-    settingsPricingRegularMaxArea: pricing.areaThresholds.regularMax,
+    settingsPricingSmallShortMax: pricing.dimensionThresholds.small.shortMax,
+    settingsPricingSmallLongMax: pricing.dimensionThresholds.small.longMax,
+    settingsPricingRegularShortMax: pricing.dimensionThresholds.regular.shortMax,
+    settingsPricingRegularLongMax: pricing.dimensionThresholds.regular.longMax,
     settingsPricingBigPva: pricing.tierPrices.BIG.PVA,
     settingsPricingBigPvb: pricing.tierPrices.BIG.PVB,
     settingsPricingBigWear: pricing.tierPrices.BIG.WEAR,
@@ -282,9 +284,15 @@ function collectSettings() {
         },
         pricingRules: {
           divisor: toPositiveNumber($('settingsPricingDivisor')?.value, defaults.moduleInternals.orders.pricingRules.divisor),
-          areaThresholds: {
-            smallMax: toPositiveNumber($('settingsPricingSmallMaxArea')?.value, defaults.moduleInternals.orders.pricingRules.areaThresholds.smallMax),
-            regularMax: toPositiveNumber($('settingsPricingRegularMaxArea')?.value, defaults.moduleInternals.orders.pricingRules.areaThresholds.regularMax),
+          dimensionThresholds: {
+            small: {
+              shortMax: toPositiveNumber($('settingsPricingSmallShortMax')?.value, defaults.moduleInternals.orders.pricingRules.dimensionThresholds.small.shortMax),
+              longMax: toPositiveNumber($('settingsPricingSmallLongMax')?.value, defaults.moduleInternals.orders.pricingRules.dimensionThresholds.small.longMax),
+            },
+            regular: {
+              shortMax: toPositiveNumber($('settingsPricingRegularShortMax')?.value, defaults.moduleInternals.orders.pricingRules.dimensionThresholds.regular.shortMax),
+              longMax: toPositiveNumber($('settingsPricingRegularLongMax')?.value, defaults.moduleInternals.orders.pricingRules.dimensionThresholds.regular.longMax),
+            },
           },
           tierPrices: {
             BIG: {

@@ -58,15 +58,41 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(result['pricingMode'], 'ream')
         self.assertEqual(result['finalPrice'], 800)
 
-    def test_area_thresholds_can_classify_tier(self):
+    def test_dimension_thresholds_can_classify_small_tier(self):
         result = calculate_quote({
-            'width': 12,
-            'height': 20,
+            'width': 26,
+            'height': 18,
             'quantity': 100,
             'coatingType': 'PVB',
-        }, {'areaThresholds': {'smallMax': 250, 'regularMax': 500}})
+        })
         self.assertEqual(result['pricingTier'], 'SMALL')
         self.assertEqual(result['pricingMode'], 'sheet')
+
+    def test_dimension_thresholds_can_classify_regular_and_big_tiers(self):
+        regular = calculate_quote({
+            'width': 30,
+            'height': 20,
+            'quantity': 100,
+            'coatingType': 'PVA',
+        })
+        big = calculate_quote({
+            'width': 36,
+            'height': 26,
+            'quantity': 100,
+            'coatingType': 'PVA',
+        })
+        self.assertEqual(regular['pricingTier'], 'REGULAR')
+        self.assertEqual(regular['pricingMode'], 'ream')
+        self.assertEqual(big['pricingTier'], 'BIG')
+
+    def test_custom_dimension_thresholds_are_applied(self):
+        result = calculate_quote({
+            'width': 22,
+            'height': 16,
+            'quantity': 100,
+            'coatingType': 'PVA',
+        }, {'dimensionThresholds': {'small': {'shortMax': 16, 'longMax': 22}}})
+        self.assertEqual(result['pricingTier'], 'SMALL')
 
     def test_custom_settings_are_applied(self):
         result = calculate_quote({

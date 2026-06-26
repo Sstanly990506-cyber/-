@@ -4,7 +4,10 @@ export const COATING_TYPES = ['PVA', 'PVB', 'WEAR', 'PRESS'];
 
 export const DEFAULT_PRICING_RULES = {
   divisor: 4680,
-  areaThresholds: { smallMax: 340, regularMax: 620 },
+  dimensionThresholds: {
+    small: { shortMax: 18, longMax: 26 },
+    regular: { shortMax: 25, longMax: 35 },
+  },
   tierPrices: {
     BIG: { PVA: 900, PVB: 700, WEAR: 900, PRESS: 850 },
     REGULAR: { PVA: 850, PVB: 650, WEAR: 850, PRESS: 800 },
@@ -37,15 +40,21 @@ function normalizeTierPrices(source = {}, legacyBasePrices = {}) {
 
 export function normalizePricingRules(value = {}) {
   const source = value && typeof value === 'object' ? value : {};
-  const legacySmall = positive(source.smallAreaThreshold, DEFAULT_PRICING_RULES.areaThresholds.smallMax);
-  const areaThresholds = {
-    smallMax: positive(source.areaThresholds?.smallMax, legacySmall),
-    regularMax: positive(source.areaThresholds?.regularMax, DEFAULT_PRICING_RULES.areaThresholds.regularMax),
+  const dimensionThresholds = {
+    small: {
+      shortMax: positive(source.dimensionThresholds?.small?.shortMax, DEFAULT_PRICING_RULES.dimensionThresholds.small.shortMax),
+      longMax: positive(source.dimensionThresholds?.small?.longMax, DEFAULT_PRICING_RULES.dimensionThresholds.small.longMax),
+    },
+    regular: {
+      shortMax: positive(source.dimensionThresholds?.regular?.shortMax, DEFAULT_PRICING_RULES.dimensionThresholds.regular.shortMax),
+      longMax: positive(source.dimensionThresholds?.regular?.longMax, DEFAULT_PRICING_RULES.dimensionThresholds.regular.longMax),
+    },
   };
-  if (areaThresholds.regularMax < areaThresholds.smallMax) areaThresholds.regularMax = areaThresholds.smallMax;
+  if (dimensionThresholds.regular.shortMax < dimensionThresholds.small.shortMax) dimensionThresholds.regular.shortMax = dimensionThresholds.small.shortMax;
+  if (dimensionThresholds.regular.longMax < dimensionThresholds.small.longMax) dimensionThresholds.regular.longMax = dimensionThresholds.small.longMax;
   return {
     divisor: positive(source.divisor, DEFAULT_PRICING_RULES.divisor),
-    areaThresholds,
+    dimensionThresholds,
     tierPrices: normalizeTierPrices(source.tierPrices, source.basePrices),
     minimumCharges: Object.fromEntries(PRICING_TIERS.map((tier) => [
       tier,
@@ -72,10 +81,13 @@ export function normalizePricingTier(value = '') {
 
 export function classifyPricingTier(widthTai, heightTai, rules = {}) {
   const settings = normalizePricingRules(rules);
-  const area = Number(widthTai || 0) * Number(heightTai || 0);
-  if (!area) return 'BIG';
-  if (area <= settings.areaThresholds.smallMax) return 'SMALL';
-  if (area <= settings.areaThresholds.regularMax) return 'REGULAR';
+  const width = Number(widthTai || 0);
+  const height = Number(heightTai || 0);
+  if (!width || !height) return 'BIG';
+  const shortSide = Math.min(width, height);
+  const longSide = Math.max(width, height);
+  if (shortSide <= settings.dimensionThresholds.small.shortMax && longSide <= settings.dimensionThresholds.small.longMax) return 'SMALL';
+  if (shortSide <= settings.dimensionThresholds.regular.shortMax && longSide <= settings.dimensionThresholds.regular.longMax) return 'REGULAR';
   return 'BIG';
 }
 

@@ -6,7 +6,10 @@ COATING_TYPES = {'PVA', 'PVB', 'WEAR', 'PRESS'}
 
 DEFAULT_PRICING_RULES = {
     'divisor': 4680,
-    'areaThresholds': {'smallMax': 340, 'regularMax': 620},
+    'dimensionThresholds': {
+        'small': {'shortMax': 18, 'longMax': 26},
+        'regular': {'shortMax': 25, 'longMax': 35},
+    },
     'tierPrices': {
         'BIG': {'PVA': 900, 'PVB': 700, 'WEAR': 900, 'PRESS': 850},
         'REGULAR': {'PVA': 850, 'PVB': 650, 'WEAR': 850, 'PRESS': 800},
@@ -41,16 +44,24 @@ def _normalize_tier_prices(source=None, legacy_base=None):
 
 def normalize_pricing_rules(value=None):
     source = value if isinstance(value, dict) else {}
-    legacy_small = _positive_number(source.get('smallAreaThreshold'), DEFAULT_PRICING_RULES['areaThresholds']['smallMax'])
-    area_thresholds = {
-        'smallMax': _positive_number((source.get('areaThresholds') or {}).get('smallMax'), legacy_small),
-        'regularMax': _positive_number((source.get('areaThresholds') or {}).get('regularMax'), DEFAULT_PRICING_RULES['areaThresholds']['regularMax']),
+    dimension_source = source.get('dimensionThresholds') or {}
+    dimension_thresholds = {
+        'small': {
+            'shortMax': _positive_number((dimension_source.get('small') or {}).get('shortMax'), DEFAULT_PRICING_RULES['dimensionThresholds']['small']['shortMax']),
+            'longMax': _positive_number((dimension_source.get('small') or {}).get('longMax'), DEFAULT_PRICING_RULES['dimensionThresholds']['small']['longMax']),
+        },
+        'regular': {
+            'shortMax': _positive_number((dimension_source.get('regular') or {}).get('shortMax'), DEFAULT_PRICING_RULES['dimensionThresholds']['regular']['shortMax']),
+            'longMax': _positive_number((dimension_source.get('regular') or {}).get('longMax'), DEFAULT_PRICING_RULES['dimensionThresholds']['regular']['longMax']),
+        },
     }
-    if area_thresholds['regularMax'] < area_thresholds['smallMax']:
-        area_thresholds['regularMax'] = area_thresholds['smallMax']
+    if dimension_thresholds['regular']['shortMax'] < dimension_thresholds['small']['shortMax']:
+        dimension_thresholds['regular']['shortMax'] = dimension_thresholds['small']['shortMax']
+    if dimension_thresholds['regular']['longMax'] < dimension_thresholds['small']['longMax']:
+        dimension_thresholds['regular']['longMax'] = dimension_thresholds['small']['longMax']
     return {
         'divisor': _positive_number(source.get('divisor'), DEFAULT_PRICING_RULES['divisor']),
-        'areaThresholds': area_thresholds,
+        'dimensionThresholds': dimension_thresholds,
         'tierPrices': _normalize_tier_prices(source.get('tierPrices'), source.get('basePrices')),
         'minimumCharges': {
             tier: _positive_number((source.get('minimumCharges') or {}).get(tier), DEFAULT_PRICING_RULES['minimumCharges'][tier])
@@ -83,12 +94,15 @@ def normalize_pricing_tier(value):
 
 def classify_pricing_tier(width, height, rules=None):
     settings = normalize_pricing_rules(rules)
-    area = float(width or 0) * float(height or 0)
-    if area <= 0:
+    width = float(width or 0)
+    height = float(height or 0)
+    if width <= 0 or height <= 0:
         return 'BIG'
-    if area <= settings['areaThresholds']['smallMax']:
+    short_side = min(width, height)
+    long_side = max(width, height)
+    if short_side <= settings['dimensionThresholds']['small']['shortMax'] and long_side <= settings['dimensionThresholds']['small']['longMax']:
         return 'SMALL'
-    if area <= settings['areaThresholds']['regularMax']:
+    if short_side <= settings['dimensionThresholds']['regular']['shortMax'] and long_side <= settings['dimensionThresholds']['regular']['longMax']:
         return 'REGULAR'
     return 'BIG'
 

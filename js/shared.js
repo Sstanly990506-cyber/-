@@ -32,7 +32,10 @@ const DEFAULT_SETTINGS = {
       showAiTools: true,
       pricingRules: {
         divisor: 4680,
-        areaThresholds: { smallMax: 340, regularMax: 620 },
+        dimensionThresholds: {
+          small: { shortMax: 18, longMax: 26 },
+          regular: { shortMax: 25, longMax: 35 },
+        },
         tierPrices: {
           BIG: { PVA: 900, PVB: 700, WEAR: 900, PRESS: 850 },
           REGULAR: { PVA: 850, PVB: 650, WEAR: 850, PRESS: 800 },
@@ -82,10 +85,15 @@ export function mergeSettings(raw = {}) {
       pricingRules: {
         ...defaults.moduleInternals.orders.pricingRules,
         ...(raw.moduleInternals?.orders?.pricingRules || {}),
-        areaThresholds: {
-          ...defaults.moduleInternals.orders.pricingRules.areaThresholds,
-          ...(raw.moduleInternals?.orders?.pricingRules?.areaThresholds || {}),
-          ...(raw.moduleInternals?.orders?.pricingRules?.smallAreaThreshold ? { smallMax: raw.moduleInternals.orders.pricingRules.smallAreaThreshold } : {}),
+        dimensionThresholds: {
+          small: {
+            ...defaults.moduleInternals.orders.pricingRules.dimensionThresholds.small,
+            ...(raw.moduleInternals?.orders?.pricingRules?.dimensionThresholds?.small || {}),
+          },
+          regular: {
+            ...defaults.moduleInternals.orders.pricingRules.dimensionThresholds.regular,
+            ...(raw.moduleInternals?.orders?.pricingRules?.dimensionThresholds?.regular || {}),
+          },
         },
         tierPrices: {
           BIG: {

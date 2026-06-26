@@ -214,7 +214,7 @@ function updatePriceRuleFormulaPreview(state) {
   const pricing = state.settings?.moduleInternals?.orders?.pricingRules || {};
   const divisor = Number(pricing.divisor || 4680);
   const formula = $('priceRuleFormulaText');
-  if (formula) formula.textContent = `大台/常規＝天台吋 × 地台吋 × 張數 × 元／令 ÷（${divisor.toLocaleString()} × 100）；小台＝張數 × 單張價。`;
+  if (formula) formula.textContent = `先用天／地門檻判斷小台、常規或大台；大台/常規＝天台吋 × 地台吋 × 張數 × 元／令 ÷（${divisor.toLocaleString()} × 100）；小台＝張數 × 單張價。`;
 
   const quantity = Number($('sheetCount')?.value || 0);
   const previewState = {
