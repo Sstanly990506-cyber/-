@@ -735,12 +735,13 @@
               </div>
               <div class="settings-subgroup pricing-settings-group" data-settings-internal-module="ordersView">
                 <h4>報價公式</h4>
-                <p class="sub">小台、常規依天／地尺寸自動判斷；超過常規上限就是大台。大台、常規用元／令，小台用單張價。</p>
+                <p class="sub">級距判斷：天／地較短邊 ≤ 小台短邊上限，且較長邊 ≤ 小台長邊上限，就是小台；超過小台但仍在常規短邊/長邊上限內，就是常規；超過常規上限就是大台。</p>
+                <p class="sub">計價公式：大台、常規＝天台吋 × 地台吋 × 張數 × 元／令 ÷（公式除數 × 100）；小台＝張數 × 單張價。最低收費會在最後套用。</p>
                 <label>公式除數<input id="settingsPricingDivisor" type="number" min="1" step="0.01" /></label>
-                <label>小台短邊上限<input id="settingsPricingSmallShortMax" type="number" min="1" step="0.01" /></label>
-                <label>小台長邊上限<input id="settingsPricingSmallLongMax" type="number" min="1" step="0.01" /></label>
-                <label>常規短邊上限<input id="settingsPricingRegularShortMax" type="number" min="1" step="0.01" /></label>
-                <label>常規長邊上限<input id="settingsPricingRegularLongMax" type="number" min="1" step="0.01" /></label>
+                <label>小台較短邊上限<input id="settingsPricingSmallShortMax" type="number" min="1" step="0.01" /></label>
+                <label>小台較長邊上限<input id="settingsPricingSmallLongMax" type="number" min="1" step="0.01" /></label>
+                <label>常規較短邊上限<input id="settingsPricingRegularShortMax" type="number" min="1" step="0.01" /></label>
+                <label>常規較長邊上限<input id="settingsPricingRegularLongMax" type="number" min="1" step="0.01" /></label>
                 <label>大台 PVA 元／令<input id="settingsPricingBigPva" type="number" min="0.01" step="0.01" /></label>
                 <label>大台 PVB 元／令<input id="settingsPricingBigPvb" type="number" min="0.01" step="0.01" /></label>
                 <label>大台耐磨元／令<input id="settingsPricingBigWear" type="number" min="0.01" step="0.01" /></label>
