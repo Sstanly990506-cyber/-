@@ -5,6 +5,7 @@ import { calculateOrderQuote, classifyPricingTier, coatingTypeCode, normalizePri
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
 let lastAutoPrice = 0;
+const COATING_LABELS = { PVA: 'PVA光', PVB: 'PVB光/油', WEAR: '耐磨', PRESS: '壓光' };
 const ORDER_ENTRY_FIELD_IDS = [
   'orderNumber',
   'orderDate',
@@ -186,6 +187,7 @@ function updateOrderSmartHint(state) {
 }
 
 function formatRuleSize(rule) {
+  if (!Number(rule.sizeLengthTai || rule.sizeLength || 0) && !Number(rule.sizeWidthTai || rule.sizeWidth || 0)) return '全部尺寸';
   return `天 ${Number(rule.sizeLength || 0).toLocaleString()} x 地 ${Number(rule.sizeWidth || 0).toLocaleString()} ${rule.sizeUnit || 'mm'}`;
 }
 
@@ -194,20 +196,44 @@ function pricingTierLabel(value) {
   return tier === 'SMALL' ? '小台' : tier === 'REGULAR' ? '常規' : '大台';
 }
 
+function isCustomerTierPriceRule(rule) {
+  return rule?.priceScope === 'customer-tier'
+    || (!Number(rule?.sizeLengthTai || rule?.sizeLength || 0) && !Number(rule?.sizeWidthTai || rule?.sizeWidth || 0));
+}
+
+function clearPriceMatrix() {
+  document.querySelectorAll('#priceRuleMatrix input[data-price-tier][data-price-coating]').forEach((input) => { input.value = ''; });
+}
+
+function matrixRulesForCustomer(state, customerName) {
+  const customer = String(customerName || '').trim().toLowerCase();
+  if (!customer) return [];
+  return (state.priceRules || []).filter((rule) => String(rule.customer || '').trim().toLowerCase() === customer && isCustomerTierPriceRule(rule));
+}
+
+function fillPriceMatrixFromCustomer(state, customerName) {
+  clearPriceMatrix();
+  const rules = matrixRulesForCustomer(state, customerName);
+  rules.forEach((rule) => {
+    const coating = coatingTypeCode(rule.glossType);
+    const tier = normalizePricingTier(rule.machineType);
+    const input = document.querySelector(`#priceRuleMatrix input[data-price-tier="${tier}"][data-price-coating="${coating}"]`);
+    if (input) input.value = rule.unitPrice || '';
+  });
+  const note = rules.find((rule) => rule.note)?.note || '';
+  if ($('priceRuleNote')) $('priceRuleNote').value = note;
+}
+
 function clearPriceRuleForm() {
   $('priceRuleForm')?.reset();
   if ($('priceRuleId')) $('priceRuleId').value = '';
-  if ($('priceRuleUnit')) $('priceRuleUnit').value = 'tai-inch';
+  clearPriceMatrix();
 }
 
 function populatePriceRuleFromOrder(state) {
   const customer = $('billingCustomerInput')?.value.trim() || '';
   $('priceRuleCustomer').value = customer;
-  $('priceRuleGloss').value = $('glossType')?.value || '';
-  $('priceRuleLength').value = $('sizeLength')?.value || '';
-  $('priceRuleWidth').value = $('sizeWidth')?.value || '';
-  $('priceRuleUnit').value = $('sizeUnit')?.value || 'tai-inch';
-  $('priceRuleMachine').value = $('machineType')?.value || getSelectedPricingTier(state) || 'ANY';
+  fillPriceMatrixFromCustomer(state, customer);
 }
 
 function updatePriceRuleFormulaPreview(state) {
@@ -219,30 +245,15 @@ function updatePriceRuleFormulaPreview(state) {
   const quantity = Number($('sheetCount')?.value || 0);
   const previewState = {
     ...state,
-    priceRules: [{
-      customer: $('priceRuleCustomer')?.value.trim() || '',
-      glossType: $('priceRuleGloss')?.value || '',
-      sizeLength: Number($('priceRuleLength')?.value || 0),
-      sizeWidth: Number($('priceRuleWidth')?.value || 0),
-      sizeUnit: $('priceRuleUnit')?.value || 'tai-inch',
-      machineType: $('priceRuleMachine')?.value || 'ANY',
-      pricingMode: 'formula',
-      unitPrice: Number($('priceRuleUnitPrice')?.value || 0),
-    }],
+    priceRules: buildPriceRulesFromForm(),
   };
   const quote = calculateOrderQuote(previewState, {
     billingCustomer: $('priceRuleCustomer')?.value.trim() || '',
-    glossType: $('priceRuleGloss')?.value || '',
-    sizeLength: $('priceRuleLength')?.value,
-    sizeWidth: $('priceRuleWidth')?.value,
-    sizeUnit: $('priceRuleUnit')?.value || 'tai-inch',
-    machineType: $('priceRuleMachine')?.value === 'ANY'
-      ? classifyPricingTier(
-        toTaiInch($('priceRuleWidth')?.value, $('priceRuleUnit')?.value || 'tai-inch'),
-        toTaiInch($('priceRuleLength')?.value, $('priceRuleUnit')?.value || 'tai-inch'),
-        pricing,
-      )
-      : $('priceRuleMachine')?.value,
+    glossType: $('glossType')?.value || '',
+    sizeLength: $('sizeLength')?.value,
+    sizeWidth: $('sizeWidth')?.value,
+    sizeUnit: $('sizeUnit')?.value || 'tai-inch',
+    machineType: getSelectedPricingTier(state),
     sheetCount: quantity,
   });
   $('priceRuleCalculatedPrice').textContent = quote ? `NT$ ${quote.calculatedPrice.toLocaleString()}` : '請輸入完整資料';
@@ -254,25 +265,33 @@ function updatePriceRuleFormulaPreview(state) {
   }
 }
 
-function buildPriceRuleFromForm() {
-  const sizeLength = Number($('priceRuleLength')?.value || 0);
-  const sizeWidth = Number($('priceRuleWidth')?.value || 0);
-  const sizeUnit = $('priceRuleUnit')?.value || 'tai-inch';
-  return {
-    id: $('priceRuleId')?.value || crypto.randomUUID(),
-    customer: $('priceRuleCustomer')?.value.trim() || '',
-    glossType: $('priceRuleGloss')?.value.trim() || '',
-    sizeLength,
-    sizeWidth,
-    sizeUnit,
-    sizeLengthTai: toTaiInch(sizeLength, sizeUnit),
-    sizeWidthTai: toTaiInch(sizeWidth, sizeUnit),
-    machineType: $('priceRuleMachine')?.value || 'ANY',
-    pricingMode: 'formula',
-    unitPrice: Number($('priceRuleUnitPrice')?.value || 0),
-    note: $('priceRuleNote')?.value.trim() || '',
-    updatedAt: new Date().toLocaleString(),
-  };
+function buildPriceRulesFromForm() {
+  const customer = $('priceRuleCustomer')?.value.trim() || '';
+  const note = $('priceRuleNote')?.value.trim() || '';
+  const updatedAt = new Date().toLocaleString();
+  return [...document.querySelectorAll('#priceRuleMatrix input[data-price-tier][data-price-coating]')]
+    .map((input) => ({
+      tier: input.dataset.priceTier,
+      coating: input.dataset.priceCoating,
+      unitPrice: Number(input.value || 0),
+    }))
+    .filter((item) => item.unitPrice > 0)
+    .map((item) => ({
+      id: crypto.randomUUID(),
+      customer,
+      glossType: COATING_LABELS[item.coating] || item.coating,
+      sizeLength: 0,
+      sizeWidth: 0,
+      sizeUnit: 'tai-inch',
+      sizeLengthTai: 0,
+      sizeWidthTai: 0,
+      machineType: item.tier,
+      pricingMode: 'formula',
+      priceScope: 'customer-tier',
+      unitPrice: item.unitPrice,
+      note,
+      updatedAt,
+    }));
 }
 
 function renderPriceRules(state) {
@@ -541,7 +560,7 @@ function renderGlossOptions(state) {
   const savedRuleOptions = (state.priceRules || []).map((rule) => rule.glossType);
   const options = [...new Set([...(state.glossOptions || []), ...savedOrderOptions, ...savedRuleOptions, '其他'].filter(Boolean))];
   state.glossOptions = options;
-  ['glossType', 'priceRuleGloss'].forEach((id) => {
+  ['glossType'].forEach((id) => {
     const select = $(id);
     if (!select) return;
     const current = select.value;
@@ -942,21 +961,13 @@ export function bindOrderEvents(state, saveState, renderAll) {
 
   $('priceRuleForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
-    const rule = buildPriceRuleFromForm();
-    if (!rule.customer || !rule.sizeLength || !rule.sizeWidth || !rule.unitPrice) return alert('請填客人、尺寸與單價。');
-    const ruleLength = toTaiInch(rule.sizeLength, rule.sizeUnit);
-    const ruleWidth = toTaiInch(rule.sizeWidth, rule.sizeUnit);
-    const duplicated = state.priceRules.find((item) => item.id !== rule.id
-      && String(item.customer || '').trim() === rule.customer
-      && coatingTypeCode(item.glossType) === coatingTypeCode(rule.glossType)
-      && (item.machineType || 'ANY') === rule.machineType
-      && Math.abs(toTaiInch(item.sizeLength, item.sizeUnit) - ruleLength) <= 0.15
-      && Math.abs(toTaiInch(item.sizeWidth, item.sizeUnit) - ruleWidth) <= 0.15);
-    if (duplicated && !window.confirm('這個客人、品項與尺寸已經有價格，要覆蓋那筆嗎？')) return;
-    if (duplicated) rule.id = duplicated.id;
-    const index = state.priceRules.findIndex((item) => item.id === rule.id);
-    if (index >= 0) state.priceRules[index] = rule;
-    else state.priceRules.unshift(rule);
+    const customer = $('priceRuleCustomer')?.value.trim() || '';
+    const rules = buildPriceRulesFromForm();
+    if (!customer) return alert('請先選擇或輸入客人。');
+    if (!rules.length) return alert('請至少填一個客人專屬價格。');
+    const customerKey = customer.toLowerCase();
+    state.priceRules = state.priceRules.filter((item) => !(String(item.customer || '').trim().toLowerCase() === customerKey && isCustomerTierPriceRule(item)));
+    state.priceRules.unshift(...rules);
     clearPriceRuleForm();
     saveState();
     renderAll();
@@ -966,6 +977,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('priceRuleForm')?.addEventListener('change', () => updatePriceRuleFormulaPreview(state));
   $('priceRuleCustomer')?.addEventListener('input', () => {
     renderPriceRuleCustomerMatches(state);
+    fillPriceMatrixFromCustomer(state, $('priceRuleCustomer')?.value || '');
     updatePriceRuleFormulaPreview(state);
   });
   $('priceRuleCustomerMatches')?.addEventListener('click', (e) => {
@@ -973,6 +985,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (!btn) return;
     $('priceRuleCustomer').value = btn.dataset.priceRuleCustomer || '';
     $('priceRuleCustomerMatches').innerHTML = '';
+    fillPriceMatrixFromCustomer(state, $('priceRuleCustomer')?.value || '');
     updatePriceRuleFormulaPreview(state);
   });
   $('clearPriceRuleBtn')?.addEventListener('click', () => {
@@ -989,13 +1002,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (edit) {
       $('priceRuleId').value = rule.id || '';
       $('priceRuleCustomer').value = rule.customer || '';
-      $('priceRuleGloss').value = rule.glossType || '';
-      $('priceRuleLength').value = rule.sizeLength || '';
-      $('priceRuleWidth').value = rule.sizeWidth || '';
-      $('priceRuleUnit').value = rule.sizeUnit || 'tai-inch';
-      $('priceRuleMachine').value = rule.machineType || 'ANY';
-      $('priceRuleUnitPrice').value = rule.unitPrice || '';
-      $('priceRuleNote').value = rule.note || '';
+      fillPriceMatrixFromCustomer(state, rule.customer || '');
       renderPriceRuleCustomerMatches(state);
       updatePriceRuleFormulaPreview(state);
       $('priceRuleCustomer')?.focus();

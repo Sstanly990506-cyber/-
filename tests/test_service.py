@@ -123,6 +123,14 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result['calculatedPrice'], 800)
         self.assertEqual(result['finalPrice'], 1000)
 
+    def test_pricing_quote_uses_customer_tier_matrix_price(self):
+        payload = {'width': 30, 'height': 20, 'quantity': 1000, 'coatingType': 'PVA', 'machineType': 'REGULAR', 'customer': '三青'}
+        rules = [{'id': 'p1', 'customer': '三青', 'glossType': 'PVA光', 'machineType': 'REGULAR', 'pricingMode': 'formula', 'priceScope': 'customer-tier', 'unitPrice': 760}]
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.read_state', return_value={'settings': None}), patch('api.service._all_records', return_value=rules):
+            result = pricing_quote_payload('token', payload)
+        self.assertEqual(result['unitPrice'], 760)
+        self.assertEqual(result['pricingTier'], 'REGULAR')
+
     def test_deleting_order_also_deletes_linked_auto_receivable(self):
         records = {
             'orders': [{'id': 'o-1', 'orderNumber': 'WO-1'}],

@@ -104,15 +104,19 @@ export function findCustomerPriceRule(state, order = {}) {
   if (!lengthTai || !widthTai) return null;
   const tier = normalizePricingTier(order.machineType || classifyPricingTier(widthTai, lengthTai, state.settings?.moduleInternals?.orders?.pricingRules));
 
-  return (state.priceRules || []).find((rule) => {
+  const matches = (state.priceRules || []).filter((rule) => {
     if (String(rule.customer || '').trim().toLowerCase() !== customer) return false;
     if (rule.glossType && glossType && coatingTypeCode(rule.glossType) !== coatingTypeCode(glossType)) return false;
     if (rule.machineType && rule.machineType !== 'ANY' && normalizePricingTier(rule.machineType) !== tier) return false;
     const ruleLength = rule.sizeLengthTai || toTaiInch(rule.sizeLength, rule.sizeUnit);
     const ruleWidth = rule.sizeWidthTai || toTaiInch(rule.sizeWidth, rule.sizeUnit);
+    if (!ruleLength && !ruleWidth) return true;
     return (closeSize(ruleLength, lengthTai) && closeSize(ruleWidth, widthTai))
       || (closeSize(ruleLength, widthTai) && closeSize(ruleWidth, lengthTai));
-  }) || null;
+  });
+  return matches.find((rule) => Number(rule.sizeLengthTai || rule.sizeLength || 0) && Number(rule.sizeWidthTai || rule.sizeWidth || 0))
+    || matches[0]
+    || null;
 }
 
 export function calculateOrderQuote(state, order = {}) {

@@ -164,7 +164,7 @@
             <div class="section-head">
               <div>
                 <h3>客人價格表</h3>
-                <p class="sub">依客人、品項、尺寸與級距設定專屬價格。大台、常規用元／令，小台用單張價。</p>
+                <p class="sub">選一位客人，像預設價格一樣填寫大台、常規、小台的專屬價格。大台、常規用元／令，小台用單張價。</p>
               </div>
               <button class="btn" type="button" data-order-screen="form">返回新增工單</button>
             </div>
@@ -181,33 +181,19 @@
               <input id="priceRuleId" type="hidden" />
               <label>客人（上游印刷廠）<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>
               <div id="priceRuleCustomerMatches" class="customer-match-list span-2"></div>
-              <label>品項 / 上光種類<select id="priceRuleGloss"></select></label>
-              <label>天<input id="priceRuleLength" type="number" min="0" step="0.01" required /></label>
-              <label>地<input id="priceRuleWidth" type="number" min="0" step="0.01" required /></label>
-              <label>尺寸單位
-                <select id="priceRuleUnit">
-                  <option value="tai-inch" selected>台吋</option>
-                  <option value="mm">mm</option>
-                  <option value="cm">cm</option>
-                  <option value="inch">英吋</option>
-                </select>
-              </label>
-              <label>適用尺寸級距
-                <select id="priceRuleMachine">
-                  <option value="ANY">全部級距</option>
-                  <option value="BIG">大台</option>
-                  <option value="REGULAR">常規</option>
-                  <option value="SMALL">小台</option>
-                </select>
-              </label>
-              <label>客人單價<input id="priceRuleUnitPrice" type="number" min="0" step="0.01" required /></label>
-              <label>備註<input id="priceRuleNote" placeholder="例如：常用價格、含稅或未稅" /></label>
+              <div class="pricing-matrix span-2" id="priceRuleMatrix">
+                <div class="pricing-matrix-head"><span>級距</span><span>PVA 光</span><span>PVB 光／油</span><span>耐磨</span><span>壓光</span></div>
+                <div class="pricing-matrix-row"><strong>大台（元／令）</strong><input data-price-tier="BIG" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
+                <div class="pricing-matrix-row"><strong>常規（元／令）</strong><input data-price-tier="REGULAR" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
+                <div class="pricing-matrix-row"><strong>小台（單張價）</strong><input data-price-tier="SMALL" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
+              </div>
+              <label class="span-2">備註<input id="priceRuleNote" placeholder="例如：三青專屬價、含稅或未稅" /></label>
               <button class="btn primary" type="submit">儲存客人價格</button>
               <button class="btn ghost" type="button" id="clearPriceRuleBtn">清空價格表單</button>
             </form>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>客人</th><th>品項</th><th>尺寸</th><th>級距</th><th>單價</th><th>操作</th></tr></thead>
+                <thead><tr><th>客人</th><th>品項</th><th>適用範圍</th><th>級距</th><th>單價</th><th>操作</th></tr></thead>
                 <tbody id="priceRulesTbody"></tbody>
               </table>
             </div>

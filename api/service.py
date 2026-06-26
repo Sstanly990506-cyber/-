@@ -266,6 +266,7 @@ def pricing_quote_payload(token,payload):
         customer_price=None
         if customer:
             width=float(payload.get('width') or 0);height=float(payload.get('height') or 0)
+            fallback_customer_price=None
             for rule in _all_records('priceRules'):
                 if str(rule.get('customer') or '').strip().lower()!=customer or rule.get('pricingMode')!='formula':continue
                 if normalize_coating_type(rule.get('glossType'))!=normalize_coating_type(payload.get('coatingType')):continue
@@ -273,8 +274,11 @@ def pricing_quote_payload(token,payload):
                 if rule_tier not in {None,'','ANY'} and normalize_pricing_tier(rule_tier)!=normalize_pricing_tier(payload.get('machineType')):continue
                 rule_width=float(rule.get('sizeWidthTai') or rule.get('sizeWidth') or 0)
                 rule_height=float(rule.get('sizeLengthTai') or rule.get('sizeLength') or 0)
+                if not rule_width and not rule_height:
+                    fallback_customer_price=rule.get('unitPrice');continue
                 if (abs(rule_width-width)<=0.15 and abs(rule_height-height)<=0.15) or (abs(rule_width-height)<=0.15 and abs(rule_height-width)<=0.15):
                     customer_price=rule.get('unitPrice');break
+            if customer_price is None:customer_price=fallback_customer_price
         return {'ok':True,**calculate_quote(payload,settings,customer_price)}
     except ValueError as err:raise ApiError(str(err),400) from err
 def recognize_order_payload(token,payload):

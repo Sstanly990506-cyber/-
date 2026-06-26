@@ -129,6 +129,32 @@ input[type="checkbox"] { width: auto; }
   background: rgba(245, 158, 11, 0.08);
   border: 1px solid rgba(245, 158, 11, 0.28);
 }
+.pricing-matrix {
+  display: grid;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.42);
+}
+.pricing-matrix-head,
+.pricing-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) repeat(4, minmax(92px, 1fr));
+  gap: 8px;
+  align-items: center;
+  min-width: 560px;
+}
+.pricing-matrix-head {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.pricing-matrix-row strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .section-head {
   display: flex;
