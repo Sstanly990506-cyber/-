@@ -32,11 +32,13 @@ const DEFAULT_SETTINGS = {
       showAiTools: true,
       pricingRules: {
         divisor: 4680,
-        basePrices: { PVA: 900, PVB: 700, WEAR: 900, PRESS: 850 },
-        smallAreaThreshold: 340,
-        smallSizes: ['12x26', '13x18', '14x21', '18x26'],
-        smallDiscounts: { PVA: 0.7, PVB: 0.6 },
-        minimumCharges: { BIG: 1000, SMALL: 600 },
+        areaThresholds: { smallMax: 340, regularMax: 620 },
+        tierPrices: {
+          BIG: { PVA: 900, PVB: 700, WEAR: 900, PRESS: 850 },
+          REGULAR: { PVA: 850, PVB: 650, WEAR: 850, PRESS: 800 },
+          SMALL: { PVA: 1, PVB: 1, WEAR: 1, PRESS: 1 },
+        },
+        minimumCharges: { BIG: 1000, REGULAR: 800, SMALL: 600 },
       },
     },
     customers: { roles: { 上游: true, 下游: true, 兩者: true } },
@@ -80,8 +82,26 @@ export function mergeSettings(raw = {}) {
       pricingRules: {
         ...defaults.moduleInternals.orders.pricingRules,
         ...(raw.moduleInternals?.orders?.pricingRules || {}),
-        basePrices: { ...defaults.moduleInternals.orders.pricingRules.basePrices, ...(raw.moduleInternals?.orders?.pricingRules?.basePrices || {}) },
-        smallDiscounts: { ...defaults.moduleInternals.orders.pricingRules.smallDiscounts, ...(raw.moduleInternals?.orders?.pricingRules?.smallDiscounts || {}) },
+        areaThresholds: {
+          ...defaults.moduleInternals.orders.pricingRules.areaThresholds,
+          ...(raw.moduleInternals?.orders?.pricingRules?.areaThresholds || {}),
+          ...(raw.moduleInternals?.orders?.pricingRules?.smallAreaThreshold ? { smallMax: raw.moduleInternals.orders.pricingRules.smallAreaThreshold } : {}),
+        },
+        tierPrices: {
+          BIG: {
+            ...defaults.moduleInternals.orders.pricingRules.tierPrices.BIG,
+            ...(raw.moduleInternals?.orders?.pricingRules?.basePrices || {}),
+            ...(raw.moduleInternals?.orders?.pricingRules?.tierPrices?.BIG || {}),
+          },
+          REGULAR: {
+            ...defaults.moduleInternals.orders.pricingRules.tierPrices.REGULAR,
+            ...(raw.moduleInternals?.orders?.pricingRules?.tierPrices?.REGULAR || {}),
+          },
+          SMALL: {
+            ...defaults.moduleInternals.orders.pricingRules.tierPrices.SMALL,
+            ...(raw.moduleInternals?.orders?.pricingRules?.tierPrices?.SMALL || {}),
+          },
+        },
         minimumCharges: { ...defaults.moduleInternals.orders.pricingRules.minimumCharges, ...(raw.moduleInternals?.orders?.pricingRules?.minimumCharges || {}) },
       },
     },

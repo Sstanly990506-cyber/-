@@ -1,10 +1,16 @@
+export const PRICING_TIERS = ['BIG', 'REGULAR', 'SMALL'];
+export const REAM_TIERS = ['BIG', 'REGULAR'];
+export const COATING_TYPES = ['PVA', 'PVB', 'WEAR', 'PRESS'];
+
 export const DEFAULT_PRICING_RULES = {
   divisor: 4680,
-  basePrices: { PVA: 900, PVB: 700, WEAR: 900, PRESS: 850 },
-  smallAreaThreshold: 340,
-  smallSizes: ['12x26', '13x18', '14x21', '18x26'],
-  smallDiscounts: { PVA: 0.7, PVB: 0.6 },
-  minimumCharges: { BIG: 1000, SMALL: 600 },
+  areaThresholds: { smallMax: 340, regularMax: 620 },
+  tierPrices: {
+    BIG: { PVA: 900, PVB: 700, WEAR: 900, PRESS: 850 },
+    REGULAR: { PVA: 850, PVB: 650, WEAR: 850, PRESS: 800 },
+    SMALL: { PVA: 1, PVB: 1, WEAR: 1, PRESS: 1 },
+  },
+  minimumCharges: { BIG: 1000, REGULAR: 800, SMALL: 600 },
 };
 
 export function toTaiInch(value, unit = 'mm') {
@@ -19,20 +25,32 @@ function positive(value, fallback) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
+function normalizeTierPrices(source = {}, legacyBasePrices = {}) {
+  return Object.fromEntries(PRICING_TIERS.map((tier) => [
+    tier,
+    Object.fromEntries(COATING_TYPES.map((type) => [
+      type,
+      positive(source?.[tier]?.[type], positive(legacyBasePrices?.[type], DEFAULT_PRICING_RULES.tierPrices[tier][type])),
+    ])),
+  ]));
+}
+
 export function normalizePricingRules(value = {}) {
   const source = value && typeof value === 'object' ? value : {};
+  const legacySmall = positive(source.smallAreaThreshold, DEFAULT_PRICING_RULES.areaThresholds.smallMax);
+  const areaThresholds = {
+    smallMax: positive(source.areaThresholds?.smallMax, legacySmall),
+    regularMax: positive(source.areaThresholds?.regularMax, DEFAULT_PRICING_RULES.areaThresholds.regularMax),
+  };
+  if (areaThresholds.regularMax < areaThresholds.smallMax) areaThresholds.regularMax = areaThresholds.smallMax;
   return {
     divisor: positive(source.divisor, DEFAULT_PRICING_RULES.divisor),
-    basePrices: Object.fromEntries(Object.entries(DEFAULT_PRICING_RULES.basePrices)
-      .map(([key, fallback]) => [key, positive(source.basePrices?.[key], fallback)])),
-    smallAreaThreshold: positive(source.smallAreaThreshold, DEFAULT_PRICING_RULES.smallAreaThreshold),
-    smallSizes: Array.isArray(source.smallSizes) && source.smallSizes.length
-      ? source.smallSizes.map((item) => String(item).trim().toLowerCase().replaceAll('×', 'x')).filter(Boolean)
-      : [...DEFAULT_PRICING_RULES.smallSizes],
-    smallDiscounts: Object.fromEntries(Object.entries(DEFAULT_PRICING_RULES.smallDiscounts)
-      .map(([key, fallback]) => [key, positive(source.smallDiscounts?.[key], fallback)])),
-    minimumCharges: Object.fromEntries(Object.entries(DEFAULT_PRICING_RULES.minimumCharges)
-      .map(([key, fallback]) => [key, positive(source.minimumCharges?.[key], fallback)])),
+    areaThresholds,
+    tierPrices: normalizeTierPrices(source.tierPrices, source.basePrices),
+    minimumCharges: Object.fromEntries(PRICING_TIERS.map((tier) => [
+      tier,
+      positive(source.minimumCharges?.[tier], DEFAULT_PRICING_RULES.minimumCharges[tier]),
+    ])),
   };
 }
 
@@ -43,6 +61,22 @@ export function coatingTypeCode(value = '') {
   if (text.includes('耐磨') || text === 'WEAR') return 'WEAR';
   if (text.includes('壓光') || text === 'PRESS') return 'PRESS';
   return '';
+}
+
+export function normalizePricingTier(value = '') {
+  const tier = String(value || '').trim().toUpperCase();
+  if (tier === 'SMALL') return 'SMALL';
+  if (tier === 'REGULAR') return 'REGULAR';
+  return 'BIG';
+}
+
+export function classifyPricingTier(widthTai, heightTai, rules = {}) {
+  const settings = normalizePricingRules(rules);
+  const area = Number(widthTai || 0) * Number(heightTai || 0);
+  if (!area) return 'BIG';
+  if (area <= settings.areaThresholds.smallMax) return 'SMALL';
+  if (area <= settings.areaThresholds.regularMax) return 'REGULAR';
+  return 'BIG';
 }
 
 function closeSize(a, b) {
@@ -56,11 +90,12 @@ export function findCustomerPriceRule(state, order = {}) {
   const lengthTai = toTaiInch(order.sizeLength, order.sizeUnit);
   const widthTai = toTaiInch(order.sizeWidth, order.sizeUnit);
   if (!lengthTai || !widthTai) return null;
+  const tier = normalizePricingTier(order.machineType || classifyPricingTier(widthTai, lengthTai, state.settings?.moduleInternals?.orders?.pricingRules));
 
   return (state.priceRules || []).find((rule) => {
     if (String(rule.customer || '').trim().toLowerCase() !== customer) return false;
     if (rule.glossType && glossType && coatingTypeCode(rule.glossType) !== coatingTypeCode(glossType)) return false;
-    if (rule.machineType && rule.machineType !== 'ANY' && rule.machineType !== order.machineType) return false;
+    if (rule.machineType && rule.machineType !== 'ANY' && normalizePricingTier(rule.machineType) !== tier) return false;
     const ruleLength = rule.sizeLengthTai || toTaiInch(rule.sizeLength, rule.sizeUnit);
     const ruleWidth = rule.sizeWidthTai || toTaiInch(rule.sizeWidth, rule.sizeUnit);
     return (closeSize(ruleLength, lengthTai) && closeSize(ruleWidth, widthTai))
@@ -68,40 +103,36 @@ export function findCustomerPriceRule(state, order = {}) {
   }) || null;
 }
 
-function matchesSmallSize(width, height, sizes) {
-  const candidates = new Set([`${width}x${height}`, `${height}x${width}`].map((item) => item.replace(/\.0+(?=x|$)/g, '')));
-  return sizes.some((size) => candidates.has(String(size).replaceAll(' ', '')));
-}
-
 export function calculateOrderQuote(state, order = {}) {
   const width = toTaiInch(order.sizeWidth, order.sizeUnit);
   const height = toTaiInch(order.sizeLength, order.sizeUnit);
   const quantity = Number(order.sheetCount || 0);
   const coatingType = coatingTypeCode(order.glossType);
-  const machineType = order.machineType === 'SMALL' ? 'SMALL' : 'BIG';
   if (!width || !height || !quantity || !coatingType) return null;
 
-  const customerRule = findCustomerPriceRule(state, order);
+  const settings = normalizePricingRules(state.settings?.moduleInternals?.orders?.pricingRules);
+  const tier = normalizePricingTier(order.machineType || classifyPricingTier(width, height, settings));
+  const customerRule = findCustomerPriceRule(state, { ...order, machineType: tier });
   if (customerRule && customerRule.pricingMode !== 'formula') {
     const finalPrice = Math.round(quantity * Number(customerRule.unitPrice || 0));
-    return { unitPrice: Number(customerRule.unitPrice || 0), calculatedPrice: finalPrice, finalPrice, minimumApplied: false, source: 'legacy-customer', customerRule };
+    return { unitPrice: Number(customerRule.unitPrice || 0), calculatedPrice: finalPrice, finalPrice, minimumApplied: false, source: 'legacy-customer', customerRule, pricingTier: tier, pricingMode: 'sheet' };
   }
 
-  const settings = normalizePricingRules(state.settings?.moduleInternals?.orders?.pricingRules);
-  let unitPrice = positive(customerRule?.unitPrice, settings.basePrices[coatingType]);
-  const area = width * height;
-  const smallDiscountApplied = area < settings.smallAreaThreshold && matchesSmallSize(width, height, settings.smallSizes);
-  if (smallDiscountApplied) unitPrice *= settings.smallDiscounts[coatingType] || 1;
-  const calculatedPrice = Math.round((width * height * quantity * unitPrice) / (settings.divisor * 100));
-  const minimum = settings.minimumCharges[machineType];
+  const unitPrice = positive(customerRule?.unitPrice, settings.tierPrices[tier]?.[coatingType] || settings.tierPrices.BIG[coatingType]);
+  const pricingMode = tier === 'SMALL' ? 'sheet' : 'ream';
+  const calculatedPrice = pricingMode === 'sheet'
+    ? Math.round(quantity * unitPrice)
+    : Math.round((width * height * quantity * unitPrice) / (settings.divisor * 100));
+  const minimum = settings.minimumCharges[tier] || 0;
   return {
     unitPrice: Math.round(unitPrice * 100) / 100,
     calculatedPrice,
     finalPrice: Math.max(calculatedPrice, Math.round(minimum)),
     minimumApplied: calculatedPrice < minimum,
-    smallDiscountApplied,
     source: customerRule ? 'customer-formula' : 'default-formula',
     customerRule,
+    pricingTier: tier,
+    pricingMode,
   };
 }
 

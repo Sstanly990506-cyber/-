@@ -1,6 +1,6 @@
 import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
-import { calculateOrderQuote, coatingTypeCode, toTaiInch } from './pricing.js';
+import { calculateOrderQuote, classifyPricingTier, coatingTypeCode, normalizePricingTier, toTaiInch } from './pricing.js';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
@@ -37,7 +37,7 @@ function updateTaiInchPreview() {
   const unit = $('sizeUnit').value || 'mm';
   const l = toTaiInch($('sizeLength').value, unit);
   const w = toTaiInch($('sizeWidth').value, unit);
-  $('sizeTaiInch').value = l && w ? `${l.toFixed(2)} × ${w.toFixed(2)} 台吋` : '';
+  $('sizeTaiInch').value = l && w ? `天 ${l.toFixed(2)} × 地 ${w.toFixed(2)} 台吋` : '';
 }
 
 function bindOrderEnterNavigation() {
@@ -123,7 +123,7 @@ function findSmartPriceSuggestion(state, editingId = '') {
     sizeLength: $('sizeLength').value,
     sizeWidth: $('sizeWidth').value,
     sizeUnit: $('sizeUnit').value || 'mm',
-    machineType: $('machineType')?.value || 'BIG',
+    machineType: getSelectedPricingTier(state),
     sheetCount,
   });
   if (formulaQuote) return { ...formulaQuote, estimated: formulaQuote.finalPrice };
@@ -148,6 +148,16 @@ function findSmartPriceSuggestion(state, editingId = '') {
   return { estimated, source: 'history', candidates: candidates.length, avgPerSheet: Math.round(avgPerSheet) };
 }
 
+function getSelectedPricingTier(state) {
+  const manual = $('machineType')?.value || '';
+  if (manual) return manual;
+  return classifyPricingTier(
+    toTaiInch($('sizeWidth')?.value, $('sizeUnit')?.value || 'tai-inch'),
+    toTaiInch($('sizeLength')?.value, $('sizeUnit')?.value || 'tai-inch'),
+    state.settings?.moduleInternals?.orders?.pricingRules,
+  );
+}
+
 function updateOrderSmartHint(state) {
   const hint = $('orderSmartHint');
   if (!hint) return;
@@ -157,12 +167,13 @@ function updateOrderSmartHint(state) {
     return;
   }
   if (suggestion.source !== 'history') {
-    const source = suggestion.customerRule ? `客人專屬單價 ${suggestion.unitPrice.toLocaleString()} 元／令` : `預設單價 ${suggestion.unitPrice.toLocaleString()} 元／令`;
+    const tierLabel = pricingTierLabel(suggestion.pricingTier);
+    const unitLabel = suggestion.pricingMode === 'sheet' ? '單張價' : '元／令';
+    const source = suggestion.customerRule ? `客人專屬${unitLabel} ${suggestion.unitPrice.toLocaleString()}` : `預設${unitLabel} ${suggestion.unitPrice.toLocaleString()}`;
     const adjustments = [
-      suggestion.smallDiscountApplied ? '已套用小尺寸折扣' : '',
       suggestion.minimumApplied ? '已套用最低收費' : '',
     ].filter(Boolean).join('、');
-    hint.textContent = `公式報價：${source}，計算價 NT$ ${suggestion.calculatedPrice.toLocaleString()}，最終報價 NT$ ${suggestion.finalPrice.toLocaleString()}${adjustments ? `（${adjustments}）` : ''}。`;
+    hint.textContent = `公式報價：${tierLabel}，${source}，計算價 NT$ ${suggestion.calculatedPrice.toLocaleString()}，最終報價 NT$ ${suggestion.finalPrice.toLocaleString()}${adjustments ? `（${adjustments}）` : ''}。`;
   } else {
     const basis = $('billingCustomerInput')?.value.trim() ? '同一個客人' : '相近工單';
     hint.textContent = `智能估價：使用 ${suggestion.candidates} 筆${basis}相近尺寸紀錄，預估總價約 NT$ ${suggestion.estimated.toLocaleString()}，平均每張 ${suggestion.avgPerSheet.toLocaleString()}。`;
@@ -175,30 +186,35 @@ function updateOrderSmartHint(state) {
 }
 
 function formatRuleSize(rule) {
-  return `${Number(rule.sizeLength || 0).toLocaleString()} x ${Number(rule.sizeWidth || 0).toLocaleString()} ${rule.sizeUnit || 'mm'}`;
+  return `天 ${Number(rule.sizeLength || 0).toLocaleString()} x 地 ${Number(rule.sizeWidth || 0).toLocaleString()} ${rule.sizeUnit || 'mm'}`;
+}
+
+function pricingTierLabel(value) {
+  const tier = normalizePricingTier(value);
+  return tier === 'SMALL' ? '小台' : tier === 'REGULAR' ? '常規' : '大台';
 }
 
 function clearPriceRuleForm() {
   $('priceRuleForm')?.reset();
   if ($('priceRuleId')) $('priceRuleId').value = '';
-  if ($('priceRuleUnit')) $('priceRuleUnit').value = 'mm';
+  if ($('priceRuleUnit')) $('priceRuleUnit').value = 'tai-inch';
 }
 
-function populatePriceRuleFromOrder() {
+function populatePriceRuleFromOrder(state) {
   const customer = $('billingCustomerInput')?.value.trim() || '';
   $('priceRuleCustomer').value = customer;
   $('priceRuleGloss').value = $('glossType')?.value || '';
   $('priceRuleLength').value = $('sizeLength')?.value || '';
   $('priceRuleWidth').value = $('sizeWidth')?.value || '';
-  $('priceRuleUnit').value = $('sizeUnit')?.value || 'mm';
-  $('priceRuleMachine').value = $('machineType')?.value || 'ANY';
+  $('priceRuleUnit').value = $('sizeUnit')?.value || 'tai-inch';
+  $('priceRuleMachine').value = $('machineType')?.value || getSelectedPricingTier(state) || 'ANY';
 }
 
 function updatePriceRuleFormulaPreview(state) {
   const pricing = state.settings?.moduleInternals?.orders?.pricingRules || {};
   const divisor = Number(pricing.divisor || 4680);
   const formula = $('priceRuleFormulaText');
-  if (formula) formula.textContent = `總價＝寬台吋 × 長台吋 × 張數 × 單價 ÷（${divisor.toLocaleString()} × 100）`;
+  if (formula) formula.textContent = `大台/常規＝天台吋 × 地台吋 × 張數 × 元／令 ÷（${divisor.toLocaleString()} × 100）；小台＝張數 × 單張價。`;
 
   const quantity = Number($('sheetCount')?.value || 0);
   const previewState = {
@@ -208,7 +224,7 @@ function updatePriceRuleFormulaPreview(state) {
       glossType: $('priceRuleGloss')?.value || '',
       sizeLength: Number($('priceRuleLength')?.value || 0),
       sizeWidth: Number($('priceRuleWidth')?.value || 0),
-      sizeUnit: $('priceRuleUnit')?.value || 'mm',
+      sizeUnit: $('priceRuleUnit')?.value || 'tai-inch',
       machineType: $('priceRuleMachine')?.value || 'ANY',
       pricingMode: 'formula',
       unitPrice: Number($('priceRuleUnitPrice')?.value || 0),
@@ -219,15 +235,21 @@ function updatePriceRuleFormulaPreview(state) {
     glossType: $('priceRuleGloss')?.value || '',
     sizeLength: $('priceRuleLength')?.value,
     sizeWidth: $('priceRuleWidth')?.value,
-    sizeUnit: $('priceRuleUnit')?.value || 'mm',
-    machineType: $('priceRuleMachine')?.value === 'SMALL' ? 'SMALL' : 'BIG',
+    sizeUnit: $('priceRuleUnit')?.value || 'tai-inch',
+    machineType: $('priceRuleMachine')?.value === 'ANY'
+      ? classifyPricingTier(
+        toTaiInch($('priceRuleWidth')?.value, $('priceRuleUnit')?.value || 'tai-inch'),
+        toTaiInch($('priceRuleLength')?.value, $('priceRuleUnit')?.value || 'tai-inch'),
+        pricing,
+      )
+      : $('priceRuleMachine')?.value,
     sheetCount: quantity,
   });
   $('priceRuleCalculatedPrice').textContent = quote ? `NT$ ${quote.calculatedPrice.toLocaleString()}` : '請輸入完整資料';
   $('priceRuleFinalPrice').textContent = quote ? `NT$ ${quote.finalPrice.toLocaleString()}` : '請輸入完整資料';
   if ($('priceRuleFormulaNote')) {
     $('priceRuleFormulaNote').textContent = quote
-      ? `張數 ${quantity.toLocaleString()}，單價 ${quote.unitPrice.toLocaleString()} 元／令${quote.minimumApplied ? '，已套用最低收費' : ''}${quote.smallDiscountApplied ? '，已套用小尺寸折扣' : ''}。`
+      ? `張數 ${quantity.toLocaleString()}，${pricingTierLabel(quote.pricingTier)} ${quote.pricingMode === 'sheet' ? '單張價' : '元／令'} ${quote.unitPrice.toLocaleString()}${quote.minimumApplied ? '，已套用最低收費' : ''}。`
       : '請先在新增工單填入計算張數，並補齊客人、品項、尺寸與單價。';
   }
 }
@@ -235,7 +257,7 @@ function updatePriceRuleFormulaPreview(state) {
 function buildPriceRuleFromForm() {
   const sizeLength = Number($('priceRuleLength')?.value || 0);
   const sizeWidth = Number($('priceRuleWidth')?.value || 0);
-  const sizeUnit = $('priceRuleUnit')?.value || 'mm';
+  const sizeUnit = $('priceRuleUnit')?.value || 'tai-inch';
   return {
     id: $('priceRuleId')?.value || crypto.randomUUID(),
     customer: $('priceRuleCustomer')?.value.trim() || '',
@@ -262,8 +284,8 @@ function renderPriceRules(state) {
       <td>${escapeHtml(rule.customer || '-')}</td>
       <td>${escapeHtml(rule.glossType || '不限')}</td>
       <td>${escapeHtml(formatRuleSize(rule))}</td>
-      <td>${rule.machineType === 'BIG' ? '大台' : rule.machineType === 'SMALL' ? '小台' : '全部'}</td>
-      <td>${rule.pricingMode === 'formula' ? '元／令' : '舊制每張'} NT$ ${Number(rule.unitPrice || 0).toLocaleString()}</td>
+      <td>${rule.machineType === 'ANY' ? '全部' : pricingTierLabel(rule.machineType)}</td>
+      <td>${rule.machineType === 'SMALL' ? '單張價' : '元／令'} NT$ ${Number(rule.unitPrice || 0).toLocaleString()}</td>
       <td>
         <button class="btn small" type="button" data-edit-price-rule="${escapeHtml(rule.id)}">編輯</button>
         <button class="btn small ghost" type="button" data-delete-price-rule="${escapeHtml(rule.id)}">刪除</button>
@@ -313,7 +335,7 @@ function buildOrderFromForm(state) {
     sizeLength: Number($('sizeLength').value || 0),
     sizeWidth: Number($('sizeWidth').value || 0),
     sizeUnit: $('sizeUnit').value || 'mm',
-    machineType: $('machineType')?.value || 'BIG',
+    machineType: getSelectedPricingTier(state),
     glossType: $('glossType').value || '',
     totalPrice: Number($('totalPrice').value || 0),
     status: $('orderStatus').value || getEnabledOrderStatuses(state)[0],
@@ -357,7 +379,7 @@ function openOrderExportWindow(order) {
 function renderOrderTable(order) {
   const taiInch = toTaiInch(order.sizeLength, order.sizeUnit);
   const taiInchW = toTaiInch(order.sizeWidth, order.sizeUnit);
-  const taiInchText = taiInch && taiInchW ? `${taiInch.toFixed(2)} × ${taiInchW.toFixed(2)} 台吋` : '-';
+  const taiInchText = taiInch && taiInchW ? `天 ${taiInch.toFixed(2)} × 地 ${taiInchW.toFixed(2)} 台吋` : '-';
   return `
     <table>
       <tr><th>工單編號</th><td>${order.orderNumber || '-'}</td><th>交貨日期</th><td>${order.orderDate || '-'}</td></tr>
@@ -365,7 +387,7 @@ function renderOrderTable(order) {
       <tr><th>上游客戶</th><td>${order.upstream || '-'}</td><th>下游客戶</th><td>${order.downstream || '-'}</td></tr>
       <tr><th>地址</th><td colspan="3">${order.address || '-'}</td></tr>
       <tr><th>數量</th><td>${order.sheetCountText || order.sheetCount || '-'}</td><th>計算張數</th><td>${order.sheetCount || '-'}</td></tr>
-      <tr><th>尺寸（台吋）</th><td>${taiInchText}</td><th>上光種類</th><td>${order.glossType || '-'}</td></tr>
+      <tr><th>天／地（台吋）</th><td>${taiInchText}</td><th>上光種類</th><td>${order.glossType || '-'}</td></tr>
     </table>
     <div class="footer"><span>客戶簽收：______________</span><span>製單人：______________</span></div>`;
 }
@@ -432,8 +454,8 @@ const AI_FIELD_LABELS = {
   address: '送貨地址',
   sheetCountText: '數量說明',
   sheetCount: '計算張數',
-  sizeLength: '長',
-  sizeWidth: '寬',
+  sizeLength: '天',
+  sizeWidth: '地',
   sizeUnit: '單位',
   glossType: '上光種類',
   totalPrice: '總價',
@@ -596,6 +618,8 @@ export function clearOrderForm() {
   $('orderForm').reset();
   $('orderId').value = '';
   $('orderDate').value = getTodayText();
+  $('sizeUnit').value = 'tai-inch';
+  $('machineType').value = '';
   $('sizeTaiInch').value = '';
   lastAutoPrice = 0;
   lastRecognizedOrder = null;
@@ -617,7 +641,7 @@ export function openOrderForEdit(state, orderId) {
   $('sheetCount').value = order.sheetCount || '';
   $('sizeLength').value = order.sizeLength || '';
   $('sizeWidth').value = order.sizeWidth || '';
-  $('sizeUnit').value = order.sizeUnit || 'mm';
+  $('sizeUnit').value = order.sizeUnit || 'tai-inch';
   $('machineType').value = order.machineType || 'BIG';
   $('glossType').value = order.glossType || '';
   $('totalPrice').value = order.totalPrice || '';
@@ -643,7 +667,7 @@ function copyOrderAsNew(state, orderId) {
   $('sheetCount').value = order.sheetCount || '';
   $('sizeLength').value = order.sizeLength || '';
   $('sizeWidth').value = order.sizeWidth || '';
-  $('sizeUnit').value = order.sizeUnit || 'mm';
+  $('sizeUnit').value = order.sizeUnit || 'tai-inch';
   $('machineType').value = order.machineType || 'BIG';
   $('glossType').value = order.glossType || '';
   $('totalPrice').value = order.totalPrice || '';
@@ -919,7 +943,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('priceRuleForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const rule = buildPriceRuleFromForm();
-    if (!rule.customer || !rule.sizeLength || !rule.sizeWidth || !rule.unitPrice) return alert('請填客人、尺寸與元／令單價。');
+    if (!rule.customer || !rule.sizeLength || !rule.sizeWidth || !rule.unitPrice) return alert('請填客人、尺寸與單價。');
     const ruleLength = toTaiInch(rule.sizeLength, rule.sizeUnit);
     const ruleWidth = toTaiInch(rule.sizeWidth, rule.sizeUnit);
     const duplicated = state.priceRules.find((item) => item.id !== rule.id
@@ -968,7 +992,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       $('priceRuleGloss').value = rule.glossType || '';
       $('priceRuleLength').value = rule.sizeLength || '';
       $('priceRuleWidth').value = rule.sizeWidth || '';
-      $('priceRuleUnit').value = rule.sizeUnit || 'mm';
+      $('priceRuleUnit').value = rule.sizeUnit || 'tai-inch';
       $('priceRuleMachine').value = rule.machineType || 'ANY';
       $('priceRuleUnitPrice').value = rule.unitPrice || '';
       $('priceRuleNote').value = rule.note || '';
@@ -990,7 +1014,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   document.querySelectorAll('[data-order-screen]').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (btn.id === 'openPriceRulesFromOrderBtn') {
-        populatePriceRuleFromOrder();
+        populatePriceRuleFromOrder(state);
       }
       state.orderScreen = btn.dataset.orderScreen;
       renderOrderScreen(state);

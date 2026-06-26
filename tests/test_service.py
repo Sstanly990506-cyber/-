@@ -106,13 +106,13 @@ class ServiceTests(unittest.TestCase):
         optimize.assert_called_once_with({'stops': []})
 
     def test_ops_can_request_pricing_quote(self):
-        payload = {'width': 26, 'height': 18, 'quantity': 1000, 'coatingType': 'PVA', 'machineType': 'SMALL'}
+        payload = {'width': 26, 'height': 18, 'quantity': 1000, 'coatingType': 'PVA', 'machineType': 'BIG'}
         state = {'settings': {'moduleInternals': {'orders': {'pricingRules': {'divisor': 4680}}}}}
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.read_state', return_value=state):
             result = pricing_quote_payload('token', payload)
         self.assertEqual(result['calculatedPrice'], 900)
-        self.assertEqual(result['finalPrice'], 900)
-        self.assertFalse(result['minimumApplied'])
+        self.assertEqual(result['finalPrice'], 1000)
+        self.assertTrue(result['minimumApplied'])
 
     def test_pricing_quote_uses_customer_override(self):
         payload = {'width': 26, 'height': 18, 'quantity': 1000, 'coatingType': 'PVB', 'machineType': 'BIG', 'customer': '三青'}

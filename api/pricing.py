@@ -1,16 +1,19 @@
 """Quotation rules shared by the API surfaces."""
 
+PRICING_TIERS = {'BIG', 'REGULAR', 'SMALL'}
+REAM_TIERS = {'BIG', 'REGULAR'}
+COATING_TYPES = {'PVA', 'PVB', 'WEAR', 'PRESS'}
+
 DEFAULT_PRICING_RULES = {
     'divisor': 4680,
-    'basePrices': {'PVA': 900, 'PVB': 700, 'WEAR': 900, 'PRESS': 850},
-    'smallAreaThreshold': 340,
-    'smallSizes': ['12x26', '13x18', '14x21', '18x26'],
-    'smallDiscounts': {'PVA': 0.7, 'PVB': 0.6},
-    'minimumCharges': {'BIG': 1000, 'SMALL': 600},
+    'areaThresholds': {'smallMax': 340, 'regularMax': 620},
+    'tierPrices': {
+        'BIG': {'PVA': 900, 'PVB': 700, 'WEAR': 900, 'PRESS': 850},
+        'REGULAR': {'PVA': 850, 'PVB': 650, 'WEAR': 850, 'PRESS': 800},
+        'SMALL': {'PVA': 1, 'PVB': 1, 'WEAR': 1, 'PRESS': 1},
+    },
+    'minimumCharges': {'BIG': 1000, 'REGULAR': 800, 'SMALL': 600},
 }
-
-COATING_TYPES = {'PVA', 'PVB', 'WEAR', 'PRESS'}
-MACHINE_TYPES = {'BIG', 'SMALL'}
 
 
 def _positive_number(value, fallback):
@@ -21,30 +24,40 @@ def _positive_number(value, fallback):
     return number if number > 0 else float(fallback)
 
 
+def _normalize_tier_prices(source=None, legacy_base=None):
+    source = source if isinstance(source, dict) else {}
+    legacy_base = legacy_base if isinstance(legacy_base, dict) else {}
+    return {
+        tier: {
+            coating: _positive_number(
+                (source.get(tier) or {}).get(coating),
+                _positive_number(legacy_base.get(coating), DEFAULT_PRICING_RULES['tierPrices'][tier][coating]),
+            )
+            for coating in COATING_TYPES
+        }
+        for tier in PRICING_TIERS
+    }
+
+
 def normalize_pricing_rules(value=None):
     source = value if isinstance(value, dict) else {}
-    defaults = DEFAULT_PRICING_RULES
+    legacy_small = _positive_number(source.get('smallAreaThreshold'), DEFAULT_PRICING_RULES['areaThresholds']['smallMax'])
+    area_thresholds = {
+        'smallMax': _positive_number((source.get('areaThresholds') or {}).get('smallMax'), legacy_small),
+        'regularMax': _positive_number((source.get('areaThresholds') or {}).get('regularMax'), DEFAULT_PRICING_RULES['areaThresholds']['regularMax']),
+    }
+    if area_thresholds['regularMax'] < area_thresholds['smallMax']:
+        area_thresholds['regularMax'] = area_thresholds['smallMax']
     return {
-        'divisor': _positive_number(source.get('divisor'), defaults['divisor']),
-        'basePrices': {
-            key: _positive_number((source.get('basePrices') or {}).get(key), defaults['basePrices'][key])
-            for key in COATING_TYPES
-        },
-        'smallAreaThreshold': _positive_number(source.get('smallAreaThreshold'), defaults['smallAreaThreshold']),
-        'smallSizes': [
-            str(item).strip().lower().replace('×', 'x')
-            for item in (source.get('smallSizes') or defaults['smallSizes'])
-            if str(item).strip()
-        ],
-        'smallDiscounts': {
-            key: _positive_number((source.get('smallDiscounts') or {}).get(key), defaults['smallDiscounts'][key])
-            for key in defaults['smallDiscounts']
-        },
+        'divisor': _positive_number(source.get('divisor'), DEFAULT_PRICING_RULES['divisor']),
+        'areaThresholds': area_thresholds,
+        'tierPrices': _normalize_tier_prices(source.get('tierPrices'), source.get('basePrices')),
         'minimumCharges': {
-            key: _positive_number((source.get('minimumCharges') or {}).get(key), defaults['minimumCharges'][key])
-            for key in MACHINE_TYPES
+            tier: _positive_number((source.get('minimumCharges') or {}).get(tier), DEFAULT_PRICING_RULES['minimumCharges'][tier])
+            for tier in PRICING_TIERS
         },
     }
+
 
 def normalize_coating_type(value):
     text = str(value or '').strip().upper()
@@ -59,9 +72,25 @@ def normalize_coating_type(value):
     return text
 
 
-def _matches_small_size(width, height, sizes):
-    candidates = {f'{width:g}x{height:g}', f'{height:g}x{width:g}'}
-    return any(str(size).replace(' ', '') in candidates for size in sizes)
+def normalize_pricing_tier(value):
+    tier = str(value or '').strip().upper()
+    if tier == 'SMALL':
+        return 'SMALL'
+    if tier == 'REGULAR':
+        return 'REGULAR'
+    return 'BIG'
+
+
+def classify_pricing_tier(width, height, rules=None):
+    settings = normalize_pricing_rules(rules)
+    area = float(width or 0) * float(height or 0)
+    if area <= 0:
+        return 'BIG'
+    if area <= settings['areaThresholds']['smallMax']:
+        return 'SMALL'
+    if area <= settings['areaThresholds']['regularMax']:
+        return 'REGULAR'
+    return 'BIG'
 
 
 def calculate_quote(payload, rules=None, customer_unit_price=None):
@@ -71,26 +100,28 @@ def calculate_quote(payload, rules=None, customer_unit_price=None):
     height = _positive_number(payload.get('height'), 0)
     quantity = _positive_number(payload.get('quantity'), 0)
     coating_type = normalize_coating_type(payload.get('coatingType'))
-    machine_type = str(payload.get('machineType') or '').strip().upper()
+    settings = normalize_pricing_rules(rules)
+    tier = normalize_pricing_tier(payload.get('machineType') or classify_pricing_tier(width, height, settings))
     if not width or not height or not quantity:
         raise ValueError('width, height and quantity must be greater than zero')
     if coating_type not in COATING_TYPES:
         raise ValueError('unsupported coatingType')
-    if machine_type not in MACHINE_TYPES:
+    if tier not in PRICING_TIERS:
         raise ValueError('unsupported machineType')
 
-    settings = normalize_pricing_rules(rules)
-    unit_price = _positive_number(customer_unit_price, settings['basePrices'][coating_type])
-    area = width * height
-    if area < settings['smallAreaThreshold'] and _matches_small_size(width, height, settings['smallSizes']):
-        unit_price *= settings['smallDiscounts'].get(coating_type, 1)
-
-    calculated = round((width * height * quantity * unit_price) / (settings['divisor'] * 100))
-    minimum = settings['minimumCharges'][machine_type]
+    unit_price = _positive_number(customer_unit_price, settings['tierPrices'][tier][coating_type])
+    pricing_mode = 'sheet' if tier == 'SMALL' else 'ream'
+    if pricing_mode == 'sheet':
+        calculated = round(quantity * unit_price)
+    else:
+        calculated = round((width * height * quantity * unit_price) / (settings['divisor'] * 100))
+    minimum = settings['minimumCharges'][tier]
     final = max(calculated, round(minimum))
     return {
         'unitPrice': round(unit_price, 2),
         'calculatedPrice': calculated,
         'finalPrice': final,
         'minimumApplied': calculated < minimum,
+        'pricingTier': tier,
+        'pricingMode': pricing_mode,
     }

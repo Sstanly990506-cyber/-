@@ -5,7 +5,7 @@ from api.records import changes_since, clear_records, count_records_by_entity, d
 from api.ai_orders import OrderRecognitionError, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.trip_optimizer import optimize_trip
-from api.pricing import calculate_quote, normalize_coating_type
+from api.pricing import calculate_quote, normalize_coating_type, normalize_pricing_tier
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
 ENTITY_VIEW={'orders':'ordersView','customers':'customersView','inventory':'inventoryView','events':'notificationsView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','aiCorrections':'ordersView'}
 STATE_FIELD_VIEW={'glossOptions':'ordersView','customers':'customersView','orders':'ordersView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','systemEvents':'notificationsView','inventoryItems':'inventoryView'}
@@ -269,7 +269,8 @@ def pricing_quote_payload(token,payload):
             for rule in _all_records('priceRules'):
                 if str(rule.get('customer') or '').strip().lower()!=customer or rule.get('pricingMode')!='formula':continue
                 if normalize_coating_type(rule.get('glossType'))!=normalize_coating_type(payload.get('coatingType')):continue
-                if rule.get('machineType') not in {None,'','ANY',payload.get('machineType')}:continue
+                rule_tier=rule.get('machineType')
+                if rule_tier not in {None,'','ANY'} and normalize_pricing_tier(rule_tier)!=normalize_pricing_tier(payload.get('machineType')):continue
                 rule_width=float(rule.get('sizeWidthTai') or rule.get('sizeWidth') or 0)
                 rule_height=float(rule.get('sizeLengthTai') or rule.get('sizeLength') or 0)
                 if (abs(rule_width-width)<=0.15 and abs(rule_height-height)<=0.15) or (abs(rule_width-height)<=0.15 and abs(rule_height-width)<=0.15):
