@@ -700,15 +700,11 @@
             </article>
 
             <article class="card settings-theme-card">
-              <h3>主題與警示門檻</h3>
+              <h3>主題色</h3>
               <div class="form-grid settings-form-grid">
                 <label>主色<input id="settingsThemePrimary" type="color" /></label>
                 <label>強調色<input id="settingsThemeAccent" type="color" /></label>
                 <label>面板底色<input id="settingsThemePanel" type="color" /></label>
-                <label>工單警示天數<input id="settingsOrderWarningDays" type="number" min="1" /></label>
-                <label>應收逾期天數<input id="settingsReceivableOverdueDays" type="number" min="1" /></label>
-                <label>應付提醒天數<input id="settingsPayableWarningDays" type="number" min="1" /></label>
-                <label>預設低庫存門檻<input id="settingsInventoryLowStockDefault" type="number" min="1" /></label>
               </div>
             </article>
           </div>
@@ -727,6 +723,7 @@
               <div class="settings-internal-grid">
               <div class="settings-subgroup" data-settings-internal-module="ordersView">
                 <h4>工單系統</h4>
+                <label>工單警示天數<input id="settingsOrderWarningDays" type="number" min="1" /></label>
                 <label class="settings-switch"><input id="settingsOrderShowFilters" type="checkbox" /><span>顯示狀態篩選按鈕</span></label>
                 <label class="settings-switch"><input id="settingsOrderShowExport" type="checkbox" /><span>顯示工單匯出按鈕</span></label>
                 <label class="settings-switch"><input id="settingsOrderShowAiTools" type="checkbox" /><span>開啟 AI 識別工單與 AI 修正中心</span></label>
@@ -771,6 +768,15 @@
                 <label class="settings-switch"><input id="settingsTripShowManualStopForm" type="checkbox" /><span>顯示手動新增站點區塊</span></label>
                 <label class="settings-switch"><input id="settingsTripShowOrderPool" type="checkbox" /><span>顯示工單勾選區塊</span></label>
                 <label class="settings-switch"><input id="settingsTripShowManualRoute" type="checkbox" /><span>顯示手動路線調整區塊</span></label>
+              </div>
+              <div class="settings-subgroup" data-settings-internal-module="financeView">
+                <h4>財經系統</h4>
+                <label>應收逾期天數<input id="settingsReceivableOverdueDays" type="number" min="1" /></label>
+                <label>應付提醒天數<input id="settingsPayableWarningDays" type="number" min="1" /></label>
+              </div>
+              <div class="settings-subgroup" data-settings-internal-module="inventoryView">
+                <h4>庫存系統</h4>
+                <label>預設低庫存門檻<input id="settingsInventoryLowStockDefault" type="number" min="1" /></label>
               </div>
               <div id="settingsModuleNoInternals" class="settings-subgroup hidden">
                 <h4>此系統目前沒有額外細節</h4>

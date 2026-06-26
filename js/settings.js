@@ -7,6 +7,7 @@ function ensureSettings(state) {
 
 let activeSettingsModuleId = null;
 let settingsDraft = null;
+const MODULES_WITH_INTERNAL_SETTINGS = ['ordersView', 'customersView', 'tripsView', 'financeView', 'inventoryView'];
 
 function moduleSettingsHtml(settings) {
   return MODULE_DEFINITIONS.map((module) => {
@@ -67,7 +68,7 @@ function renderModuleSettingsNavigator(settings) {
   document.querySelectorAll('[data-settings-internal-module]').forEach((section) => {
     section.classList.toggle('hidden', section.dataset.settingsInternalModule !== activeSettingsModuleId);
   });
-  $('settingsModuleNoInternals')?.classList.toggle('hidden', !activeSettingsModuleId || ['ordersView', 'customersView', 'tripsView'].includes(activeSettingsModuleId));
+  $('settingsModuleNoInternals')?.classList.toggle('hidden', !activeSettingsModuleId || MODULES_WITH_INTERNAL_SETTINGS.includes(activeSettingsModuleId));
 }
 
 const PERMISSION_ROLE_DEFAULTS = {

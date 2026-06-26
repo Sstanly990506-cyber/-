@@ -186,8 +186,14 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('data-settings-internal-module="ordersView"', view)
         self.assertIn('data-settings-internal-module="customersView"', view)
         self.assertIn('data-settings-internal-module="tripsView"', view)
+        self.assertIn('data-settings-internal-module="financeView"', view)
+        self.assertIn('data-settings-internal-module="inventoryView"', view)
         self.assertIn('data-settings-open-module', settings)
         self.assertIn('renderModuleSettingsNavigator', settings)
+        self.assertIn('MODULES_WITH_INTERNAL_SETTINGS', settings)
+        self.assertLess(view.index('data-settings-internal-module="ordersView"'), view.index('id="settingsOrderWarningDays"'))
+        self.assertLess(view.index('data-settings-internal-module="financeView"'), view.index('id="settingsReceivableOverdueDays"'))
+        self.assertLess(view.index('data-settings-internal-module="inventoryView"'), view.index('id="settingsInventoryLowStockDefault"'))
         self.assertIn('.settings-module-nav-card', styles)
 
     def test_finance_quick_actions_are_present(self):
