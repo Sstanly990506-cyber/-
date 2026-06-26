@@ -28,6 +28,11 @@ function positive(value, fallback) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
+function nonNegative(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
 function normalizeTierPrices(source = {}, legacyBasePrices = {}) {
   return Object.fromEntries(PRICING_TIERS.map((tier) => [
     tier,
@@ -91,6 +96,74 @@ export function classifyPricingTier(widthTai, heightTai, rules = {}) {
   return 'BIG';
 }
 
+function defaultTierBounds(rules = {}) {
+  const settings = normalizePricingRules(rules);
+  return {
+    SMALL: {
+      shortMin: 0,
+      shortMax: settings.dimensionThresholds.small.shortMax,
+      longMin: 0,
+      longMax: settings.dimensionThresholds.small.longMax,
+    },
+    REGULAR: {
+      shortMin: settings.dimensionThresholds.small.shortMax,
+      shortMax: settings.dimensionThresholds.regular.shortMax,
+      longMin: settings.dimensionThresholds.small.longMax,
+      longMax: settings.dimensionThresholds.regular.longMax,
+    },
+  };
+}
+
+export function normalizeCustomerTierBounds(value = {}, rules = {}) {
+  const source = value && typeof value === 'object' ? value : {};
+  const defaults = defaultTierBounds(rules);
+  return Object.fromEntries(['SMALL', 'REGULAR'].map((tier) => {
+    const row = source[tier] || source[tier.toLowerCase()] || {};
+    const fallback = defaults[tier];
+    const shortMin = nonNegative(row.shortMin, fallback.shortMin);
+    const shortMax = Math.max(shortMin, nonNegative(row.shortMax, fallback.shortMax));
+    const longMin = nonNegative(row.longMin, fallback.longMin);
+    const longMax = Math.max(longMin, nonNegative(row.longMax, fallback.longMax));
+    return [tier, { shortMin, shortMax, longMin, longMax }];
+  }));
+}
+
+export function findCustomerTierBounds(state, customerName = '') {
+  const customer = String(customerName || '').trim().toLowerCase();
+  if (!customer) return null;
+  const rule = (state.priceRules || []).find((item) => (
+    item?.priceScope === 'customer-tier-bounds'
+    && String(item.customer || '').trim().toLowerCase() === customer
+  ));
+  return rule?.tierBounds || null;
+}
+
+export function classifyPricingTierWithBounds(widthTai, heightTai, bounds = null, rules = {}) {
+  if (!bounds) return classifyPricingTier(widthTai, heightTai, rules);
+  const width = Number(widthTai || 0);
+  const height = Number(heightTai || 0);
+  if (!width || !height) return 'BIG';
+  const shortSide = Math.min(width, height);
+  const longSide = Math.max(width, height);
+  const normalized = normalizeCustomerTierBounds(bounds, rules);
+  const inside = (tier) => (
+    shortSide >= normalized[tier].shortMin
+    && shortSide <= normalized[tier].shortMax
+    && longSide >= normalized[tier].longMin
+    && longSide <= normalized[tier].longMax
+  );
+  if (inside('SMALL')) return 'SMALL';
+  if (inside('REGULAR')) return 'REGULAR';
+  return 'BIG';
+}
+
+export function classifyOrderPricingTier(state, order = {}) {
+  const width = toTaiInch(order.sizeWidth, order.sizeUnit);
+  const height = toTaiInch(order.sizeLength, order.sizeUnit);
+  const settings = state.settings?.moduleInternals?.orders?.pricingRules;
+  return classifyPricingTierWithBounds(width, height, findCustomerTierBounds(state, order.billingCustomer), settings);
+}
+
 function closeSize(a, b) {
   return Math.abs(Number(a || 0) - Number(b || 0)) <= 0.15;
 }
@@ -102,9 +175,10 @@ export function findCustomerPriceRule(state, order = {}) {
   const lengthTai = toTaiInch(order.sizeLength, order.sizeUnit);
   const widthTai = toTaiInch(order.sizeWidth, order.sizeUnit);
   if (!lengthTai || !widthTai) return null;
-  const tier = normalizePricingTier(order.machineType || classifyPricingTier(widthTai, lengthTai, state.settings?.moduleInternals?.orders?.pricingRules));
+  const tier = normalizePricingTier(order.machineType || classifyOrderPricingTier(state, order));
 
   const matches = (state.priceRules || []).filter((rule) => {
+    if (rule?.priceScope === 'customer-tier-bounds') return false;
     if (String(rule.customer || '').trim().toLowerCase() !== customer) return false;
     if (rule.glossType && glossType && coatingTypeCode(rule.glossType) !== coatingTypeCode(glossType)) return false;
     if (rule.machineType && rule.machineType !== 'ANY' && normalizePricingTier(rule.machineType) !== tier) return false;
@@ -127,7 +201,7 @@ export function calculateOrderQuote(state, order = {}) {
   if (!width || !height || !quantity || !coatingType) return null;
 
   const settings = normalizePricingRules(state.settings?.moduleInternals?.orders?.pricingRules);
-  const tier = normalizePricingTier(order.machineType || classifyPricingTier(width, height, settings));
+  const tier = normalizePricingTier(order.machineType || classifyOrderPricingTier(state, order));
   const customerRule = findCustomerPriceRule(state, { ...order, machineType: tier });
   if (customerRule && customerRule.pricingMode !== 'formula') {
     const finalPrice = Math.round(quantity * Number(customerRule.unitPrice || 0));

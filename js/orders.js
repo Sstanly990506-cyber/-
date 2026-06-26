@@ -1,6 +1,6 @@
 import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
-import { calculateOrderQuote, classifyPricingTier, coatingTypeCode, normalizePricingTier, toTaiInch } from './pricing.js';
+import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
@@ -152,11 +152,12 @@ function findSmartPriceSuggestion(state, editingId = '') {
 function getSelectedPricingTier(state) {
   const manual = $('machineType')?.value || '';
   if (manual) return manual;
-  return classifyPricingTier(
-    toTaiInch($('sizeWidth')?.value, $('sizeUnit')?.value || 'tai-inch'),
-    toTaiInch($('sizeLength')?.value, $('sizeUnit')?.value || 'tai-inch'),
-    state.settings?.moduleInternals?.orders?.pricingRules,
-  );
+  return classifyOrderPricingTier(state, {
+    billingCustomer: $('billingCustomerInput')?.value.trim() || $('priceRuleCustomer')?.value.trim() || '',
+    sizeLength: $('sizeLength')?.value,
+    sizeWidth: $('sizeWidth')?.value,
+    sizeUnit: $('sizeUnit')?.value || 'tai-inch',
+  });
 }
 
 function updateOrderSmartHint(state) {
@@ -197,12 +198,43 @@ function pricingTierLabel(value) {
 }
 
 function isCustomerTierPriceRule(rule) {
+  if (rule?.priceScope === 'customer-tier-bounds') return false;
   return rule?.priceScope === 'customer-tier'
     || (!Number(rule?.sizeLengthTai || rule?.sizeLength || 0) && !Number(rule?.sizeWidthTai || rule?.sizeWidth || 0));
 }
 
+function isCustomerPricingConfigRule(rule) {
+  return rule?.priceScope === 'customer-tier-bounds' || isCustomerTierPriceRule(rule);
+}
+
 function clearPriceMatrix() {
   document.querySelectorAll('#priceRuleMatrix input[data-price-tier][data-price-coating]').forEach((input) => { input.value = ''; });
+}
+
+function defaultPriceBounds(state) {
+  return normalizeCustomerTierBounds({}, state.settings?.moduleInternals?.orders?.pricingRules);
+}
+
+function clearPriceBounds(state) {
+  fillPriceBounds(defaultPriceBounds(state));
+}
+
+function customerBoundsRule(state, customerName) {
+  const customer = String(customerName || '').trim().toLowerCase();
+  if (!customer) return null;
+  return (state.priceRules || []).find((rule) => (
+    rule?.priceScope === 'customer-tier-bounds'
+    && String(rule.customer || '').trim().toLowerCase() === customer
+  ));
+}
+
+function fillPriceBounds(bounds) {
+  const normalized = normalizeCustomerTierBounds(bounds);
+  document.querySelectorAll('#priceRuleBounds input[data-price-bound-tier][data-price-bound-edge]').forEach((input) => {
+    const tier = input.dataset.priceBoundTier;
+    const edge = input.dataset.priceBoundEdge;
+    input.value = normalized?.[tier]?.[edge] ?? '';
+  });
 }
 
 function matrixRulesForCustomer(state, customerName) {
@@ -213,6 +245,7 @@ function matrixRulesForCustomer(state, customerName) {
 
 function fillPriceMatrixFromCustomer(state, customerName) {
   clearPriceMatrix();
+  fillPriceBounds(customerBoundsRule(state, customerName)?.tierBounds || defaultPriceBounds(state));
   const rules = matrixRulesForCustomer(state, customerName);
   rules.forEach((rule) => {
     const coating = coatingTypeCode(rule.glossType);
@@ -224,10 +257,11 @@ function fillPriceMatrixFromCustomer(state, customerName) {
   if ($('priceRuleNote')) $('priceRuleNote').value = note;
 }
 
-function clearPriceRuleForm() {
+function clearPriceRuleForm(state) {
   $('priceRuleForm')?.reset();
   if ($('priceRuleId')) $('priceRuleId').value = '';
   clearPriceMatrix();
+  clearPriceBounds(state);
 }
 
 function populatePriceRuleFromOrder(state) {
@@ -253,7 +287,7 @@ function updatePriceRuleFormulaPreview(state) {
     sizeLength: $('sizeLength')?.value,
     sizeWidth: $('sizeWidth')?.value,
     sizeUnit: $('sizeUnit')?.value || 'tai-inch',
-    machineType: getSelectedPricingTier(state),
+    machineType: $('machineType')?.value || '',
     sheetCount: quantity,
   });
   $('priceRuleCalculatedPrice').textContent = quote ? `NT$ ${quote.calculatedPrice.toLocaleString()}` : '請輸入完整資料';
@@ -269,7 +303,25 @@ function buildPriceRulesFromForm() {
   const customer = $('priceRuleCustomer')?.value.trim() || '';
   const note = $('priceRuleNote')?.value.trim() || '';
   const updatedAt = new Date().toLocaleString();
-  return [...document.querySelectorAll('#priceRuleMatrix input[data-price-tier][data-price-coating]')]
+  const tierBounds = {};
+  document.querySelectorAll('#priceRuleBounds input[data-price-bound-tier][data-price-bound-edge]').forEach((input) => {
+    const tier = input.dataset.priceBoundTier;
+    const edge = input.dataset.priceBoundEdge;
+    if (!tierBounds[tier]) tierBounds[tier] = {};
+    tierBounds[tier][edge] = Number(input.value || 0);
+  });
+  const boundsRule = {
+    id: crypto.randomUUID(),
+    customer,
+    glossType: '',
+    machineType: 'ANY',
+    pricingMode: 'formula',
+    priceScope: 'customer-tier-bounds',
+    tierBounds: normalizeCustomerTierBounds(tierBounds),
+    note,
+    updatedAt,
+  };
+  const matrixRules = [...document.querySelectorAll('#priceRuleMatrix input[data-price-tier][data-price-coating]')]
     .map((input) => ({
       tier: input.dataset.priceTier,
       coating: input.dataset.priceCoating,
@@ -292,12 +344,15 @@ function buildPriceRulesFromForm() {
       note,
       updatedAt,
     }));
+  return [boundsRule, ...matrixRules];
 }
 
 function renderPriceRules(state) {
   const body = $('priceRulesTbody');
   if (!body) return;
-  const rows = [...(state.priceRules || [])].sort((a, b) => String(a.customer || '').localeCompare(String(b.customer || ''), 'zh-Hant'));
+  const rows = [...(state.priceRules || [])]
+    .filter((rule) => rule?.priceScope !== 'customer-tier-bounds')
+    .sort((a, b) => String(a.customer || '').localeCompare(String(b.customer || ''), 'zh-Hant'));
   body.innerHTML = rows.length ? rows.map((rule) => `
     <tr>
       <td>${escapeHtml(rule.customer || '-')}</td>
@@ -964,11 +1019,11 @@ export function bindOrderEvents(state, saveState, renderAll) {
     const customer = $('priceRuleCustomer')?.value.trim() || '';
     const rules = buildPriceRulesFromForm();
     if (!customer) return alert('請先選擇或輸入客人。');
-    if (!rules.length) return alert('請至少填一個客人專屬價格。');
+    if (!rules.some(isCustomerTierPriceRule)) return alert('請至少填一個客人專屬價格。');
     const customerKey = customer.toLowerCase();
-    state.priceRules = state.priceRules.filter((item) => !(String(item.customer || '').trim().toLowerCase() === customerKey && isCustomerTierPriceRule(item)));
+    state.priceRules = state.priceRules.filter((item) => !(String(item.customer || '').trim().toLowerCase() === customerKey && isCustomerPricingConfigRule(item)));
     state.priceRules.unshift(...rules);
-    clearPriceRuleForm();
+    clearPriceRuleForm(state);
     saveState();
     renderAll();
   });
@@ -989,7 +1044,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     updatePriceRuleFormulaPreview(state);
   });
   $('clearPriceRuleBtn')?.addEventListener('click', () => {
-    clearPriceRuleForm();
+    clearPriceRuleForm(state);
     renderPriceRuleCustomerMatches(state);
   });
   $('priceRulesTbody')?.addEventListener('click', (e) => {

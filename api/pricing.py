@@ -27,6 +27,14 @@ def _positive_number(value, fallback):
     return number if number > 0 else float(fallback)
 
 
+def _non_negative_number(value, fallback):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(fallback)
+    return number if number >= 0 else float(fallback)
+
+
 def _normalize_tier_prices(source=None, legacy_base=None):
     source = source if isinstance(source, dict) else {}
     legacy_base = legacy_base if isinstance(legacy_base, dict) else {}
@@ -103,6 +111,61 @@ def classify_pricing_tier(width, height, rules=None):
     if short_side <= settings['dimensionThresholds']['small']['shortMax'] and long_side <= settings['dimensionThresholds']['small']['longMax']:
         return 'SMALL'
     if short_side <= settings['dimensionThresholds']['regular']['shortMax'] and long_side <= settings['dimensionThresholds']['regular']['longMax']:
+        return 'REGULAR'
+    return 'BIG'
+
+
+def _default_tier_bounds(rules=None):
+    settings = normalize_pricing_rules(rules)
+    return {
+        'SMALL': {
+            'shortMin': 0,
+            'shortMax': settings['dimensionThresholds']['small']['shortMax'],
+            'longMin': 0,
+            'longMax': settings['dimensionThresholds']['small']['longMax'],
+        },
+        'REGULAR': {
+            'shortMin': settings['dimensionThresholds']['small']['shortMax'],
+            'shortMax': settings['dimensionThresholds']['regular']['shortMax'],
+            'longMin': settings['dimensionThresholds']['small']['longMax'],
+            'longMax': settings['dimensionThresholds']['regular']['longMax'],
+        },
+    }
+
+
+def normalize_customer_tier_bounds(value=None, rules=None):
+    source = value if isinstance(value, dict) else {}
+    defaults = _default_tier_bounds(rules)
+    result = {}
+    for tier in ('SMALL', 'REGULAR'):
+        row = source.get(tier) or source.get(tier.lower()) or {}
+        fallback = defaults[tier]
+        short_min = _non_negative_number(row.get('shortMin'), fallback['shortMin'])
+        short_max = max(short_min, _non_negative_number(row.get('shortMax'), fallback['shortMax']))
+        long_min = _non_negative_number(row.get('longMin'), fallback['longMin'])
+        long_max = max(long_min, _non_negative_number(row.get('longMax'), fallback['longMax']))
+        result[tier] = {'shortMin': short_min, 'shortMax': short_max, 'longMin': long_min, 'longMax': long_max}
+    return result
+
+
+def classify_pricing_tier_with_bounds(width, height, bounds=None, rules=None):
+    if not bounds:
+        return classify_pricing_tier(width, height, rules)
+    width = float(width or 0)
+    height = float(height or 0)
+    if width <= 0 or height <= 0:
+        return 'BIG'
+    short_side = min(width, height)
+    long_side = max(width, height)
+    normalized = normalize_customer_tier_bounds(bounds, rules)
+
+    def inside(tier):
+        row = normalized[tier]
+        return row['shortMin'] <= short_side <= row['shortMax'] and row['longMin'] <= long_side <= row['longMax']
+
+    if inside('SMALL'):
+        return 'SMALL'
+    if inside('REGULAR'):
         return 'REGULAR'
     return 'BIG'
 

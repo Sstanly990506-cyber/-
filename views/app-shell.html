@@ -181,11 +181,30 @@
               <input id="priceRuleId" type="hidden" />
               <label>客人（上游印刷廠）<input id="priceRuleCustomer" list="billingCustomerOptions" required /></label>
               <div id="priceRuleCustomerMatches" class="customer-match-list span-2"></div>
+              <div class="pricing-bounds span-2" id="priceRuleBounds">
+                <div class="pricing-bounds-title">
+                  <strong>尺寸級距上下限（單位：台吋）</strong>
+                  <span>超過常規上限就自動算大台</span>
+                </div>
+                <div class="pricing-bounds-grid">
+                  <span></span><span>天／短邊下限</span><span>天／短邊上限</span><span>地／長邊下限</span><span>地／長邊上限</span>
+                  <strong>小台</strong>
+                  <input data-price-bound-tier="SMALL" data-price-bound-edge="shortMin" type="number" min="0" step="0.01" placeholder="0" />
+                  <input data-price-bound-tier="SMALL" data-price-bound-edge="shortMax" type="number" min="0" step="0.01" placeholder="18" />
+                  <input data-price-bound-tier="SMALL" data-price-bound-edge="longMin" type="number" min="0" step="0.01" placeholder="0" />
+                  <input data-price-bound-tier="SMALL" data-price-bound-edge="longMax" type="number" min="0" step="0.01" placeholder="26" />
+                  <strong>常規</strong>
+                  <input data-price-bound-tier="REGULAR" data-price-bound-edge="shortMin" type="number" min="0" step="0.01" placeholder="18" />
+                  <input data-price-bound-tier="REGULAR" data-price-bound-edge="shortMax" type="number" min="0" step="0.01" placeholder="25" />
+                  <input data-price-bound-tier="REGULAR" data-price-bound-edge="longMin" type="number" min="0" step="0.01" placeholder="26" />
+                  <input data-price-bound-tier="REGULAR" data-price-bound-edge="longMax" type="number" min="0" step="0.01" placeholder="35" />
+                </div>
+              </div>
               <div class="pricing-matrix span-2" id="priceRuleMatrix">
                 <div class="pricing-matrix-head"><span>級距</span><span>PVA 光</span><span>PVB 光／油</span><span>耐磨</span><span>壓光</span></div>
-                <div class="pricing-matrix-row"><strong>大台（元／令）</strong><input data-price-tier="BIG" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
-                <div class="pricing-matrix-row"><strong>常規（元／令）</strong><input data-price-tier="REGULAR" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
-                <div class="pricing-matrix-row"><strong>小台（單張價）</strong><input data-price-tier="SMALL" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
+                <div class="pricing-matrix-row big"><strong>大台（元／令）</strong><input data-price-tier="BIG" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="BIG" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
+                <div class="pricing-matrix-row regular"><strong>常規（元／令）</strong><input data-price-tier="REGULAR" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="REGULAR" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
+                <div class="pricing-matrix-row small"><strong>小台（單張價）</strong><input data-price-tier="SMALL" data-price-coating="PVA" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="PVB" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="WEAR" type="number" min="0" step="0.01" /><input data-price-tier="SMALL" data-price-coating="PRESS" type="number" min="0" step="0.01" /></div>
               </div>
               <label class="span-2">備註<input id="priceRuleNote" placeholder="例如：三青專屬價、含稅或未稅" /></label>
               <button class="btn primary" type="submit">儲存客人價格</button>

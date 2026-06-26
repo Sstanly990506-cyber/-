@@ -5,7 +5,7 @@ from api.records import changes_since, clear_records, count_records_by_entity, d
 from api.ai_orders import OrderRecognitionError, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.trip_optimizer import optimize_trip
-from api.pricing import calculate_quote, normalize_coating_type, normalize_pricing_tier
+from api.pricing import calculate_quote, classify_pricing_tier_with_bounds, normalize_coating_type, normalize_pricing_tier
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
 ENTITY_VIEW={'orders':'ordersView','customers':'customersView','inventory':'inventoryView','events':'notificationsView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','aiCorrections':'ordersView'}
 STATE_FIELD_VIEW={'glossOptions':'ordersView','customers':'customersView','orders':'ordersView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','systemEvents':'notificationsView','inventoryItems':'inventoryView'}
@@ -263,15 +263,21 @@ def pricing_quote_payload(token,payload):
     try:
         settings=(read_state().get('settings') or {}).get('moduleInternals',{}).get('orders',{}).get('pricingRules')
         customer=str(payload.get('customer') or '').strip().lower()
+        quote_payload=dict(payload)
         customer_price=None
         if customer:
             width=float(payload.get('width') or 0);height=float(payload.get('height') or 0)
             fallback_customer_price=None
-            for rule in _all_records('priceRules'):
+            price_rules=_all_records('priceRules')
+            bounds_rule=next((rule for rule in price_rules if str(rule.get('customer') or '').strip().lower()==customer and rule.get('priceScope')=='customer-tier-bounds'),None)
+            if bounds_rule and not quote_payload.get('machineType'):
+                quote_payload['machineType']=classify_pricing_tier_with_bounds(width,height,bounds_rule.get('tierBounds'),settings)
+            for rule in price_rules:
+                if rule.get('priceScope')=='customer-tier-bounds':continue
                 if str(rule.get('customer') or '').strip().lower()!=customer or rule.get('pricingMode')!='formula':continue
                 if normalize_coating_type(rule.get('glossType'))!=normalize_coating_type(payload.get('coatingType')):continue
                 rule_tier=rule.get('machineType')
-                if rule_tier not in {None,'','ANY'} and normalize_pricing_tier(rule_tier)!=normalize_pricing_tier(payload.get('machineType')):continue
+                if rule_tier not in {None,'','ANY'} and normalize_pricing_tier(rule_tier)!=normalize_pricing_tier(quote_payload.get('machineType')):continue
                 rule_width=float(rule.get('sizeWidthTai') or rule.get('sizeWidth') or 0)
                 rule_height=float(rule.get('sizeLengthTai') or rule.get('sizeLength') or 0)
                 if not rule_width and not rule_height:
@@ -279,7 +285,7 @@ def pricing_quote_payload(token,payload):
                 if (abs(rule_width-width)<=0.15 and abs(rule_height-height)<=0.15) or (abs(rule_width-height)<=0.15 and abs(rule_height-width)<=0.15):
                     customer_price=rule.get('unitPrice');break
             if customer_price is None:customer_price=fallback_customer_price
-        return {'ok':True,**calculate_quote(payload,settings,customer_price)}
+        return {'ok':True,**calculate_quote(quote_payload,settings,customer_price)}
     except ValueError as err:raise ApiError(str(err),400) from err
 def recognize_order_payload(token,payload):
     account=require_account(token)

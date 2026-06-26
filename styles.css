@@ -126,17 +126,63 @@ input[type="checkbox"] { width: auto; }
   margin: 14px 0;
   padding: 16px;
   border-radius: 16px;
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.28);
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.18), transparent 42%),
+    linear-gradient(135deg, rgba(124, 58, 237, 0.16), rgba(14, 165, 233, 0.08));
+  border: 1px solid rgba(245, 158, 11, 0.32);
+}
+.pricing-bounds {
+  display: grid;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.12), transparent 36%),
+    rgba(15, 23, 42, 0.5);
+}
+.pricing-bounds-title {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.pricing-bounds-title span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.pricing-bounds-grid {
+  display: grid;
+  grid-template-columns: minmax(76px, 0.8fr) repeat(4, minmax(112px, 1fr));
+  gap: 8px;
+  align-items: center;
+  min-width: 610px;
+}
+.pricing-bounds-grid > span {
+  color: #bae6fd;
+  font-size: 12px;
+  font-weight: 700;
+}
+.pricing-bounds-grid > strong {
+  color: #f8fafc;
+  padding: 10px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.24), rgba(34, 197, 94, 0.14));
 }
 .pricing-matrix {
   display: grid;
   gap: 8px;
   overflow-x: auto;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: rgba(15, 23, 42, 0.42);
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(196, 181, 253, 0.26);
+  background:
+    radial-gradient(circle at top right, rgba(236, 72, 153, 0.14), transparent 36%),
+    radial-gradient(circle at bottom left, rgba(245, 158, 11, 0.12), transparent 34%),
+    rgba(15, 23, 42, 0.5);
 }
 .pricing-matrix-head,
 .pricing-matrix-row {
@@ -147,10 +193,17 @@ input[type="checkbox"] { width: auto; }
   min-width: 560px;
 }
 .pricing-matrix-head {
-  color: var(--muted);
+  color: #ddd6fe;
   font-size: 12px;
   font-weight: 700;
 }
+.pricing-matrix-row {
+  padding: 8px;
+  border-radius: 14px;
+}
+.pricing-matrix-row.big { background: linear-gradient(90deg, rgba(245, 158, 11, 0.16), rgba(245, 158, 11, 0.04)); }
+.pricing-matrix-row.regular { background: linear-gradient(90deg, rgba(139, 92, 246, 0.17), rgba(139, 92, 246, 0.04)); }
+.pricing-matrix-row.small { background: linear-gradient(90deg, rgba(34, 197, 94, 0.16), rgba(34, 197, 94, 0.04)); }
 .pricing-matrix-row strong {
   color: #f8fafc;
   font-size: 14px;

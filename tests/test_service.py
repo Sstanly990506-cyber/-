@@ -131,6 +131,18 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result['unitPrice'], 760)
         self.assertEqual(result['pricingTier'], 'REGULAR')
 
+    def test_pricing_quote_uses_customer_tier_bounds(self):
+        payload = {'width': 40, 'height': 20, 'quantity': 1000, 'coatingType': 'PVA', 'customer': '三青'}
+        rules = [
+            {'id': 'b1', 'customer': '三青', 'priceScope': 'customer-tier-bounds', 'tierBounds': {'REGULAR': {'shortMin': 18, 'shortMax': 25, 'longMin': 26, 'longMax': 45}}},
+            {'id': 'p1', 'customer': '三青', 'glossType': 'PVA光', 'machineType': 'REGULAR', 'pricingMode': 'formula', 'priceScope': 'customer-tier', 'unitPrice': 760},
+            {'id': 'p2', 'customer': '三青', 'glossType': 'PVA光', 'machineType': 'BIG', 'pricingMode': 'formula', 'priceScope': 'customer-tier', 'unitPrice': 990},
+        ]
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.read_state', return_value={'settings': None}), patch('api.service._all_records', return_value=rules):
+            result = pricing_quote_payload('token', payload)
+        self.assertEqual(result['pricingTier'], 'REGULAR')
+        self.assertEqual(result['unitPrice'], 760)
+
     def test_deleting_order_also_deletes_linked_auto_receivable(self):
         records = {
             'orders': [{'id': 'o-1', 'orderNumber': 'WO-1'}],
