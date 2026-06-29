@@ -260,6 +260,7 @@ class ServiceTests(unittest.TestCase):
         saved = upsert.call_args.args[2]
         self.assertEqual(saved['name'], '佳德印刷有限公司')
         self.assertEqual(saved['taxId'], '27595356')
+        self.assertEqual(saved['phone'], '2226-9858')
 
     def test_non_admin_cannot_import_customers(self):
         with patch('api.service.authenticate_user', return_value={'role': 'ops'}):

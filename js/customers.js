@@ -29,7 +29,10 @@ function fillCustomerForm(customer) {
 }
 
 function normalizePhone(phone = '') {
-  return phone.replace(/[^\d+]/g, '');
+  const digits = phone.replace(/\D/g, '');
+  const local = digits.startsWith('02') ? digits.slice(2) : digits;
+  if (local.length === 8) return `${local.slice(0, 4)}-${local.slice(4)}`;
+  return phone.trim();
 }
 
 function normalizeTaxId(taxId = '') {

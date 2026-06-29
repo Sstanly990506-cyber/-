@@ -189,6 +189,12 @@ def report_payload(token):
     if not account_can_view(account,'financeView'):raise ApiError('permission denied',403)
     orders=_all_records('orders');receivables=_all_records('receivables');payables=_all_records('payables');inventory=_all_records('inventory')
     return {'ok':True,'summary':{'ordersLoaded':len(orders),'pendingOrders':sum(1 for row in orders if row.get('status')!='已完成'),'receivableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('received'))) for row in receivables),'payableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('paid'))) for row in payables),'lowInventory':sum(1 for row in inventory if _number(row.get('stock'))<=_number(row.get('safetyStock')))}}
+def _format_customer_phone(value):
+    text=str(value or '').strip()
+    digits=''.join(ch for ch in text if ch.isdigit())
+    if digits.startswith('02'):digits=digits[2:]
+    if len(digits)==8:return f'{digits[:4]}-{digits[4:]}'
+    return text
 def import_customers_payload(payload):
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     username=str(payload.get('username') or '').strip();password=str(payload.get('password') or '')
@@ -209,7 +215,7 @@ def import_customers_payload(payload):
         if role=='客人':role='上游'
         if role not in {'上游','下游','兩者'}:role='上游'
         tax_id=''.join(ch for ch in str(row.get('taxId') or '') if ch.isdigit())[:8]
-        phone=str(row.get('phone') or '').strip()
+        phone=_format_customer_phone(row.get('phone'))
         address=str(row.get('address') or '').strip()
         match=(by_tax.get(tax_id) if tax_id else None) or by_name.get(name.lower())
         record_id=str((match or {}).get('id') or row.get('id') or uuid.uuid4())
