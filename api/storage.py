@@ -82,16 +82,14 @@ STORAGE_INITIALIZING = False
 LOCAL_FILE_LOCK = Lock()
 USERS_FILE_LOCK = Lock()
 RUNTIME_BOOTSTRAP_PASSWORDS = {}
+DEFAULT_SESSION_SECRET = 'sanqingco-shared-session-secret-v2'
 
 
 def resolve_session_secret() -> tuple[str, str]:
     configured = os.environ.get('APP_SESSION_SECRET') or os.environ.get('SESSION_SECRET')
     if configured:
         return configured, 'environment'
-    if DATABASE_URL:
-        digest = hashlib.sha256(DATABASE_URL.encode('utf-8')).hexdigest()
-        return digest, 'database-derived'
-    return secrets.token_urlsafe(32), 'runtime-random'
+    return hashlib.sha256(DEFAULT_SESSION_SECRET.encode('utf-8')).hexdigest(), 'app-default'
 
 
 SESSION_SECRET, SESSION_SECRET_SOURCE = resolve_session_secret()
