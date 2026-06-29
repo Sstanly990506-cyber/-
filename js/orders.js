@@ -1,11 +1,11 @@
 import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
+import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
 let lastAutoPrice = 0;
-const COATING_LABELS = { PVA: 'PVA光', PVB: 'PVB光/油', WEAR: '耐磨', PRESS: '壓光' };
 const ORDER_ENTRY_FIELD_IDS = [
   'orderNumber',
   'orderDate',
@@ -185,26 +185,6 @@ function updateOrderSmartHint(state) {
     $('totalPrice').value = String(suggestion.estimated);
     lastAutoPrice = suggestion.estimated;
   }
-}
-
-function formatRuleSize(rule) {
-  if (!Number(rule.sizeLengthTai || rule.sizeLength || 0) && !Number(rule.sizeWidthTai || rule.sizeWidth || 0)) return '全部尺寸';
-  return `天 ${Number(rule.sizeLength || 0).toLocaleString()} x 地 ${Number(rule.sizeWidth || 0).toLocaleString()} ${rule.sizeUnit || 'mm'}`;
-}
-
-function pricingTierLabel(value) {
-  const tier = normalizePricingTier(value);
-  return tier === 'SMALL' ? '小台' : tier === 'REGULAR' ? '常規' : '大台';
-}
-
-function isCustomerTierPriceRule(rule) {
-  if (rule?.priceScope === 'customer-tier-bounds') return false;
-  return rule?.priceScope === 'customer-tier'
-    || (!Number(rule?.sizeLengthTai || rule?.sizeLength || 0) && !Number(rule?.sizeWidthTai || rule?.sizeWidth || 0));
-}
-
-function isCustomerPricingConfigRule(rule) {
-  return rule?.priceScope === 'customer-tier-bounds' || isCustomerTierPriceRule(rule);
 }
 
 function clearPriceMatrix() {

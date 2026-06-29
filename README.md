@@ -33,6 +33,7 @@ python -m unittest discover -s tests -v
 ## 文件
 
 - [部署與區域網路使用](docs/DEPLOYMENT.md)
+- [正式環境變數](docs/ENVIRONMENT.md)
 - [容量與效能](docs/CAPACITY.md)
 - [安全設定](docs/SECURITY.md)
 - [故障排除](docs/TROUBLESHOOTING.md)

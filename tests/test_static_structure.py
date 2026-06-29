@@ -8,20 +8,34 @@ class StaticStructureTests(unittest.TestCase):
     def test_health_uses_shared_service(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
-        vercel_health = (ROOT / 'api' / 'health.py').read_text(encoding='utf-8')
+        routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
         self.assertIn('from api.service import', flask_server)
-        self.assertIn('from api.service import', builtin_server)
-        self.assertIn('from api.service import health_payload', vercel_health)
+        self.assertIn('resolve_get_route', builtin_server)
+        self.assertIn("'/api/health'", routes)
+        self.assertIn('health_payload', routes)
 
-    def test_vercel_users_route_uses_shared_service(self):
-        users = (ROOT / 'api' / 'users.py').read_text(encoding='utf-8')
-        self.assertIn('from api.service import ApiError, user_action_payload', users)
-        self.assertIn('user_action_payload(get_bearer_token(self), read_json_body(self))', users)
-        self.assertNotIn('unsupported action', users)
+    def test_vercel_routes_are_unified_through_index(self):
+        routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
+        vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')
+        self.assertFalse((ROOT / 'api' / 'users.py').exists())
+        self.assertFalse((ROOT / 'api' / 'state.py').exists())
+        self.assertFalse((ROOT / 'api' / 'health.py').exists())
+        self.assertIn('/api/(.*)', vercel)
+        self.assertIn('/api/index.py', vercel)
+        self.assertIn('/api/users', routes)
+        self.assertIn('user_action_payload', routes)
 
     def test_environment_details_are_not_exposed_by_health_route(self):
         service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
         self.assertNotIn('get_environment_status', service)
+
+    def test_session_secret_is_not_hardcoded(self):
+        storage = (ROOT / 'api' / 'storage.py').read_text(encoding='utf-8')
+        environment = (ROOT / 'docs' / 'ENVIRONMENT.md').read_text(encoding='utf-8')
+        self.assertNotIn('DEFAULT_SESSION_SECRET', storage)
+        self.assertNotIn('app-default', storage)
+        self.assertIn('APP_SESSION_SECRET', environment)
+        self.assertIn('OPENAI_API_KEY', environment)
 
     def test_configurable_text_is_sanitized(self):
         shared = (ROOT / 'js' / 'shared.js').read_text(encoding='utf-8')
@@ -41,29 +55,39 @@ class StaticStructureTests(unittest.TestCase):
     def test_scalable_data_routes_exist_in_both_servers(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
         for route in ('/api/bootstrap', '/api/data/', '/api/changes', '/api/reports/summary', '/api/orders/recognize', '/api/orders/recognize/status', '/api/orders/recognize/corrections'):
-            self.assertIn(route, flask_server)
-            self.assertIn(route, builtin_server)
+            if route == '/api/data/':
+                self.assertIn(route, flask_server)
+                self.assertIn(route, builtin_server)
+            else:
+                self.assertIn(route, routes)
+        self.assertIn('GET_ROUTES', routes)
+        self.assertIn('POST_ROUTES', routes)
 
     def test_admin_clear_test_data_route_exists(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
         settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
-        self.assertIn('/api/admin/clear-test-data', flask_server)
-        self.assertIn('/api/admin/clear-test-data', builtin_server)
+        self.assertIn('/api/admin/clear-test-data', routes)
+        self.assertIn('resolve_post_route', flask_server)
+        self.assertIn('resolve_post_route', builtin_server)
         self.assertIn('/api/admin/clear-test-data', settings)
         self.assertIn('clearTestDataBtn', view)
 
     def test_backup_restore_routes_and_controls_exist(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
         settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         for route in ('/api/admin/backup', '/api/admin/restore'):
-            self.assertIn(route, flask_server)
-            self.assertIn(route, builtin_server)
+            self.assertIn(route, routes)
             self.assertIn(route, settings)
+        self.assertIn('resolve_get_route', flask_server)
+        self.assertIn('resolve_post_route', builtin_server)
         self.assertIn('downloadBackupBtn', view)
         self.assertIn('restoreBackupFile', view)
         self.assertIn('restoreBackupBtn', view)
@@ -71,11 +95,13 @@ class StaticStructureTests(unittest.TestCase):
     def test_capacity_monitor_exists(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
+        routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
         settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
-        self.assertIn('/api/admin/capacity', flask_server)
-        self.assertIn('/api/admin/capacity', builtin_server)
+        self.assertIn('/api/admin/capacity', routes)
+        self.assertIn('resolve_get_route', flask_server)
+        self.assertIn('resolve_get_route', builtin_server)
         self.assertIn('capacity_payload', service)
         self.assertIn('refreshCapacityBtn', view)
         self.assertIn('capacityMetrics', view)
@@ -138,6 +164,23 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('summaries = {', main)
         self.assertIn("priority.dataset.dashboardTarget === 'financeView'", main)
         self.assertIn('.dashboard-module-grid { grid-template-columns: repeat(2', styles)
+
+    def test_user_entered_tables_avoid_raw_inner_html(self):
+        main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
+        customers = (ROOT / 'js' / 'customers.js').read_text(encoding='utf-8')
+        self.assertIn('grid.replaceChildren', main)
+        self.assertNotIn('grid.innerHTML', main)
+        self.assertIn('body.replaceChildren()', customers)
+        self.assertIn('td.textContent = value', customers)
+        self.assertNotIn('tr.innerHTML = `', customers)
+
+    def test_order_pricing_helpers_are_split_out(self):
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        pricing_ui = (ROOT / 'js' / 'orders-pricing.js').read_text(encoding='utf-8')
+        self.assertIn("from './orders-pricing.js'", orders)
+        self.assertIn('export function pricingTierLabel', pricing_ui)
+        self.assertIn('export function isCustomerTierPriceRule', pricing_ui)
+        self.assertLess(len(orders.splitlines()), 1095)
 
     def test_admin_security_forms_are_present(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
@@ -307,7 +350,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("'priceRules': 'priceRules'", records)
         self.assertIn("'priceRules':'ordersView'", service)
         self.assertIn('pricing_quote_payload', service)
-        self.assertIn('/api/pricing/quote', (ROOT / 'api_server.py').read_text(encoding='utf-8'))
+        self.assertIn('/api/pricing/quote', (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8'))
 
     def test_ai_correction_center_is_present(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
@@ -373,7 +416,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('syncAddressFromDownstream(state)', orders)
         self.assertIn('送貨地址已使用下游客戶系統地址', orders)
         self.assertIn('送貨地址（下游）', view)
-        self.assertIn("path=='/api/orders/recognize/status'", (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8'))
+        self.assertIn('/api/orders/recognize/status', (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8'))
 
     def test_order_quantity_supports_text_and_calculation_value(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')

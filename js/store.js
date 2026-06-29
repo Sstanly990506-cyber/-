@@ -1,40 +1,534 @@
 import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js';
-const ENTITY_MAP={customers:'customers',orders:'orders',audits:'audits',receivables:'receivables',payables:'payables',priceRules:'priceRules',inventoryItems:'inventory',systemEvents:'events'};
-const REVERSE_ENTITY=Object.fromEntries(Object.entries(ENTITY_MAP).map(([key,value])=>[value,key]));
-const ROLE_KEYS={admin:Object.keys(ENTITY_MAP),ops:['customers','orders','priceRules','inventoryItems','systemEvents'],finance:['receivables','payables','systemEvents'],audit:['audits','systemEvents'],driver:['customers','orders'],viewer:[]};
-const VIEW_KEYS={ordersView:['customers','orders','priceRules'],customersView:['customers'],tripsView:['customers','orders'],opsCenterView:['orders','systemEvents'],inventoryView:['inventoryItems'],notificationsView:['systemEvents'],financeView:['receivables','payables','systemEvents'],auditView:['audits','systemEvents']};
-const PAGER_ANCHORS={customers:'customersTbody',orders:'ordersTbody',audits:'auditTbody',inventoryItems:'inventoryTbody'};
-const SEARCH_INPUTS={customers:'customerSearch',orders:'orderSearch',inventoryItems:'inventorySearch'};
-export const state={user:null,userRole:'viewer',allowedViews:null,glossOptions:[],customers:[],orders:[],audits:[],receivables:[],payables:[],priceRules:[],systemEvents:[],settings:getDefaultSettings(),inventoryItems:[],pagination:{},serverReport:null,reportRange:{start:'',end:''},financeScreen:'main',auditFilter:{start:'',end:'',keyword:'',user:'',field:'',anomalyOnly:false},orderStatusFilter:'全部',orderScreen:'list',authToken:null};
-let onRefresh=()=>{},onSyncUi=()=>{},syncTimer=null,changeCursor=0,initializedRemote=false,searchBound=false;const snapshots={};
-function headers(json=false){return {...(json?{'Content-Type':'application/json'}:{}),...(state.authToken?{Authorization:`Bearer ${state.authToken}`}:{})};}
-async function jsonRequest(url,options={}){const res=await fetch(url,options);let data=null;try{data=await res.json();}catch{}if(!res.ok)throw new Error(data?.error||`HTTP ${res.status}`);return data;}
-function setUi(text,source,ok=true){onSyncUi({badgeText:text,detailText:`${text}：${formatTs(Date.now())}（${source}）`,ok});}
-function cleanRecord(row){const result={...row};delete result._updatedAt;return result;}
-function snapshot(key){snapshots[key]=new Map((state[key]||[]).filter(row=>row?.id).map(row=>[row.id,JSON.stringify(row)]));}
-function normalizeMoney(v){const n=Number(v||0);return Number.isFinite(n)?Math.max(0,n):0;}
-function unique(rows){return [...new Map((rows||[]).filter(row=>row?.id).map(row=>[row.id,row])).values()];}
-function normalizeStateData(){state.customers=unique(state.customers).map(c=>({...c,taxId:String(c.taxId??'')}));state.orders=unique(state.orders).map(o=>({...o,billingCustomer:String(o.billingCustomer??''),upstream:String(o.upstream??''),machineType:['BIG','REGULAR','SMALL'].includes(o.machineType)?o.machineType:'BIG',sortOrder:o.sortOrder===null||o.sortOrder===undefined||o.sortOrder===''?null:(Number.isFinite(Number(o.sortOrder))?Number(o.sortOrder):null),totalPrice:normalizeMoney(o.totalPrice),sheetCount:normalizeMoney(o.sheetCount),sheetCountText:String(o.sheetCountText??o.sheetCount??'')}));state.receivables=unique(state.receivables);state.payables=unique(state.payables);state.priceRules=unique(state.priceRules).map(rule=>({...rule,customer:String(rule.customer??''),glossType:String(rule.glossType??''),machineType:['BIG','REGULAR','SMALL'].includes(rule.machineType)?rule.machineType:'ANY',pricingMode:rule.pricingMode||'legacy-per-sheet',sizeLength:normalizeMoney(rule.sizeLength),sizeWidth:normalizeMoney(rule.sizeWidth),sizeLengthTai:normalizeMoney(rule.sizeLengthTai),sizeWidthTai:normalizeMoney(rule.sizeWidthTai),sizeUnit:rule.sizeUnit||'mm',unitPrice:normalizeMoney(rule.unitPrice)}));state.inventoryItems=unique(state.inventoryItems);state.audits=(state.audits||[]).slice(0,500);state.systemEvents=(state.systemEvents||[]).slice(0,500);state.settings=mergeSettings(state.settings||{});}
-function renderAllPagers(){for(const [key,anchor] of Object.entries(PAGER_ANCHORS))renderPager(key,anchor);}
-function refresh(){onRefresh();queueMicrotask(renderAllPagers);}
-export function setAuthToken(token){state.authToken=token||null;}
-export function configureStore({refreshFn,syncUiFn}){onRefresh=refreshFn;onSyncUi=syncUiFn;}
-export function initializeStore(){state.settings=mergeSettings(JSON.parse(localStorage.getItem('uiSettings')||'null')||{});const now=new Date();state.reportRange.start=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;state.reportRange.end=now.toISOString().slice(0,10);setUi('已儲存','等待登入');}
-export async function loadEntityPage(key,page=1,query='',refreshUi=true){const entity=ENTITY_MAP[key]||key;const data=await jsonRequest(`/api/data/${entity}?page=${page}&pageSize=100&q=${encodeURIComponent(query)}`,{headers:headers()});const stateKey=REVERSE_ENTITY[entity]||key;state[stateKey]=data.items||[];state.pagination[stateKey]={page:data.page,pages:data.pages,total:data.total,query};normalizeStateData();snapshot(stateKey);if(refreshUi)refresh();return data;}
-export function renderPager(key,anchorId){const anchor=document.getElementById(anchorId);if(!anchor)return;let pager=anchor.parentElement?.querySelector(`.data-pager[data-key="${key}"]`);if(!pager){pager=document.createElement('div');pager.className='filter-row data-pager';pager.dataset.key=key;anchor.parentElement?.append(pager);}const meta=state.pagination[key]||{page:1,pages:1,total:(state[key]||[]).length};const localTotal=(state[key]||[]).length;const displayTotal=Number(meta.pages||1)<=1?localTotal:Math.max(Number(meta.total||0),localTotal);pager.replaceChildren();const prev=document.createElement('button');prev.className='btn';prev.textContent='上一頁';prev.disabled=meta.page<=1;const text=document.createElement('span');text.className='sync-detail';text.textContent=`第 ${meta.page} / ${Math.max(meta.pages,1)} 頁，共 ${displayTotal} 筆`;const next=document.createElement('button');next.className='btn';next.textContent='下一頁';next.disabled=meta.page>=meta.pages;prev.onclick=()=>loadEntityPage(key,meta.page-1,meta.query||'');next.onclick=()=>loadEntityPage(key,meta.page+1,meta.query||'');pager.append(prev,text,next);}
-function bindServerSearch(){if(searchBound)return;searchBound=true;for(const [key,inputId] of Object.entries(SEARCH_INPUTS)){const input=document.getElementById(inputId);if(!input)continue;let timer;input.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(()=>loadEntityPage(key,1,input.value).catch(err=>setUi('搜尋失敗',err.message,false)),300);});}}
-async function loadEntityPagesInBackground(keys,concurrency=2){let cursor=0;async function worker(){while(cursor<keys.length){const key=keys[cursor++];try{await loadEntityPage(key,1,'',false);}catch(err){console.warn(`背景載入 ${key} 失敗`,err);}}}await Promise.all(Array.from({length:Math.min(concurrency,keys.length)},worker));}
-function applyInitialPages(initialPages={}){for(const [entity,data] of Object.entries(initialPages||{})){const stateKey=REVERSE_ENTITY[entity]||entity;if(!stateKey||!(stateKey in state))continue;state[stateKey]=data.items||[];state.pagination[stateKey]={page:data.page||1,pages:data.pages||1,total:data.total||0,query:''};snapshot(stateKey);}}
-function dataKeysForAccount(){if(Array.isArray(state.allowedViews)){return [...new Set(state.allowedViews.flatMap(viewId=>VIEW_KEYS[viewId]||[]))];}return ROLE_KEYS[state.userRole]||[];}
-export function hydrateBootstrap(base={},source='登入預載'){state.glossOptions=base.glossOptions||['PVA光','PVB光/油','耐磨','壓光','其他'];state.settings=mergeSettings(base.settings||state.settings);changeCursor=Number(base.syncTick||0);const keys=dataKeysForAccount();initializedRemote=true;applyInitialPages(base.initialPages||{});normalizeStateData();refresh();bindServerSearch();const loadedKeys=new Set(Object.keys(base.initialPages||{}).map(entity=>REVERSE_ENTITY[entity]||entity));const missingKeys=keys.filter(key=>!loadedKeys.has(key));if(missingKeys.length){setUi('載入中','背景資料',false);loadEntityPagesInBackground(missingKeys).then(()=>{normalizeStateData();refresh();setUi('已儲存','分頁資料庫');});}else{setUi('已儲存',source);}}
-async function loadBootstrap(){setUi('載入中','基本資料',false);const base=await jsonRequest('/api/bootstrap',{headers:headers()});hydrateBootstrap(base,'基本資料');}
-export async function loadServerReport(){try{const data=await jsonRequest('/api/reports/summary',{headers:headers()});state.serverReport=data.summary||null;return state.serverReport;}catch{return null;}}
-async function pushChanges(){if(!state.authToken)return;const jobs=[];for(const [key,entity] of Object.entries(ENTITY_MAP)){const before=snapshots[key]||new Map(),current=new Set();for(const row of state[key]||[]){if(!row?.id)continue;current.add(row.id);const encoded=JSON.stringify(row);if(before.get(row.id)!==encoded)jobs.push(jsonRequest(`/api/data/${entity}/${encodeURIComponent(row.id)}`,{method:'PUT',headers:headers(true),body:JSON.stringify(cleanRecord(row))}));}for(const id of before.keys())if(!current.has(id))jobs.push(jsonRequest(`/api/data/${entity}/${encodeURIComponent(id)}`,{method:'DELETE',headers:headers()}));}if(jobs.length){setUi('儲存中','送出變更',false);await Promise.all(jobs);for(const key of Object.keys(ENTITY_MAP))snapshot(key);setUi('已儲存','單筆同步');}}
-function applyChange(change){const key=REVERSE_ENTITY[change.entity];if(!key)return;const rows=state[key]||[];const index=rows.findIndex(row=>row.id===change.id);if(change.deleted){if(index>=0)rows.splice(index,1);return;}const next={...(change.data||{}),id:change.id,_updatedAt:change.updatedAt};if(index>=0)rows[index]=next;else if(rows.length<100)rows.unshift(next);}
-export async function pullServerState(){if(!state.authToken)return;if(!initializedRemote){await loadBootstrap();return;}try{const data=await jsonRequest(`/api/changes?since=${changeCursor}&limit=5000`,{headers:headers()});(data.changes||[]).forEach(applyChange);changeCursor=Number(data.cursor||changeCursor);normalizeStateData();for(const key of Object.keys(ENTITY_MAP))snapshot(key);if(data.changes?.length)refresh();setUi('已儲存','增量同步');}catch(err){setUi('同步失敗',err.message,false);}}
-export function startStoreSync(){bindServerSearch();if(syncTimer)return;syncTimer=setInterval(pullServerState,10000);}
-export function saveState(){normalizeStateData();localStorage.setItem('uiSettings',JSON.stringify(state.settings));pushChanges().catch(err=>setUi('儲存失敗',err.message,false));}
-export function appendSystemEvent(message,level='info',meta={}){if(state.userRole!=='admin'&&Array.isArray(state.allowedViews)&&!state.allowedViews.includes('notificationsView'))return;state.systemEvents.unshift({id:crypto.randomUUID(),at:new Date().toISOString(),user:state.user||'system',level,message,meta});if(state.systemEvents.length>500)state.systemEvents.length=500;}
-export function getIntegrityReport(){const issues=[],seen=new Set();state.orders.forEach(o=>{const no=(o.orderNumber||'').trim();if(!no)issues.push({level:'warning',text:'有工單缺少編號'});if(no&&seen.has(no))issues.push({level:'critical',text:`工單編號重複：${no}`});seen.add(no);});return{total:issues.length,critical:issues.filter(i=>i.level==='critical').length,warning:issues.filter(i=>i.level==='warning').length,info:0,issues:issues.slice(0,10)};}
-export function getOrderReceivableKey(order){return(order.orderNumber||'').trim()||`ORDER-${order.id}`;}
-export function syncOrderToReceivables(order){const key=getOrderReceivableKey(order),idx=state.receivables.findIndex(r=>(r.orderNumber||'').trim()===key),link=['已完成','已送出'].includes(order.status)&&Number(order.totalPrice||0)>0;if(!link){if(idx>=0&&state.receivables[idx].source==='auto-order')state.receivables.splice(idx,1);return;}const row={id:idx>=0?state.receivables[idx].id:crypto.randomUUID(),source:'auto-order',date:order.orderDate||getTodayText(),customer:order.billingCustomer||order.downstream||order.upstream||'-',orderNumber:key,amount:Number(order.totalPrice||0),received:idx>=0?Number(state.receivables[idx].received||0):0};if(idx>=0)state.receivables[idx]=row;else state.receivables.unshift(row);}
+
+const ENTITY_MAP = {
+  customers:'customers',
+  orders:'orders',
+  audits:'audits',
+  receivables:'receivables',
+  payables:'payables',
+  priceRules:'priceRules',
+  inventoryItems:'inventory',
+  systemEvents:'events',
+};
+
+const REVERSE_ENTITY = Object.fromEntries(
+  Object.entries(ENTITY_MAP).map(([key, value]) => [value, key]),
+);
+
+const ROLE_KEYS = {
+  admin: Object.keys(ENTITY_MAP),
+  ops: ['customers', 'orders', 'priceRules', 'inventoryItems', 'systemEvents'],
+  finance: ['receivables', 'payables', 'systemEvents'],
+  audit: ['audits', 'systemEvents'],
+  driver:['customers','orders'],
+  viewer: [],
+};
+
+const VIEW_KEYS = {
+  ordersView: ['customers', 'orders', 'priceRules'],
+  customersView: ['customers'],
+  tripsView:['customers','orders'],
+  opsCenterView: ['orders', 'systemEvents'],
+  inventoryView: ['inventoryItems'],
+  notificationsView: ['systemEvents'],
+  financeView: ['receivables', 'payables', 'systemEvents'],
+  auditView: ['audits', 'systemEvents'],
+};
+
+const PAGER_ANCHORS = {
+  customers: 'customersTbody',
+  orders: 'ordersTbody',
+  audits: 'auditTbody',
+  inventoryItems: 'inventoryTbody',
+};
+
+const SEARCH_INPUTS = {
+  customers: 'customerSearch',
+  orders: 'orderSearch',
+  inventoryItems: 'inventorySearch',
+};
+
+export const state = {
+  user: null,
+  userRole: 'viewer',
+  allowedViews: null,
+  glossOptions: [],
+  customers: [],
+  orders: [],
+  audits: [],
+  receivables: [],
+  payables: [],
+  priceRules: [],
+  systemEvents: [],
+  settings: getDefaultSettings(),
+  inventoryItems: [],
+  pagination: {},
+  serverReport: null,
+  reportRange: { start: '', end: '' },
+  financeScreen: 'main',
+  auditFilter: { start: '', end: '', keyword: '', user: '', field: '', anomalyOnly: false },
+  orderStatusFilter: '全部',
+  orderScreen: 'list',
+  authToken: null,
+};
+
+let onRefresh = () => {};
+let onSyncUi = () => {};
+let syncTimer = null;
+let changeCursor = 0;
+let initializedRemote = false;
+let searchBound = false;
+
+const snapshots = {};
+
+function headers(json = false) {
+  return {
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+    ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}),
+  };
+}
+
+async function jsonRequest(url, options = {}) {
+  const res = await fetch(url, options);
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function setUi(text, source, ok = true) {
+  onSyncUi({
+    badgeText: text,
+    detailText: `${text}：${formatTs(Date.now())}（${source}）`,
+    ok,
+  });
+}
+
+function cleanRecord(row) {
+  const result = { ...row };
+  delete result._updatedAt;
+  return result;
+}
+
+function snapshot(key) {
+  snapshots[key] = new Map(
+    (state[key] || [])
+      .filter((row) => row?.id)
+      .map((row) => [row.id, JSON.stringify(row)]),
+  );
+}
+
+function normalizeMoney(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? Math.max(0, number) : 0;
+}
+
+function normalizeSortOrder(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function unique(rows) {
+  return [
+    ...new Map((rows || []).filter((row) => row?.id).map((row) => [row.id, row])).values(),
+  ];
+}
+
+function normalizeStateData() {
+  state.customers = unique(state.customers).map((c) => ({
+    ...c,
+    taxId:String(c.taxId??''),
+  }));
+
+  state.orders = unique(state.orders).map((o) => ({
+    ...o,
+    billingCustomer:String(o.billingCustomer??''),
+    upstream: String(o.upstream ?? ''),
+    machineType: ['BIG', 'REGULAR', 'SMALL'].includes(o.machineType) ? o.machineType : 'BIG',
+    sortOrder:o.sortOrder===null || o.sortOrder === undefined || o.sortOrder === ''
+      ? null
+      : normalizeSortOrder(o.sortOrder),
+    totalPrice: normalizeMoney(o.totalPrice),
+    sheetCount: normalizeMoney(o.sheetCount),
+    sheetCountText:String(o.sheetCountText??o.sheetCount??''),
+  }));
+
+  state.receivables = unique(state.receivables);
+  state.payables = unique(state.payables);
+
+  state.priceRules = unique(state.priceRules).map((rule) => ({
+    ...rule,
+    customer: String(rule.customer ?? ''),
+    glossType: String(rule.glossType ?? ''),
+    machineType: ['BIG', 'REGULAR', 'SMALL'].includes(rule.machineType) ? rule.machineType : 'ANY',
+    pricingMode: rule.pricingMode || 'legacy-per-sheet',
+    sizeLength: normalizeMoney(rule.sizeLength),
+    sizeWidth: normalizeMoney(rule.sizeWidth),
+    sizeLengthTai: normalizeMoney(rule.sizeLengthTai),
+    sizeWidthTai: normalizeMoney(rule.sizeWidthTai),
+    sizeUnit: rule.sizeUnit || 'mm',
+    unitPrice: normalizeMoney(rule.unitPrice),
+  }));
+
+  state.inventoryItems = unique(state.inventoryItems);
+  state.audits = (state.audits || []).slice(0, 500);
+  state.systemEvents = (state.systemEvents || []).slice(0, 500);
+  state.settings = mergeSettings(state.settings || {});
+}
+
+function renderAllPagers() {
+  for (const [key, anchor] of Object.entries(PAGER_ANCHORS)) {
+    renderPager(key, anchor);
+  }
+}
+
+function refresh() {
+  onRefresh();
+  queueMicrotask(renderAllPagers);
+}
+
+export function setAuthToken(token) {
+  state.authToken = token || null;
+}
+
+export function configureStore({ refreshFn, syncUiFn }) {
+  onRefresh = refreshFn;
+  onSyncUi = syncUiFn;
+}
+
+export function initializeStore() {
+  state.settings = mergeSettings(JSON.parse(localStorage.getItem('uiSettings') || 'null') || {});
+
+  const now = new Date();
+  state.reportRange.start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  state.reportRange.end = now.toISOString().slice(0, 10);
+  setUi('已儲存', '等待登入');
+}
+
+export async function loadEntityPage(key, page = 1, query = '', refreshUi = true) {
+  const entity = ENTITY_MAP[key] || key;
+  const data = await jsonRequest(
+    `/api/data/${entity}?page=${page}&pageSize=100&q=${encodeURIComponent(query)}`,
+    { headers: headers() },
+  );
+  const stateKey = REVERSE_ENTITY[entity] || key;
+
+  state[stateKey] = data.items || [];
+  state.pagination[stateKey] = {
+    page: data.page,
+    pages: data.pages,
+    total: data.total,
+    query,
+  };
+
+  normalizeStateData();
+  snapshot(stateKey);
+  if (refreshUi) refresh();
+  return data;
+}
+
+export function renderPager(key, anchorId) {
+  const anchor = document.getElementById(anchorId);
+  if (!anchor) return;
+
+  let pager = anchor.parentElement?.querySelector(`.data-pager[data-key="${key}"]`);
+  if (!pager) {
+    pager = document.createElement('div');
+    pager.className = 'filter-row data-pager';
+    pager.dataset.key = key;
+    anchor.parentElement?.append(pager);
+  }
+
+  const meta = state.pagination[key] || { page: 1, pages: 1, total: (state[key] || []).length };
+  const localTotal = (state[key] || []).length;
+  const displayTotal=Number(meta.pages || 1) <= 1
+    ? localTotal
+    : Math.max(Number(meta.total || 0), localTotal);
+
+  const prev = document.createElement('button');
+  prev.className = 'btn';
+  prev.textContent = '上一頁';
+  prev.disabled = meta.page <= 1;
+  prev.onclick = () => loadEntityPage(key, meta.page - 1, meta.query || '');
+
+  const text = document.createElement('span');
+  text.className = 'sync-detail';
+  text.textContent = `第 ${meta.page} / ${Math.max(meta.pages, 1)} 頁，共 ${displayTotal} 筆`;
+
+  const next = document.createElement('button');
+  next.className = 'btn';
+  next.textContent = '下一頁';
+  next.disabled = meta.page >= meta.pages;
+  next.onclick = () => loadEntityPage(key, meta.page + 1, meta.query || '');
+
+  pager.replaceChildren(prev, text, next);
+}
+
+function bindServerSearch() {
+  if (searchBound) return;
+  searchBound = true;
+
+  for (const [key, inputId] of Object.entries(SEARCH_INPUTS)) {
+    const input = document.getElementById(inputId);
+    if (!input) continue;
+
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        loadEntityPage(key, 1, input.value).catch((err) => setUi('搜尋失敗', err.message, false));
+      }, 300);
+    });
+  }
+}
+
+async function loadEntityPagesInBackground(keys,concurrency=2) {
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < keys.length) {
+      const key = keys[cursor];
+      cursor += 1;
+      try {
+        await loadEntityPage(key, 1, '', false);
+      } catch (err) {
+        console.warn(`背景載入 ${key} 失敗`, err);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, keys.length) }, worker));
+}
+
+function applyInitialPages(initialPages = {}) {
+  for (const [entity, data] of Object.entries(initialPages || {})) {
+    const stateKey = REVERSE_ENTITY[entity] || entity;
+    if (!stateKey || !(stateKey in state)) continue;
+
+    state[stateKey] = data.items || [];
+    state.pagination[stateKey] = {
+      page: data.page || 1,
+      pages: data.pages || 1,
+      total: data.total || 0,
+      query: '',
+    };
+    snapshot(stateKey);
+  }
+}
+
+function dataKeysForAccount() {
+  if (Array.isArray(state.allowedViews)) {
+    return [...new Set(state.allowedViews.flatMap((viewId) => VIEW_KEYS[viewId] || []))];
+  }
+  return ROLE_KEYS[state.userRole] || [];
+}
+
+export function hydrateBootstrap(base = {}, source = '登入預載') {
+  state.glossOptions = base.glossOptions || ['PVA光', 'PVB光/油', '耐磨', '壓光', '其他'];
+  state.settings = mergeSettings(base.settings || state.settings);
+  changeCursor = Number(base.syncTick || 0);
+  initializedRemote = true;
+
+  const keys = dataKeysForAccount();
+  applyInitialPages(base.initialPages || {});
+  normalizeStateData();
+  refresh();
+  bindServerSearch();
+
+  const loadedKeys = new Set(
+    Object.keys(base.initialPages || {}).map((entity) => REVERSE_ENTITY[entity] || entity),
+  );
+  const missingKeys = keys.filter((key) => !loadedKeys.has(key));
+  if (missingKeys.length) {
+    setUi('載入中', '背景資料', false);
+    loadEntityPagesInBackground(missingKeys).then(() => {
+      normalizeStateData();
+      refresh();
+      setUi('已儲存', '分頁資料庫');
+    });
+  } else {
+    setUi('已儲存', source);
+  }
+}
+
+async function loadBootstrap() {
+  setUi('載入中', '伺服器資料', false);
+  const base = await jsonRequest('/api/bootstrap', { headers: headers() });
+  hydrateBootstrap(base, '伺服器資料');
+}
+
+export async function loadServerReport() {
+  try {
+    const data = await jsonRequest('/api/reports/summary', { headers: headers() });
+    state.serverReport = data.summary || null;
+    return state.serverReport;
+  } catch {
+    return null;
+  }
+}
+
+async function pushChanges() {
+  if (!state.authToken) return;
+
+  const jobs = [];
+  for (const [key, entity] of Object.entries(ENTITY_MAP)) {
+    const before = snapshots[key] || new Map();
+    const current = new Set();
+
+    for (const row of state[key] || []) {
+      if (!row?.id) continue;
+
+      current.add(row.id);
+      const encoded = JSON.stringify(row);
+      if (before.get(row.id) !== encoded) {
+        jobs.push(jsonRequest(
+          `/api/data/${entity}/${encodeURIComponent(row.id)}`,
+          {
+            method: 'PUT',
+            headers: headers(true),
+            body: JSON.stringify(cleanRecord(row)),
+          },
+        ));
+      }
+    }
+
+    for (const id of before.keys()) {
+      if (!current.has(id)) {
+        jobs.push(jsonRequest(
+          `/api/data/${entity}/${encodeURIComponent(id)}`,
+          { method: 'DELETE', headers: headers() },
+        ));
+      }
+    }
+  }
+
+  if (!jobs.length) return;
+
+  setUi('儲存中', '送出變更', false);
+  await Promise.all(jobs);
+  for (const key of Object.keys(ENTITY_MAP)) snapshot(key);
+  setUi('已儲存', '單筆同步');
+}
+
+function applyChange(change) {
+  const key = REVERSE_ENTITY[change.entity];
+  if (!key) return;
+
+  const rows = state[key] || [];
+  const index = rows.findIndex((row) => row.id === change.id);
+  if (change.deleted) {
+    if (index >= 0) rows.splice(index, 1);
+    return;
+  }
+
+  const next = { ...(change.data || {}), id: change.id, _updatedAt: change.updatedAt };
+  if (index >= 0) rows[index] = next;
+  else if (rows.length < 100) rows.unshift(next);
+}
+
+export async function pullServerState() {
+  if (!state.authToken) return;
+  if (!initializedRemote) {
+    await loadBootstrap();
+    return;
+  }
+
+  try {
+    const data = await jsonRequest(`/api/changes?since=${changeCursor}&limit=5000`, { headers: headers() });
+    (data.changes || []).forEach(applyChange);
+    changeCursor = Number(data.cursor || changeCursor);
+    normalizeStateData();
+    for (const key of Object.keys(ENTITY_MAP)) snapshot(key);
+    if (data.changes?.length) refresh();
+    setUi('已儲存', '增量同步');
+  } catch (err) {
+    setUi('同步失敗', err.message, false);
+  }
+}
+
+export function startStoreSync() {
+  bindServerSearch();
+  if (syncTimer) return;
+  syncTimer = setInterval(pullServerState, 10000);
+}
+
+export function saveState() {
+  normalizeStateData();
+  localStorage.setItem('uiSettings', JSON.stringify(state.settings));
+  pushChanges().catch((err) => setUi('儲存失敗', err.message, false));
+}
+
+export function appendSystemEvent(message, level = 'info', meta = {}) {
+  if (
+    state.userRole !== 'admin'
+    && Array.isArray(state.allowedViews)
+    && !state.allowedViews.includes('notificationsView')
+  ) {
+    return;
+  }
+
+  state.systemEvents.unshift({
+    id: crypto.randomUUID(),
+    at: new Date().toISOString(),
+    user: state.user || 'system',
+    level,
+    message,
+    meta,
+  });
+  if (state.systemEvents.length > 500) state.systemEvents.length = 500;
+}
+
+export function getIntegrityReport() {
+  const issues = [];
+  const seen = new Set();
+
+  state.orders.forEach((order) => {
+    const no = (order.orderNumber || '').trim();
+    if (!no) issues.push({ level: 'warning', text: '有工單缺少編號' });
+    if (no && seen.has(no)) issues.push({ level: 'critical', text: `工單編號重複：${no}` });
+    seen.add(no);
+  });
+
+  return {
+    total: issues.length,
+    critical: issues.filter((item) => item.level === 'critical').length,
+    warning: issues.filter((item) => item.level === 'warning').length,
+    info: 0,
+    issues: issues.slice(0, 10),
+  };
+}
+
+export function getOrderReceivableKey(order) {
+  return (order.orderNumber || '').trim() || `ORDER-${order.id}`;
+}
+
+export function syncOrderToReceivables(order) {
+  const key = getOrderReceivableKey(order);
+  const index = state.receivables.findIndex((row) => (row.orderNumber || '').trim() === key);
+  const shouldLink = ['已完成', '已送出'].includes(order.status) && Number(order.totalPrice || 0) > 0;
+
+  if (!shouldLink) {
+    if (index >= 0 && state.receivables[index].source === 'auto-order') {
+      state.receivables.splice(index, 1);
+    }
+    return;
+  }
+
+  const row = {
+    id: index >= 0 ? state.receivables[index].id : crypto.randomUUID(),
+    source: 'auto-order',
+    date: order.orderDate || getTodayText(),
+    customer: order.billingCustomer || order.downstream || order.upstream || '-',
+    orderNumber: key,
+    amount: Number(order.totalPrice || 0),
+    received: index >= 0 ? Number(state.receivables[index].received || 0) : 0,
+  };
+
+  if (index >= 0) state.receivables[index] = row;
+  else state.receivables.unshift(row);
+}

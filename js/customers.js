@@ -15,7 +15,7 @@ function renderCustomerRoleOptions(state) {
   if (!select) return;
   const roles = getCustomerRoles(state);
   const current = select.value;
-  select.innerHTML = roles.map((role) => `<option value="${role}">${role}</option>`).join('');
+  select.replaceChildren(...roles.map((role) => new Option(role, role)));
   select.value = roles.includes(current) ? current : roles[0];
 }
 
@@ -99,7 +99,7 @@ export function renderCustomers(state) {
   renderCustomerRoleOptions(state);
   const body = $('customersTbody');
   if (!body) return;
-  body.innerHTML = '';
+  body.replaceChildren();
   const keyword = ($('customerSearch')?.value || '').trim().toLowerCase();
 
   state.customers
@@ -109,17 +109,33 @@ export function renderCustomers(state) {
     })
     .forEach((c) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `
-      <td>${c.name}</td>
-      <td>${c.taxId || '-'}</td>
-      <td>${c.phone || '-'}</td>
-      <td>${c.address || '-'}</td>
-      <td>${normalizeCustomerRole(c.role)}</td>
-      <td><span class="tag ${c.active === false ? 'off' : ''}">${c.active === false ? '停用' : '啟用'}</span></td>
-      <td class="actions">
-        <button class="btn" data-edit-customer="${c.id}">編輯</button>
-        <button class="btn" data-toggle-customer="${c.id}">${c.active === false ? '啟用' : '停用'}</button>
-      </td>`;
+      [c.name || '-', c.taxId || '-', c.phone || '-', c.address || '-', normalizeCustomerRole(c.role) || '-'].forEach((value) => {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.append(td);
+      });
+
+      const statusTd = document.createElement('td');
+      const tag = document.createElement('span');
+      tag.className = `tag ${c.active === false ? 'off' : ''}`.trim();
+      tag.textContent = c.active === false ? '停用' : '啟用';
+      statusTd.append(tag);
+      tr.append(statusTd);
+
+      const actions = document.createElement('td');
+      actions.className = 'actions';
+      const edit = document.createElement('button');
+      edit.className = 'btn';
+      edit.type = 'button';
+      edit.dataset.editCustomer = c.id;
+      edit.textContent = '編輯';
+      const toggle = document.createElement('button');
+      toggle.className = 'btn';
+      toggle.type = 'button';
+      toggle.dataset.toggleCustomer = c.id;
+      toggle.textContent = c.active === false ? '啟用' : '停用';
+      actions.append(edit, toggle);
+      tr.append(actions);
       body.append(tr);
     });
 

@@ -106,11 +106,21 @@ function renderDashboardNavCards() {
     .filter((module) => module.id !== 'settingsView' && module.id !== 'dashboardView' && module.id !== 'loginView')
     .filter((module) => isModuleEnabled(module.id) && hasViewPermission(module.id));
 
-  grid.innerHTML = visibleModules.map((module) => {
+  grid.replaceChildren(...visibleModules.map((module) => {
     const label = state.settings?.moduleLabels?.[module.id] || module.label;
     const icon = state.settings?.moduleIcons?.[module.id] || module.icon || '⚙️';
-    return `<button class="nav-card" type="button" data-target="${module.id}"><span class="nav-card-icon">${icon}</span><strong>${label}</strong></button>`;
-  }).join('');
+    const button = document.createElement('button');
+    button.className = 'nav-card';
+    button.type = 'button';
+    button.dataset.target = module.id;
+    const iconNode = document.createElement('span');
+    iconNode.className = 'nav-card-icon';
+    iconNode.textContent = icon;
+    const labelNode = document.createElement('strong');
+    labelNode.textContent = label;
+    button.append(iconNode, labelNode);
+    return button;
+  }));
 }
 
 function applyRoleUi() {

@@ -244,18 +244,18 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result, {'ok': True})
         change_password.assert_called_once_with('password123')
 
-    def test_vercel_users_handler_uses_shared_user_service(self):
-        from api.users import handler
+    def test_route_table_maps_user_actions_to_shared_service(self):
+        from api.routes import resolve_post_route
 
-        with patch('api.users.get_bearer_token', return_value='token'), patch('api.users.read_json_body', return_value={'action': 'change_finance_password', 'password': 'password123'}), patch('api.users.user_action_payload', return_value={'ok': True}) as operation, patch('api.users.json_response') as response:
-            handler.do_POST(object())
-        operation.assert_called_once_with('token', {'action': 'change_finance_password', 'password': 'password123'})
-        response.assert_called_once_with(unittest.mock.ANY, 200, {'ok': True})
+        payload = {'action': 'change_finance_password', 'password': 'password123'}
+        operation, args = resolve_post_route('/api/users', 'token', payload)
+        self.assertIs(operation, user_action_payload)
+        self.assertEqual(args, ('token', payload))
 
-    def test_admin_can_import_customers_with_password(self):
+    def test_admin_can_import_customers_with_token(self):
         payload = {'username': 'admin', 'password': 'secret', 'customers': [{'name': '佳德印刷有限公司', 'role': '上游', 'taxId': '27595356', 'phone': '02-22269858', 'address': '新北市中和區'}]}
-        with patch('api.service.authenticate_user', return_value={'role': 'admin'}), patch('api.service.list_records', return_value={'items': []}), patch('api.service.upsert_record', return_value={'ok': True}) as upsert:
-            result = import_customers_payload(payload)
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.list_records', return_value={'items': []}), patch('api.service.upsert_record', return_value={'ok': True}) as upsert:
+            result = import_customers_payload('token', payload)
         self.assertEqual(result['count'], 1)
         saved = upsert.call_args.args[2]
         self.assertEqual(saved['name'], '佳德印刷有限公司')
@@ -263,9 +263,9 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(saved['phone'], '2226-9858')
 
     def test_non_admin_cannot_import_customers(self):
-        with patch('api.service.authenticate_user', return_value={'role': 'ops'}):
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}):
             with self.assertRaises(ApiError) as caught:
-                import_customers_payload({'username': 'ops', 'password': 'secret', 'customers': [{'name': 'A'}]})
+                import_customers_payload('token', {'username': 'ops', 'password': 'secret', 'customers': [{'name': 'A'}]})
         self.assertEqual(caught.exception.status, 403)
 
     def test_ops_can_recognize_order_without_saving_it(self):

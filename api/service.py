@@ -195,12 +195,10 @@ def _format_customer_phone(value):
     if digits.startswith('02'):digits=digits[2:]
     if len(digits)==8:return f'{digits[:4]}-{digits[4:]}'
     return text
-def import_customers_payload(payload):
-    if not isinstance(payload,dict):raise ApiError('invalid json',400)
-    username=str(payload.get('username') or '').strip();password=str(payload.get('password') or '')
-    account=authenticate_user(username,password)
-    if not account:raise ApiError('invalid credentials',401)
+def import_customers_payload(token,payload):
+    account=require_account(token)
     if account.get('role')!='admin':raise ApiError('admin role required',403)
+    if not isinstance(payload,dict):raise ApiError('invalid json',400)
     rows=payload.get('customers')
     if not isinstance(rows,list) or not rows:raise ApiError('missing customers',400)
     existing=list_records('customers',1,5000).get('items') or []

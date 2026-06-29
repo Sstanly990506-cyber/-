@@ -4,7 +4,8 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs,unquote,urlparse
 from api._common import get_bearer_token,json_response,read_json_body
-from api.service import ApiError,backup_payload,bootstrap_payload,capacity_payload,changes_payload,clear_test_data_payload,delete_entity_payload,get_state_payload,health_payload,import_customers_payload,list_entity_payload,optimize_trip_payload,pricing_quote_payload,recognize_order_payload,recognize_order_status_payload,report_order_correction_payload,report_payload,restore_backup_payload,update_state_payload,upsert_entity_payload,user_action_payload
+from api.routes import resolve_get_route,resolve_post_route
+from api.service import ApiError,delete_entity_payload,list_entity_payload,upsert_entity_payload
 from api.storage import BASE_DIR
 SENSITIVE_SUFFIXES={'.db','.sqlite','.sqlite3','.py','.bat','.ps1','.sh'};BLOCKED_PATH_PARTS={'data'};PUBLIC_ROOT=Path(BASE_DIR).resolve()
 def is_sensitive_path(path):return any(path.split('?',1)[0].lower().endswith(s) for s in SENSITIVE_SUFFIXES)
@@ -25,14 +26,9 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         except Exception as err:json_response(self,500,{'ok':False,'error':str(err)})
     def do_GET(self):
         p=urlparse(self.path);path=p.path or '/';q=parse_qs(p.query);token=get_bearer_token(self)
-        if path in {'/api/health','/health'}:self.send_service_response(health_payload)
-        elif path=='/api/bootstrap':self.send_service_response(bootstrap_payload,token)
-        elif path in {'/api/state','/state'}:self.send_service_response(get_state_payload,token)
-        elif path=='/api/admin/backup':self.send_service_response(backup_payload,token)
-        elif path=='/api/admin/capacity':self.send_service_response(capacity_payload,token)
-        elif path=='/api/changes':self.send_service_response(changes_payload,token,q.get('since',['0'])[0],q.get('limit',['1000'])[0])
-        elif path=='/api/reports/summary':self.send_service_response(report_payload,token)
-        elif path=='/api/orders/recognize/status':self.send_service_response(recognize_order_status_payload,token)
+        route=resolve_get_route(path,token,q)
+        if route:
+            op,args=route;self.send_service_response(op,*args)
         elif path.startswith('/api/data/'):
             entity=path.split('/')[3];self.send_service_response(list_entity_payload,token,entity,q.get('page',['1'])[0],q.get('pageSize',['100'])[0],q.get('q',[''])[0])
         elif path=='/':self.serve_file('index.html')
@@ -43,15 +39,9 @@ class AppRequestHandler(BaseHTTPRequestHandler):
             else:self.serve_file(rel)
     def do_POST(self):
         path=urlparse(self.path).path or '/';token=get_bearer_token(self)
-        if path in {'/api/state','/state'}:self.send_service_response(update_state_payload,token,read_json_body(self))
-        elif path in {'/api/users','/users'}:self.send_service_response(user_action_payload,token,read_json_body(self))
-        elif path=='/api/admin/clear-test-data':self.send_service_response(clear_test_data_payload,token,read_json_body(self))
-        elif path=='/api/admin/restore':self.send_service_response(restore_backup_payload,token,read_json_body(self))
-        elif path=='/api/admin/import-customers':self.send_service_response(import_customers_payload,read_json_body(self))
-        elif path in {'/api/trips/optimize','/trips/optimize'}:self.send_service_response(optimize_trip_payload,token,read_json_body(self))
-        elif path=='/api/pricing/quote':self.send_service_response(pricing_quote_payload,token,read_json_body(self))
-        elif path=='/api/orders/recognize':self.send_service_response(recognize_order_payload,token,read_json_body(self))
-        elif path=='/api/orders/recognize/corrections':self.send_service_response(report_order_correction_payload,token,read_json_body(self))
+        route=resolve_post_route(path,token,read_json_body(self))
+        if route:
+            op,args=route;self.send_service_response(op,*args)
         else:self.send_error(404)
     def do_PUT(self):
         parts=urlparse(self.path).path.split('/');token=get_bearer_token(self)
