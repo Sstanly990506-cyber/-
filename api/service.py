@@ -189,6 +189,37 @@ def report_payload(token):
     if not account_can_view(account,'financeView'):raise ApiError('permission denied',403)
     orders=_all_records('orders');receivables=_all_records('receivables');payables=_all_records('payables');inventory=_all_records('inventory')
     return {'ok':True,'summary':{'ordersLoaded':len(orders),'pendingOrders':sum(1 for row in orders if row.get('status')!='已完成'),'receivableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('received'))) for row in receivables),'payableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('paid'))) for row in payables),'lowInventory':sum(1 for row in inventory if _number(row.get('stock'))<=_number(row.get('safetyStock')))}}
+def import_customers_payload(payload):
+    if not isinstance(payload,dict):raise ApiError('invalid json',400)
+    username=str(payload.get('username') or '').strip();password=str(payload.get('password') or '')
+    account=authenticate_user(username,password)
+    if not account:raise ApiError('invalid credentials',401)
+    if account.get('role')!='admin':raise ApiError('admin role required',403)
+    rows=payload.get('customers')
+    if not isinstance(rows,list) or not rows:raise ApiError('missing customers',400)
+    existing=list_records('customers',1,5000).get('items') or []
+    by_name={str(row.get('name') or '').strip().lower():row for row in existing if str(row.get('name') or '').strip()}
+    by_tax={str(row.get('taxId') or '').strip():row for row in existing if str(row.get('taxId') or '').strip()}
+    results=[]
+    for row in rows:
+        if not isinstance(row,dict):continue
+        name=str(row.get('name') or '').strip()
+        if not name:continue
+        role=str(row.get('role') or '上游').strip()
+        if role=='客人':role='上游'
+        if role not in {'上游','下游','兩者'}:role='上游'
+        tax_id=''.join(ch for ch in str(row.get('taxId') or '') if ch.isdigit())[:8]
+        phone=str(row.get('phone') or '').strip()
+        address=str(row.get('address') or '').strip()
+        match=(by_tax.get(tax_id) if tax_id else None) or by_name.get(name.lower())
+        record_id=str((match or {}).get('id') or row.get('id') or uuid.uuid4())
+        record={'id':record_id,'name':name,'role':role,'taxId':tax_id,'phone':phone,'address':address,'active':row.get('active',True) is not False}
+        upsert_record('customers',record_id,record)
+        by_name[name.lower()]=record
+        if tax_id:by_tax[tax_id]=record
+        results.append({'id':record_id,'name':name,'mode':'updated' if match else 'created'})
+    if not results:raise ApiError('no valid customers',400)
+    return {'ok':True,'count':len(results),'results':results}
 def user_action_payload(token,payload):
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     action=str(payload.get('action') or '').strip().lower()

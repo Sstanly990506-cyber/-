@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
+from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, import_customers_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -251,6 +251,21 @@ class ServiceTests(unittest.TestCase):
             handler.do_POST(object())
         operation.assert_called_once_with('token', {'action': 'change_finance_password', 'password': 'password123'})
         response.assert_called_once_with(unittest.mock.ANY, 200, {'ok': True})
+
+    def test_admin_can_import_customers_with_password(self):
+        payload = {'username': 'admin', 'password': 'secret', 'customers': [{'name': '佳德印刷有限公司', 'role': '上游', 'taxId': '27595356', 'phone': '02-22269858', 'address': '新北市中和區'}]}
+        with patch('api.service.authenticate_user', return_value={'role': 'admin'}), patch('api.service.list_records', return_value={'items': []}), patch('api.service.upsert_record', return_value={'ok': True}) as upsert:
+            result = import_customers_payload(payload)
+        self.assertEqual(result['count'], 1)
+        saved = upsert.call_args.args[2]
+        self.assertEqual(saved['name'], '佳德印刷有限公司')
+        self.assertEqual(saved['taxId'], '27595356')
+
+    def test_non_admin_cannot_import_customers(self):
+        with patch('api.service.authenticate_user', return_value={'role': 'ops'}):
+            with self.assertRaises(ApiError) as caught:
+                import_customers_payload({'username': 'ops', 'password': 'secret', 'customers': [{'name': 'A'}]})
+        self.assertEqual(caught.exception.status, 403)
 
     def test_ops_can_recognize_order_without_saving_it(self):
         recognized = {'orderNumber': 'WO-1'}
