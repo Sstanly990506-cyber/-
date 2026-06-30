@@ -482,7 +482,32 @@ th, td {
   background: var(--card-strong);
   white-space: nowrap;
 }
+.orders-table {
+  table-layout: fixed;
+}
+.orders-table th:nth-child(1),
+.orders-table td:nth-child(1) { width: 34%; }
+.orders-table th:nth-child(2),
+.orders-table td:nth-child(2) { width: 34%; }
+.orders-table th:nth-child(3),
+.orders-table td:nth-child(3) { width: 18%; }
+.orders-table th:nth-child(4),
+.orders-table td:nth-child(4) { width: 14%; }
 .orders-table tbody tr:hover { background: rgba(255,255,255,0.035); }
+.orders-table .order-preview-row {
+  cursor: pointer;
+}
+.order-preview-date,
+.order-preview-customer,
+.order-preview-status {
+  vertical-align: middle;
+}
+.order-preview-customer strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .order-number-copy {
   min-width: 150px;
 }
@@ -516,8 +541,9 @@ th, td {
 .order-row-actions {
   display: flex;
   gap: 6px;
-  min-width: 200px;
+  min-width: 96px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .order-row-actions .btn { padding: 7px 10px; }
 .orders-empty-row td {

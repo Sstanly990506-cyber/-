@@ -634,35 +634,23 @@ export function renderOrders(state, renderCustomerOptions) {
   if (summary) summary.textContent = `顯示 ${filtered.length} 筆，共 ${state.orders.length} 筆工單`;
 
   if (!filtered.length) {
-    body.innerHTML = '<tr class="orders-empty-row"><td colspan="7">目前沒有符合條件的工單。</td></tr>';
+    body.innerHTML = '<tr class="orders-empty-row"><td colspan="4">目前沒有符合條件的工單。</td></tr>';
     return;
   }
 
   filtered.forEach((order) => {
     const tr = document.createElement('tr');
     const status = order.status || '未完成';
+    const customer = order.billingCustomer || order.upstream || order.downstream || '-';
+    const completed = status === '已完成';
+    tr.className = 'order-preview-row';
+    tr.dataset.edit = order.id;
     tr.innerHTML = `
-      <td class="table-actions order-position-actions" data-label="順序">
-        <button class="btn small" type="button" data-move-order="-1" data-id="${order.id}" title="上移">↑</button>
-        <button class="btn small" type="button" data-move-order="1" data-id="${order.id}" title="下移">↓</button>
-      </td>
-      <td class="order-number-copy" data-label="工單編號" data-copy-order="${order.id}" title="雙擊複製成新工單">
-        <strong>${escapeHtml(order.orderNumber || '-')}</strong>
-        <small>雙擊可複製新增</small>
-      </td>
-      <td data-label="交貨日期"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
-      <td data-label="客人 / 流程" class="order-route-cell">
-        <strong>${escapeHtml(order.billingCustomer || '-')}</strong>
-        <small>上游：${escapeHtml(order.upstream || '-')}</small>
-        <small>下游：${escapeHtml(order.downstream || '-')}</small>
-      </td>
-      <td data-label="金額" class="order-price-cell">NT$ ${Number(order.totalPrice || 0).toLocaleString()}</td>
-      <td data-label="狀態"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+      <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
+      <td data-label="客人" class="order-preview-customer"><strong>${escapeHtml(customer)}</strong></td>
+      <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        <button class="btn" data-edit="${order.id}">編輯</button>
-        <button class="btn danger" data-delete-order="${order.id}">刪除</button>
-        ${settings.quickActions?.['已完成'] && visibleStatuses.has('已完成') ? `<button class="btn" data-quick-status="已完成" data-id="${order.id}">已完成</button>` : ''}
-        ${settings.quickActions?.['已送出'] && visibleStatuses.has('已送出') ? `<button class="btn" data-quick-status="已送出" data-id="${order.id}">已送出</button>` : ''}
+        <button class="btn primary small" type="button" data-quick-status="已完成" data-id="${order.id}" ${completed ? 'disabled' : ''}>${completed ? '已完成' : '完成'}</button>
       </td>`;
     body.append(tr);
   });
@@ -964,8 +952,13 @@ export function bindOrderEvents(state, saveState, renderAll) {
     }
 
     const btn = e.target.closest('button[data-edit]');
-    if (!btn) return;
-    openOrderForEdit(state, btn.dataset.edit);
+    if (btn) {
+      openOrderForEdit(state, btn.dataset.edit);
+      return;
+    }
+
+    const row = e.target.closest('tr[data-edit]');
+    if (row) openOrderForEdit(state, row.dataset.edit);
   });
   $('ordersTbody')?.addEventListener('dblclick', (e) => {
     const cell = e.target.closest('[data-copy-order]');

@@ -382,10 +382,48 @@ class StaticStructureTests(unittest.TestCase):
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
         self.assertIn('id="ordersListSummary"', view)
         self.assertIn('class="orders-table"', view)
-        self.assertIn('data-label="客人 / 流程"', orders)
+        self.assertIn('<th>交貨日期</th><th>客人</th><th>狀態</th><th>操作</th>', view)
+        self.assertIn("tr.className = 'order-preview-row'", orders)
+        self.assertIn('data-label="客人"', orders)
+        self.assertIn('data-quick-status="已完成"', orders)
+        self.assertNotIn('class="order-price-cell">NT$', orders)
         self.assertIn('order-status-badge', orders)
         self.assertIn('.orders-table thead { display: none; }', styles)
         self.assertIn('const displayTotal=', store)
+
+    def test_orders_can_be_deleted_and_enter_moves_between_fields(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
+        self.assertIn('data-delete-order', orders)
+        self.assertIn('確定要刪除工單', orders)
+        self.assertIn("receivable.source === 'auto-order'", orders)
+        self.assertIn('id="saveOrderBtn"', view)
+        self.assertIn('ORDER_ENTRY_FIELD_IDS', orders)
+        self.assertIn('bindOrderEnterNavigation', orders)
+        self.assertIn("event.key !== 'Enter'", orders)
+        self.assertIn('event.isComposing', orders)
+        self.assertIn("linked_receivables", service)
+
+    def test_order_preview_rows_open_for_edit(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        self.assertIn('點一下可編輯', view)
+        self.assertIn("const row = e.target.closest('tr[data-edit]')", orders)
+        self.assertIn('openOrderForEdit(state, row.dataset.edit)', orders)
+        self.assertIn("sortOrder:o.sortOrder===null", store)
+
+    def test_legacy_order_actions_are_no_longer_shown_in_preview(self):
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        render_block = orders[orders.index('export function renderOrders'):orders.index('export function clearOrderForm')]
+        self.assertNotIn('data-delete-order', render_block)
+        self.assertNotIn('data-move-order', render_block)
+        self.assertNotIn('data-copy-order', render_block)
+        self.assertIn('moveOrder(state', orders)
+        self.assertIn('data-copy-order', orders)
+        self.assertIn("addEventListener('dblclick'", orders)
+        self.assertIn('copyOrderAsNew', orders)
 
     def test_ai_order_recognition_fills_existing_form(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
@@ -453,7 +491,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('copyOrderAsNew', orders)
         self.assertIn("$('orderNumber').value = ''", orders)
         self.assertIn("$('orderNumber')?.focus()", orders)
-        self.assertIn('雙擊複製', view)
+        self.assertNotIn('雙擊複製', view)
         self.assertIn("sortOrder:o.sortOrder===null", store)
 
     def test_ai_recognition_has_vercel_runtime_limits(self):
