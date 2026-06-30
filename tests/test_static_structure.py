@@ -383,13 +383,26 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('id="ordersListSummary"', view)
         self.assertIn('class="orders-table"', view)
         self.assertIn('<th>交貨日期</th><th>客人</th><th>狀態</th><th>操作</th>', view)
-        self.assertIn("tr.className = 'order-preview-row'", orders)
+        self.assertIn('order-preview-row', orders)
+        self.assertIn("tr.style.setProperty('--row-index'", orders)
         self.assertIn('data-label="客人"', orders)
         self.assertIn('data-quick-status="已完成"', orders)
         self.assertNotIn('class="order-price-cell">NT$', orders)
         self.assertIn('order-status-badge', orders)
+        self.assertIn('@keyframes orderRowEnter', styles)
+        self.assertIn('@keyframes orderRowComplete', styles)
         self.assertIn('.orders-table thead { display: none; }', styles)
         self.assertIn('const displayTotal=', store)
+
+    def test_navigation_and_order_list_have_light_motion(self):
+        main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        styles = (ROOT / 'styles.css').read_text(encoding='utf-8')
+        self.assertIn("panel.classList.add('view-entering')", main)
+        self.assertIn('@keyframes viewEnter', styles)
+        self.assertIn('prefers-reduced-motion: reduce', styles)
+        self.assertIn('highlightedOrderId = order.id', orders)
+        self.assertIn('is-just-completed', orders)
 
     def test_orders_can_be_deleted_and_enter_moves_between_fields(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')

@@ -6,6 +6,7 @@ import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomer
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
 let lastAutoPrice = 0;
+let highlightedOrderId = null;
 const ORDER_ENTRY_FIELD_IDS = [
   'orderNumber',
   'orderDate',
@@ -638,13 +639,14 @@ export function renderOrders(state, renderCustomerOptions) {
     return;
   }
 
-  filtered.forEach((order) => {
+  filtered.forEach((order, index) => {
     const tr = document.createElement('tr');
     const status = order.status || '未完成';
     const customer = order.billingCustomer || order.upstream || order.downstream || '-';
     const completed = status === '已完成';
-    tr.className = 'order-preview-row';
+    tr.className = `order-preview-row${highlightedOrderId === order.id ? ' is-just-completed' : ''}`;
     tr.dataset.edit = order.id;
+    tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="客人" class="order-preview-customer"><strong>${escapeHtml(customer)}</strong></td>
@@ -654,6 +656,16 @@ export function renderOrders(state, renderCustomerOptions) {
       </td>`;
     body.append(tr);
   });
+
+  if (highlightedOrderId) {
+    const currentId = highlightedOrderId;
+    window.setTimeout(() => {
+      Array.from(document.querySelectorAll('tr[data-edit]'))
+        .find((row) => row.dataset.edit === currentId)
+        ?.classList.remove('is-just-completed');
+      if (highlightedOrderId === currentId) highlightedOrderId = null;
+    }, 1100);
+  }
 }
 
 export function clearOrderForm() {
@@ -946,6 +958,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
         device: `${location.hostname || 'localhost'} / ${navigator.userAgent.slice(0, 40)}...`,
       });
       syncOrderToReceivables(order);
+      highlightedOrderId = order.id;
       saveState();
       renderAll();
       return;

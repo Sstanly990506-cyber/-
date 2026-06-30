@@ -407,7 +407,12 @@ function showView(id) {
   if (id !== 'loginView') mountInternalViews();
   activeViewId = id;
   views.forEach((v) => $(v)?.classList.add('hidden'));
-  $(id)?.classList.remove('hidden');
+  const panel = $(id);
+  panel?.classList.remove('hidden');
+  panel?.classList.remove('view-entering');
+  if (panel && id !== 'loginView') {
+    window.requestAnimationFrame(() => panel.classList.add('view-entering'));
+  }
   if (id === 'ordersView') {
     state.orderScreen = 'list';
   }
