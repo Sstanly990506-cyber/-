@@ -34,6 +34,10 @@ body {
 .panel.view-entering {
   animation: viewEnter 0.28s ease both;
 }
+.panel.view-entering .motion-item {
+  animation: softItemEnter 0.32s ease both;
+  animation-delay: calc(var(--motion-index, 0) * 22ms);
+}
 .hidden { display: none !important; }
 .card {
   background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)), var(--card);
@@ -42,6 +46,11 @@ body {
   padding: 18px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(14px);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.card:hover {
+  border-color: rgba(245, 158, 11, 0.32);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.32);
 }
 @keyframes viewEnter {
   from {
@@ -53,6 +62,16 @@ body {
     opacity: 1;
     transform: translateY(0) scale(1);
     filter: saturate(1);
+  }
+}
+@keyframes softItemEnter {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 h1,h2,h3,h4 { margin: 0 0 10px; }
@@ -466,6 +485,25 @@ th, td {
   text-align: left;
   vertical-align: middle;
 }
+tbody tr {
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+tbody tr:hover {
+  background: rgba(255,255,255,0.035);
+}
+.list li,
+.kpi,
+.finance-action-card,
+.dashboard-priority,
+.settings-module-nav-card,
+.permission-chip {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+.list li:hover,
+.kpi:hover,
+.permission-chip:hover {
+  transform: translateY(-1px);
+}
 .table-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .order-number-copy { cursor: copy; user-select: none; font-weight: 700; }
 .order-number-copy:hover { color: #fbbf24; text-decoration: underline; }
@@ -805,7 +843,74 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
 .settings-access-card,
 .settings-theme-card { height: fit-content; }
 .settings-brand-card { grid-column: span 2; }
+.settings-disclosure-card {
+  grid-column: span 3;
+  padding: 0;
+  overflow: hidden;
+}
+.settings-disclosure {
+  display: grid;
+}
+.settings-disclosure-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px;
+  cursor: pointer;
+  list-style: none;
+  background:
+    radial-gradient(circle at top right, rgba(245, 158, 11, 0.16), transparent 28%),
+    linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(14, 165, 233, 0.05));
+}
+.settings-disclosure-summary::-webkit-details-marker { display: none; }
+.settings-disclosure-summary strong {
+  display: block;
+  font-size: 18px;
+}
+.settings-disclosure-summary small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.settings-disclosure-pill {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #fff7ed;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  font-size: 13px;
+  font-weight: 700;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+.settings-disclosure-summary:hover .settings-disclosure-pill {
+  transform: translateX(2px);
+  filter: brightness(1.05);
+}
+.settings-disclosure[open] .settings-disclosure-pill::before {
+  content: '已展開 · ';
+}
+.settings-disclosure-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  animation: disclosureOpen 0.24s ease both;
+}
+@keyframes disclosureOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 .settings-preview-card {
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 16px;
   background:
     radial-gradient(circle at top right, rgba(245, 158, 11, 0.16), transparent 26%),
     linear-gradient(140deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
@@ -965,7 +1070,16 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .row { grid-template-columns: 1fr; }
   .customer-price-row { grid-template-columns: 1fr; }
   .hero-badges { justify-content: flex-start; }
-  .settings-brand-card { grid-column: auto; }
+  .settings-brand-card,
+  .settings-disclosure-card { grid-column: auto; }
+  .settings-disclosure-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .settings-disclosure-pill {
+    width: 100%;
+    text-align: center;
+  }
   .orders-list-head { grid-template-columns: 1fr; align-items: stretch; }
 }
 

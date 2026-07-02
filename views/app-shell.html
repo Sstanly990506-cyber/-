@@ -654,40 +654,49 @@
 
         <form id="settingsForm" class="panel">
           <div class="settings-grid compact-settings-grid">
-            <article class="card settings-preview-card settings-preview-compact">
-              <p class="eyebrow">Live Preview</p>
-              <h3 id="settingsPreviewTitle">上光廠智慧營運平台</h3>
-              <p id="settingsPreviewCompany" class="sub"></p>
-              <p id="settingsPreviewMessage" class="settings-preview-message"></p>
-              <div id="settingsPreviewSummary" class="hero-badge"></div>
-            </article>
-
-            <article class="card settings-brand-card">
-              <h3>品牌與首頁文案</h3>
-              <div class="form-grid settings-form-grid">
-                <label>網站標題<input id="settingsAppTitle" /></label>
-                <label>登入頁標題<input id="settingsLoginTitle" /></label>
-                <label>公司名稱<input id="settingsCompanyName" /></label>
-                <label>公司地址<input id="settingsCompanyAddress" /></label>
-                <label>公司電話<input id="settingsCompanyPhone" /></label>
-                <label>公司產業<input id="settingsCompanyIndustry" /></label>
-                <label>公司 Email<input id="settingsCompanyEmail" /></label>
-                <label>公司網站<input id="settingsCompanyWebsite" /></label>
-                <label>統一編號<input id="settingsCompanyTaxId" /></label>
-                <label class="span-2">登入頁說明<input id="settingsLoginMessage" /></label>
-                <label class="span-2">首頁主標題<input id="settingsDashboardHeroTitle" /></label>
-                <label class="span-2">首頁副標題<textarea id="settingsDashboardHeroSubtitle" rows="3"></textarea></label>
-                <label class="span-2">首頁公告<input id="settingsDashboardAnnouncement" /></label>
-                <label>歡迎前綴<input id="settingsWelcomePrefix" /></label>
-                <label>預設首頁
-                  <select id="settingsDefaultLandingView">
-                    <option value="dashboardView">功能導航</option>
-                    <option value="opsCenterView">營運中心</option>
-                    <option value="notificationsView">通知中心</option>
-                    <option value="inventoryView">庫存中心</option>
-                  </select>
-                </label>
-              </div>
+            <article class="card settings-brand-card settings-disclosure-card">
+              <details id="settingsBrandDisclosure" class="settings-disclosure">
+                <summary class="settings-disclosure-summary">
+                  <span>
+                    <strong>品牌與首頁文案</strong>
+                    <small>網站標題、公司資料、首頁文字與預設首頁</small>
+                  </span>
+                  <span class="settings-disclosure-pill">點我展開</span>
+                </summary>
+                <div class="settings-disclosure-body">
+                  <section class="settings-preview-card settings-preview-compact">
+                    <p class="eyebrow">Live Preview</p>
+                    <h3 id="settingsPreviewTitle">上光廠智慧營運平台</h3>
+                    <p id="settingsPreviewCompany" class="sub"></p>
+                    <p id="settingsPreviewMessage" class="settings-preview-message"></p>
+                    <div id="settingsPreviewSummary" class="hero-badge"></div>
+                  </section>
+                  <div class="form-grid settings-form-grid">
+                    <label>網站標題<input id="settingsAppTitle" /></label>
+                    <label>登入頁標題<input id="settingsLoginTitle" /></label>
+                    <label>公司名稱<input id="settingsCompanyName" /></label>
+                    <label>公司地址<input id="settingsCompanyAddress" /></label>
+                    <label>公司電話<input id="settingsCompanyPhone" /></label>
+                    <label>公司產業<input id="settingsCompanyIndustry" /></label>
+                    <label>公司 Email<input id="settingsCompanyEmail" /></label>
+                    <label>公司網站<input id="settingsCompanyWebsite" /></label>
+                    <label>統一編號<input id="settingsCompanyTaxId" /></label>
+                    <label class="span-2">登入頁說明<input id="settingsLoginMessage" /></label>
+                    <label class="span-2">首頁主標題<input id="settingsDashboardHeroTitle" /></label>
+                    <label class="span-2">首頁副標題<textarea id="settingsDashboardHeroSubtitle" rows="3"></textarea></label>
+                    <label class="span-2">首頁公告<input id="settingsDashboardAnnouncement" /></label>
+                    <label>歡迎前綴<input id="settingsWelcomePrefix" /></label>
+                    <label>預設首頁
+                      <select id="settingsDefaultLandingView">
+                        <option value="dashboardView">功能導航</option>
+                        <option value="opsCenterView">營運中心</option>
+                        <option value="notificationsView">通知中心</option>
+                        <option value="inventoryView">庫存中心</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </details>
             </article>
 
             <article class="card settings-access-card">

@@ -391,6 +391,27 @@ function renderAll() {
       if (state.userRole === 'admin') renderSettings(state);
       break;
   }
+  applyViewMotion();
+}
+
+function applyViewMotion() {
+  const panel = activeViewId ? $(activeViewId) : null;
+  if (!panel || panel.classList.contains('hidden')) return;
+  const motionItems = panel.querySelectorAll([
+    '.card',
+    '.nav-card',
+    '.dashboard-priority',
+    '.kpi',
+    '.finance-action-card',
+    '.settings-module-nav-card',
+    '.permission-chip',
+    '.list li',
+    '.table-wrap tbody tr',
+  ].join(','));
+  motionItems.forEach((item, index) => {
+    item.classList.add('motion-item');
+    item.style.setProperty('--motion-index', String(Math.min(index, 18)));
+  });
 }
 
 function showView(id) {
