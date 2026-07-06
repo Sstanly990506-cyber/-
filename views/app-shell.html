@@ -460,6 +460,24 @@
           </div>
           <ul id="notificationsList" class="list"></ul>
         </article>
+        <article class="card">
+          <div class="section-head">
+            <div>
+              <h3>LINE 通知與回覆</h3>
+              <p class="sub">設定 LINE Developers Webhook URL 後，LINE 可回覆「綁定、狀態、提醒」，系統也能主動推播通知。</p>
+            </div>
+            <div class="actions">
+              <button class="btn" type="button" id="refreshLineStatusBtn">重新檢查</button>
+              <button class="btn primary" type="button" id="sendLineTestBtn">送測試通知</button>
+            </div>
+          </div>
+          <div class="kpi-grid kpi-grid-2">
+            <div class="kpi"><span>LINE 設定</span><strong id="lineConfiguredStatus">尚未檢查</strong></div>
+            <div class="kpi"><span>綁定聊天室</span><strong id="lineDestinationCount">0</strong></div>
+          </div>
+          <label>Webhook URL<input id="lineWebhookUrl" readonly /></label>
+          <p id="lineStatusDetail" class="sub">請先在 LINE Developers 設定 Channel Secret 與 Channel Access Token。</p>
+        </article>
       </section>
 
       <section id="financeView" class="panel hidden">

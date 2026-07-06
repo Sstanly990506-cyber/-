@@ -452,7 +452,7 @@ function renderTodayAlerts(state, reportA) {
   return alerts;
 }
 
-function openLineReminder(state, reportA) {
+function buildFinanceLineReminder(state, reportA) {
   const dueCritical = reportA.filter((r) => r.remain > 0 && r.age >= 30).slice(0, 5);
   const dueSoon = reportA.filter((r) => r.remain > 0 && r.age >= 7 && r.age < 30).slice(0, 5);
   const unpaid = state.payables
@@ -487,8 +487,18 @@ function openLineReminder(state, reportA) {
     lines.push('✅ 今日財經狀態正常，無需特別提醒。');
   }
 
-  const url = `https://line.me/R/msg/text/?${encodeURIComponent(lines.join('\n'))}`;
-  window.open(url, '_blank', 'noopener');
+  return lines.join('\n');
+}
+
+async function sendFinanceLineReminder(state, reportA) {
+  const response = await fetch('/api/line/push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+    body: JSON.stringify({ message: buildFinanceLineReminder(state, reportA) }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
 }
 
 function getFinanceConcernCount(state, reportA) {
@@ -680,7 +690,14 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     renderInvoicePicker(state);
   });
   $('exportInvoiceBtn')?.addEventListener('click', () => openInvoiceWindow(state));
-  $('sendLineReminderBtn')?.addEventListener('click', () => openLineReminder(state, getLinkedReceivablesData(state)));
+  $('sendLineReminderBtn')?.addEventListener('click', async () => {
+    try {
+      const result = await sendFinanceLineReminder(state, getLinkedReceivablesData(state));
+      alert(`LINE 財經提醒已送出：${result.sent || 0} 個聊天室。`);
+    } catch (err) {
+      alert(`LINE 財經提醒失敗：${err.message}`);
+    }
+  });
 
   $('financeReceivableActions')?.addEventListener('click', (e) => {
     const done = e.target.closest('[data-finance-receivable-done]');

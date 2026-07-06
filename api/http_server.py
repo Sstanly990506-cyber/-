@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs,unquote,urlparse
 from api._common import get_bearer_token,json_response,read_json_body
+from api.line_bot import LineBotError,handle_line_webhook
 from api.routes import resolve_get_route,resolve_post_route
 from api.service import ApiError,delete_entity_payload,list_entity_payload,upsert_entity_payload
 from api.storage import BASE_DIR
@@ -39,6 +40,12 @@ class AppRequestHandler(BaseHTTPRequestHandler):
             else:self.serve_file(rel)
     def do_POST(self):
         path=urlparse(self.path).path or '/';token=get_bearer_token(self)
+        if path=='/api/line/webhook':
+            length=int(self.headers.get('Content-Length') or 0);body=self.rfile.read(length) if length else b''
+            try:json_response(self,200,handle_line_webhook(body,self.headers.get('X-Line-Signature','')))
+            except LineBotError as err:json_response(self,err.status,{'ok':False,'error':str(err)})
+            except Exception as err:json_response(self,500,{'ok':False,'error':str(err)})
+            return
         route=resolve_post_route(path,token,read_json_body(self))
         if route:
             op,args=route;self.send_service_response(op,*args)

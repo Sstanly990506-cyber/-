@@ -7,8 +7,8 @@ from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, chang
 from api.trip_optimizer import optimize_trip
 from api.pricing import calculate_quote, classify_pricing_tier_with_bounds, normalize_coating_type, normalize_pricing_tier
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
-ENTITY_VIEW={'orders':'ordersView','customers':'customersView','inventory':'inventoryView','events':'notificationsView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','aiCorrections':'ordersView'}
-STATE_FIELD_VIEW={'glossOptions':'ordersView','customers':'customersView','orders':'ordersView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','systemEvents':'notificationsView','inventoryItems':'inventoryView'}
+ENTITY_VIEW={'orders':'ordersView','customers':'customersView','inventory':'inventoryView','events':'notificationsView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','aiCorrections':'ordersView','lineDestinations':'notificationsView'}
+STATE_FIELD_VIEW={'glossOptions':'ordersView','customers':'customersView','orders':'ordersView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','systemEvents':'notificationsView','inventoryItems':'inventoryView','lineDestinations':'notificationsView'}
 class ApiError(Exception):
     def __init__(self,message,status=400,**extra):super().__init__(message);self.status=status;self.payload={'ok':False,'error':message,**extra}
 def require_account(token):
@@ -189,6 +189,18 @@ def report_payload(token):
     if not account_can_view(account,'financeView'):raise ApiError('permission denied',403)
     orders=_all_records('orders');receivables=_all_records('receivables');payables=_all_records('payables');inventory=_all_records('inventory')
     return {'ok':True,'summary':{'ordersLoaded':len(orders),'pendingOrders':sum(1 for row in orders if row.get('status')!='已完成'),'receivableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('received'))) for row in receivables),'payableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('paid'))) for row in payables),'lowInventory':sum(1 for row in inventory if _number(row.get('stock'))<=_number(row.get('safetyStock')))}}
+def line_status_payload(token):
+    account=require_account(token)
+    if not account_can_view(account,'notificationsView'):raise ApiError('permission denied',403)
+    from api.line_bot import line_status_payload as build_line_status
+    return build_line_status()
+def send_line_payload(token,payload):
+    account=require_account(token)
+    if not account_can_view(account,'notificationsView'):raise ApiError('permission denied',403)
+    if payload is not None and not isinstance(payload,dict):raise ApiError('invalid json',400)
+    from api.line_bot import LineBotError, send_line_message
+    try:return send_line_message((payload or {}).get('message'))
+    except LineBotError as err:raise ApiError(str(err),err.status) from err
 def _format_customer_phone(value):
     text=str(value or '').strip()
     digits=''.join(ch for ch in text if ch.isdigit())

@@ -4,6 +4,7 @@ import socket
 
 from api.http_server import create_server, is_blocked_static_path
 from api.routes import GET_ROUTES, POST_ROUTES, resolve_get_route, resolve_post_route
+from api.line_bot import LineBotError, handle_line_webhook
 from api.service import ApiError, delete_entity_payload, list_entity_payload, upsert_entity_payload
 from api.storage import BASE_DIR, DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
 
@@ -38,6 +39,19 @@ if app is not None:
             return jsonify(operation(*args))
         except ApiError as err:
             return jsonify(err.payload), err.status
+        except Exception as err:
+            return jsonify({'ok': False, 'error': str(err)}), 500
+
+    @app.post('/api/line/webhook')
+    def line_webhook():
+        try:
+            payload = handle_line_webhook(
+                request.get_data(cache=False),
+                request.headers.get('X-Line-Signature', ''),
+            )
+            return jsonify(payload)
+        except LineBotError as err:
+            return jsonify({'ok': False, 'error': str(err)}), err.status
         except Exception as err:
             return jsonify({'ok': False, 'error': str(err)}), 500
 

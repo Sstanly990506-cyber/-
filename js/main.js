@@ -246,15 +246,26 @@ function formatDashboardMoney(value) {
 
 function pushGlobalLineReminder(alerts) {
   const text = buildGlobalLineMessage(alerts);
-  const url = `https://line.me/R/msg/text/?${encodeURIComponent(text)}`;
-  window.open(url, '_blank', 'noopener');
   const score = getRiskScore(alerts);
   const signature = alerts.map((a) => `${a.level}|${a.module}|${a.text}`).join('\n');
   localStorage.setItem(REMINDER_LAST_SENT_AT_KEY, String(Date.now()));
   localStorage.setItem(REMINDER_LAST_SCORE_KEY, String(score));
   localStorage.setItem(REMINDER_LAST_SIGNATURE_KEY, signature);
-  appendSystemEvent(`已自動推送智能提醒（風險分數 ${score}）`, 'warning', { score, count: alerts.length });
-  saveState();
+  fetch('/api/line/push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) },
+    body: JSON.stringify({ message: text }),
+  })
+    .then((res) => res.json().then((data) => ({ res, data })).catch(() => ({ res, data: {} })))
+    .then(({ res, data }) => {
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      appendSystemEvent(`已自動推送 LINE 智能提醒（風險分數 ${score}，${data.sent || 0} 個聊天室）`, 'warning', { score, count: alerts.length });
+      saveState();
+    })
+    .catch((err) => {
+      appendSystemEvent(`LINE 智能提醒未送出：${err.message}`, 'warning', { score, count: alerts.length });
+      saveState();
+    });
 }
 
 function shouldAutoPush(alerts) {

@@ -45,6 +45,7 @@ DEFAULT_APP_STATE = {
     'systemEvents': [],
     'settings': None,
     'inventoryItems': [],
+    'lineDestinations': [],
     'syncTick': 0,
 }
 

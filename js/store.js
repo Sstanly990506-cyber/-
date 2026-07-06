@@ -9,6 +9,7 @@ const ENTITY_MAP = {
   priceRules:'priceRules',
   inventoryItems:'inventory',
   systemEvents:'events',
+  lineDestinations:'lineDestinations',
 };
 
 const REVERSE_ENTITY = Object.fromEntries(
@@ -17,9 +18,9 @@ const REVERSE_ENTITY = Object.fromEntries(
 
 const ROLE_KEYS = {
   admin: Object.keys(ENTITY_MAP),
-  ops: ['customers', 'orders', 'priceRules', 'inventoryItems', 'systemEvents'],
-  finance: ['receivables', 'payables', 'systemEvents'],
-  audit: ['audits', 'systemEvents'],
+  ops: ['customers', 'orders', 'priceRules', 'inventoryItems', 'systemEvents', 'lineDestinations'],
+  finance: ['receivables', 'payables', 'systemEvents', 'lineDestinations'],
+  audit: ['audits', 'systemEvents', 'lineDestinations'],
   driver:['customers','orders'],
   viewer: [],
 };
@@ -30,7 +31,7 @@ const VIEW_KEYS = {
   tripsView:['customers','orders'],
   opsCenterView: ['orders', 'systemEvents'],
   inventoryView: ['inventoryItems'],
-  notificationsView: ['systemEvents'],
+  notificationsView: ['systemEvents', 'lineDestinations'],
   financeView: ['receivables', 'payables', 'systemEvents'],
   auditView: ['audits', 'systemEvents'],
 };
@@ -60,6 +61,7 @@ export const state = {
   payables: [],
   priceRules: [],
   systemEvents: [],
+  lineDestinations: [],
   settings: getDefaultSettings(),
   inventoryItems: [],
   pagination: {},

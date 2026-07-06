@@ -16,6 +16,7 @@ ENTITY_FIELDS = {
     'inventory': 'inventoryItems',
     'events': 'systemEvents',
     'aiCorrections': 'aiCorrections',
+    'lineDestinations': 'lineDestinations',
 }
 RECORDS_PATH = storage.DATA_DIR / 'records.json'
 RECORDS_LOCK = Lock()

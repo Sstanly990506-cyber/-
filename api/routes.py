@@ -9,6 +9,7 @@ from api.service import (
     get_state_payload,
     health_payload,
     import_customers_payload,
+    line_status_payload,
     optimize_trip_payload,
     pricing_quote_payload,
     recognize_order_payload,
@@ -16,6 +17,7 @@ from api.service import (
     report_order_correction_payload,
     report_payload,
     restore_backup_payload,
+    send_line_payload,
     update_state_payload,
     user_action_payload,
 )
@@ -42,6 +44,7 @@ GET_ROUTES = {
     ),
     '/api/reports/summary': lambda token, query: (report_payload, (token,)),
     '/api/orders/recognize/status': lambda token, query: (recognize_order_status_payload, (token,)),
+    '/api/line/status': lambda token, query: (line_status_payload, (token,)),
 }
 
 
@@ -56,6 +59,7 @@ POST_ROUTES = {
     '/api/trips/optimize': lambda token, payload: (optimize_trip_payload, (token, payload)),
     '/trips/optimize': lambda token, payload: (optimize_trip_payload, (token, payload)),
     '/api/pricing/quote': lambda token, payload: (pricing_quote_payload, (token, payload)),
+    '/api/line/push': lambda token, payload: (send_line_payload, (token, payload)),
     '/api/orders/recognize': lambda token, payload: (recognize_order_payload, (token, payload)),
     '/api/orders/recognize/corrections': lambda token, payload: (
         report_order_correction_payload,

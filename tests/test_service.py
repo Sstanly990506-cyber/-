@@ -1,6 +1,11 @@
+import base64
+import hashlib
+import hmac
+import json
 import unittest
 from unittest.mock import patch
 
+from api.line_bot import handle_line_webhook
 from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, import_customers_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
@@ -9,6 +14,24 @@ class ServiceTests(unittest.TestCase):
     def test_health_hides_environment_by_default(self):
         with patch('api.service.ensure_storage'), patch('api.service.get_storage_mode', return_value='local-json'):
             self.assertEqual(health_payload(), {'ok': True, 'database': 'local-json'})
+
+    def test_line_webhook_verifies_signature_and_replies(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'user', 'userId': 'U1234567890'},
+                'message': {'type': 'text', 'text': '綁定'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.upsert_record') as upsert, patch('api.line_bot._line_api_post') as line_post:
+            result = handle_line_webhook(body, signature)
+        self.assertEqual(result['handled'], 1)
+        self.assertEqual(upsert.call_args.args[0], 'lineDestinations')
+        self.assertEqual(upsert.call_args.args[1], 'U1234567890')
+        self.assertEqual(line_post.call_args.args[0], 'https://api.line.me/v2/bot/message/reply')
 
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):
