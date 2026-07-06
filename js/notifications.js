@@ -1,5 +1,8 @@
 import { $, formatTs, downloadCsv } from './shared.js';
 
+const LINE_OFFICIAL_ACCOUNT_ID = '@971smwet';
+const LINE_OFFICIAL_ACCOUNT_LINK = `https://line.me/R/ti/p/${LINE_OFFICIAL_ACCOUNT_ID}`;
+
 function getFilteredEvents(state) {
   const events = state.systemEvents || [];
   const type = $('noticeTypeFilter')?.value || 'all';
@@ -35,6 +38,7 @@ export function renderNotifications(state) {
   }
 
   if ($('lineWebhookUrl')) $('lineWebhookUrl').value = `${location.origin}/api/line/webhook`;
+  if ($('lineOfficialAccountLink')) $('lineOfficialAccountLink').href = LINE_OFFICIAL_ACCOUNT_LINK;
 }
 
 async function refreshLineStatus(state) {
@@ -49,9 +53,13 @@ async function refreshLineStatus(state) {
     $('lineConfiguredStatus').textContent = data.configured ? '已設定' : '未設定';
     if ($('lineDestinationCount')) $('lineDestinationCount').textContent = String(data.destinationCount || 0);
     if ($('lineStatusDetail')) {
-      $('lineStatusDetail').textContent = data.configured
-        ? `Webhook URL：${location.origin}/api/line/webhook。LINE 中輸入「綁定」後即可接收推播。`
-        : '尚未設定 LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN，請先到 Vercel 環境變數設定。';
+      if (!data.configured) {
+        $('lineStatusDetail').textContent = '尚未設定 LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN，請先到 Vercel 環境變數設定。';
+      } else if (!data.destinationCount) {
+        $('lineStatusDetail').textContent = `LINE 已設定完成，但尚未綁定聊天室。請加入三青官方帳號 ${LINE_OFFICIAL_ACCOUNT_ID}，在該聊天室輸入「綁定」。不要傳到 LINE 系統通知帳號。`;
+      } else {
+        $('lineStatusDetail').textContent = `Webhook URL：${location.origin}/api/line/webhook。已綁定 ${data.destinationCount} 個聊天室，可送測試通知。`;
+      }
     }
   } catch (err) {
     $('lineConfiguredStatus').textContent = '檢查失敗';
