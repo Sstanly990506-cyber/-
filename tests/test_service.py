@@ -95,13 +95,28 @@ class ServiceTests(unittest.TestCase):
             handle_line_webhook(body, signature)
         line_post.assert_not_called()
 
+    def test_line_group_chat_ignores_unmentioned_commands(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'group', 'groupId': 'G1234567890'},
+                'message': {'type': 'text', 'text': '未完成工單'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        line_post.assert_not_called()
+
     def test_line_group_chat_replies_when_addressed(self):
         payload = {
             'events': [{
                 'type': 'message',
                 'replyToken': 'reply-token',
                 'source': {'type': 'group', 'groupId': 'G1234567890'},
-                'message': {'type': 'text', 'text': '三青 客戶 媽媽'},
+                'message': {'type': 'text', 'text': '@三青 客戶 媽媽'},
             }]
         }
         body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
@@ -119,6 +134,7 @@ class ServiceTests(unittest.TestCase):
         reply_text = line_post.call_args.args[1]['messages'][0]['text']
         self.assertIn('【客戶/廠商查詢】', reply_text)
         self.assertIn('媽媽公司', reply_text)
+        self.assertNotIn('quickReply', line_post.call_args.args[1]['messages'][0])
 
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):

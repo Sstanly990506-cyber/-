@@ -138,11 +138,12 @@ def _handle_event(event):
         return
 
     text = str((event.get('message') or {}).get('text') or '').strip()
-    if destination_type in {'group', 'room'} and not _should_reply_in_shared_chat(text):
+    message = event.get('message') or {}
+    if destination_type in {'group', 'room'} and not _should_reply_in_shared_chat(text, message):
         return
     response = _build_reply_text(text, destination_id, destination_type)
     if reply_token and response:
-        _reply(reply_token, response)
+        _reply(reply_token, response, quick_reply=destination_type == 'user')
 
 
 def _source_destination(source):
@@ -395,27 +396,28 @@ def _strip_bot_prefix(text):
     return value.strip()
 
 
-def _should_reply_in_shared_chat(text):
+def _strip_bot_mention(text):
     value = str(text or '').strip()
-    normalized = _normalize_command(value)
-    stripped = _strip_bot_prefix(value)
-    if stripped != value:
-        return bool(stripped)
-    explicit_commands = {
-        '綁定', 'bind', '加入通知', '狀態', 'status', '系統狀態',
-        '提醒', '通知', '財經', 'line提醒', '說明', 'help', '幫助', '?',
-        '未完成工單', '待處理工單', '未結工單',
-    }
-    if normalized in explicit_commands:
-        return True
-    command_prefixes = (
-        '工單', '查工單', '查詢工單',
-        '客戶', '客人', '廠商', '查客戶', '查廠商',
-        '應收', '未收', '收款', '查應收',
-        '應付', '未付', '付款', '查應付',
-        '庫存', '材料', '查庫存',
-    )
-    return normalized.startswith(command_prefixes)
+    return re.sub(r'^@\s*(三青實業有限公司|三青系統|三青|sanqing)\s*[,，:：]?\s*', '', value, flags=re.IGNORECASE).strip()
+
+
+def _message_mentions_bot(message):
+    bot_user_id = os.environ.get('LINE_BOT_USER_ID', '').strip()
+    if not bot_user_id:
+        return False
+    mention = (message or {}).get('mention') or {}
+    for item in mention.get('mentionees') or []:
+        if str(item.get('userId') or '') == bot_user_id:
+            return True
+    return False
+
+
+def _should_reply_in_shared_chat(text, message=None):
+    value = str(text or '').strip()
+    mentioned_text = _strip_bot_mention(value)
+    if mentioned_text != value:
+        return bool(mentioned_text)
+    return _message_mentions_bot(message)
 
 
 def _build_help_text():
@@ -429,7 +431,7 @@ def _build_help_text():
         '- 庫存 紙\n'
         '- 狀態\n'
         '- 提醒\n'
-        '群組裡請加「三青」開頭，例如：三青 客戶 佳德。'
+        '群組裡只有 @三青 才會回，例如：@三青 客戶 佳德。'
     )
 
 
