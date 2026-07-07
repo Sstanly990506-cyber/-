@@ -33,4 +33,16 @@ https://www.sanqingco.com/api/line/webhook
 
 After deployment, send `綁定` to the LINE official account. The system stores that
 chat as a notification destination. Then the notification center and finance screen
-can push reminders to LINE. Supported reply commands are `綁定`, `狀態`, and `提醒`.
+can push reminders to LINE.
+
+Supported LINE reply commands include:
+
+- `綁定`
+- `狀態`
+- `提醒`
+- `工單 115060162`
+- `未完成工單`
+- `客戶 三青`
+- `應收 佳德`
+- `應付 油墨`
+- `庫存 紙`

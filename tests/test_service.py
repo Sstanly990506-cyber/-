@@ -33,6 +33,48 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(upsert.call_args.args[1], 'U1234567890')
         self.assertEqual(line_post.call_args.args[0], 'https://api.line.me/v2/bot/message/reply')
 
+    def test_line_query_requires_bound_destination(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'user', 'userId': 'U1234567890'},
+                'message': {'type': 'text', 'text': '工單 WO-1'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', return_value={'items': []}), patch('api.line_bot.upsert_record') as upsert, patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        upsert.assert_not_called()
+        self.assertIn('請先輸入', line_post.call_args.args[1]['messages'][0]['text'])
+
+    def test_line_query_returns_order_result_for_bound_destination(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'user', 'userId': 'U1234567890'},
+                'message': {'type': 'text', 'text': '工單 WO-1'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'lineDestinations':
+                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'active': True}]}
+            if entity == 'orders':
+                return {'items': [{'id': 'o1', 'orderNumber': 'WO-1', 'orderDate': '2026-07-07', 'billingCustomer': '三青', 'status': '未完成', 'totalPrice': 1200}]}
+            return {'items': []}
+
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        reply_text = line_post.call_args.args[1]['messages'][0]['text']
+        self.assertIn('【工單查詢】', reply_text)
+        self.assertIn('WO-1', reply_text)
+        self.assertIn('三青', reply_text)
+
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):
             with self.assertRaises(ApiError) as caught:

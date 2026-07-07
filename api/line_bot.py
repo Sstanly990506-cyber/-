@@ -1,14 +1,14 @@
 """LINE Messaging API integration.
 
-The webhook must verify LINE's signature against the raw request body. Push and
-reply calls intentionally use urllib so the app does not need another runtime
-dependency on Vercel or the local server.
+The webhook verifies LINE signatures, stores explicitly bound chat
+destinations, and answers small read-only queries against the system records.
 """
 import base64
 import hashlib
 import hmac
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -18,6 +18,7 @@ from api.records import list_records, upsert_record
 LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply'
 LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push'
 LINE_DESTINATION_ENTITY = 'lineDestinations'
+DONE_STATUS = '已完成'
 
 
 class LineBotError(Exception):
@@ -127,14 +128,15 @@ def _line_api_post(url, payload):
 def _handle_event(event):
     source = event.get('source') or {}
     destination_id, destination_type = _source_destination(source)
-    if destination_id:
-        _save_destination(destination_id, destination_type, event)
     reply_token = event.get('replyToken')
-    if event.get('type') in {'follow', 'join'} and reply_token:
-        _reply(reply_token, '已連線到三青系統。輸入「綁定」可接收系統通知，輸入「狀態」可查目前摘要。')
+    event_type = event.get('type')
+
+    if event_type in {'follow', 'join'} and reply_token:
+        _reply(reply_token, '已連線到三青系統。輸入「綁定」後，就能接收通知並用 LINE 查詢工單、客戶、應收與庫存。')
         return
-    if event.get('type') != 'message' or (event.get('message') or {}).get('type') != 'text':
+    if event_type != 'message' or (event.get('message') or {}).get('type') != 'text':
         return
+
     text = str((event.get('message') or {}).get('text') or '').strip()
     response = _build_reply_text(text, destination_id, destination_type)
     if reply_token and response:
@@ -151,7 +153,7 @@ def _source_destination(source):
     return '', ''
 
 
-def _save_destination(destination_id, destination_type, event):
+def _save_destination(destination_id, destination_type, event=None):
     now = int(time.time() * 1000)
     upsert_record(LINE_DESTINATION_ENTITY, destination_id, {
         'id': destination_id,
@@ -159,7 +161,7 @@ def _save_destination(destination_id, destination_type, event):
         'type': destination_type or 'user',
         'label': _mask_destination(destination_id),
         'active': True,
-        'lastEventType': event.get('type') or '',
+        'lastEventType': (event or {}).get('type') or '',
         'lastSeenAt': now,
         'createdAt': now,
     })
@@ -170,6 +172,12 @@ def _active_destinations():
     return [row for row in rows if row.get('active') is not False and (row.get('destinationId') or row.get('id'))]
 
 
+def _is_active_destination(destination_id):
+    if not destination_id:
+        return False
+    return any((row.get('destinationId') or row.get('id')) == destination_id for row in _active_destinations())
+
+
 def _reply(reply_token, text):
     _line_api_post(LINE_REPLY_URL, {
         'replyToken': reply_token,
@@ -178,15 +186,190 @@ def _reply(reply_token, text):
 
 
 def _build_reply_text(text, destination_id='', destination_type='user'):
-    normalized = text.replace(' ', '').lower()
+    normalized = _normalize_command(text)
     if normalized in {'綁定', 'bind', '加入通知'}:
+        _save_destination(destination_id, destination_type, {'type': 'message'})
         label = _mask_destination(destination_id)
-        return f'已綁定此 LINE {destination_type or "user"}：{label}\n之後系統可主動推送提醒到這裡。'
+        return f'已綁定此 LINE {destination_type or "user"}：{label}\n之後系統可主動推送提醒到這裡，也可以直接問我資料。'
+
+    if not _is_active_destination(destination_id):
+        return '請先輸入「綁定」，確認這個 LINE 聊天室可以查詢三青系統資料。'
+
     if normalized in {'狀態', 'status', '系統狀態'}:
         return _build_status_summary()
     if normalized in {'提醒', '通知', '財經', 'line提醒'}:
         return _build_system_reminder()
-    return '可用指令：\n- 綁定：接收系統推播\n- 狀態：查看工單/客戶/財務摘要\n- 提醒：查看目前需要注意事項'
+    if normalized in {'說明', 'help', '幫助', '?'}:
+        return _build_help_text()
+
+    answer = _build_query_reply(text)
+    return answer or _build_help_text()
+
+
+def _build_query_reply(text):
+    normalized = _normalize_command(text)
+    keyword = _extract_keyword(text)
+    if any(word in normalized for word in ('未完成工單', '待處理工單', '未結工單')):
+        return _reply_pending_orders(keyword)
+    if '工單' in normalized:
+        return _reply_orders(keyword)
+    if '客戶' in normalized or '客人' in normalized or '廠商' in normalized:
+        return _reply_customers(keyword)
+    if '應收' in normalized or '未收' in normalized or '收款' in normalized:
+        return _reply_receivables(keyword)
+    if '應付' in normalized or '未付' in normalized or '付款' in normalized:
+        return _reply_payables(keyword)
+    if '庫存' in normalized or '材料' in normalized:
+        return _reply_inventory(keyword)
+    if keyword:
+        return _reply_global_search(keyword)
+    return ''
+
+
+def _reply_orders(keyword=''):
+    rows = _search_records('orders', keyword, 5)
+    if not rows:
+        return f'查不到工單：{keyword or "未提供關鍵字"}'
+    lines = ['【工單查詢】']
+    for row in rows:
+        lines.append(_format_order(row))
+    return '\n'.join(lines)
+
+
+def _reply_pending_orders(keyword=''):
+    rows = _search_records('orders', keyword, 100)
+    pending = [row for row in rows if str(row.get('status') or '').strip() != DONE_STATUS]
+    if not pending:
+        return '目前查不到未完成工單。'
+    lines = [f'【未完成工單】共 {len(pending)} 筆，先列前 8 筆']
+    for row in pending[:8]:
+        lines.append(_format_order(row))
+    return '\n'.join(lines)
+
+
+def _reply_customers(keyword=''):
+    rows = _search_records('customers', keyword, 6)
+    if not rows:
+        return f'查不到客戶/廠商：{keyword or "未提供關鍵字"}'
+    lines = ['【客戶/廠商查詢】']
+    for row in rows:
+        fields = [
+            str(row.get('name') or '-'),
+            f'角色：{row.get("role") or "-"}',
+            f'統編：{row.get("taxId") or "-"}',
+            f'電話：{row.get("phone") or "-"}',
+            f'地址：{row.get("address") or "-"}',
+        ]
+        lines.append(' / '.join(fields))
+    return '\n'.join(lines)
+
+
+def _reply_receivables(keyword=''):
+    rows = _search_records('receivables', keyword, 100)
+    unpaid = [row for row in rows if _number(row.get('amount')) > _number(row.get('received'))]
+    if not unpaid:
+        return f'查不到應收未收資料：{keyword or "全部"}'
+    total = sum(_number(row.get('amount')) - _number(row.get('received')) for row in unpaid)
+    lines = [f'【應收未收】共 {len(unpaid)} 筆，合計 NT$ {int(total):,}']
+    for row in unpaid[:8]:
+        remain = _number(row.get('amount')) - _number(row.get('received'))
+        lines.append(f'- {row.get("customer") or "-"} / {row.get("orderNumber") or "-"} / 未收 NT$ {int(remain):,}')
+    return '\n'.join(lines)
+
+
+def _reply_payables(keyword=''):
+    rows = _search_records('payables', keyword, 100)
+    unpaid = [row for row in rows if _number(row.get('amount')) > _number(row.get('paid'))]
+    if not unpaid:
+        return f'查不到應付未付資料：{keyword or "全部"}'
+    total = sum(_number(row.get('amount')) - _number(row.get('paid')) for row in unpaid)
+    lines = [f'【應付未付】共 {len(unpaid)} 筆，合計 NT$ {int(total):,}']
+    for row in unpaid[:8]:
+        remain = _number(row.get('amount')) - _number(row.get('paid'))
+        lines.append(f'- {row.get("vendor") or "-"} / {row.get("item") or "-"} / 未付 NT$ {int(remain):,}')
+    return '\n'.join(lines)
+
+
+def _reply_inventory(keyword=''):
+    rows = _search_records('inventory', keyword, 8)
+    if not rows:
+        return f'查不到庫存：{keyword or "未提供關鍵字"}'
+    lines = ['【庫存查詢】']
+    for row in rows:
+        stock = row.get('stock') if row.get('stock') not in {None, ''} else '-'
+        safety = row.get('safetyStock') if row.get('safetyStock') not in {None, ''} else '-'
+        lines.append(f'- {row.get("material") or row.get("name") or "-"} / {row.get("category") or "-"} / 庫存 {stock}{row.get("unit") or ""} / 安全量 {safety}')
+    return '\n'.join(lines)
+
+
+def _reply_global_search(keyword):
+    sections = []
+    orders = _search_records('orders', keyword, 3)
+    customers = _search_records('customers', keyword, 3)
+    receivables = _search_records('receivables', keyword, 3)
+    if orders:
+        sections.append('工單：' + '、'.join(str(row.get('orderNumber') or '-') for row in orders))
+    if customers:
+        sections.append('客戶：' + '、'.join(str(row.get('name') or '-') for row in customers))
+    if receivables:
+        sections.append('應收：' + '、'.join(str(row.get('orderNumber') or row.get('customer') or '-') for row in receivables))
+    if not sections:
+        return f'查不到「{keyword}」。你可以試：工單 {keyword}、客戶 {keyword}、應收 {keyword}'
+    return '【綜合查詢】\n' + '\n'.join(sections)
+
+
+def _format_order(row):
+    customer = row.get('billingCustomer') or row.get('upstream') or row.get('downstream') or '-'
+    date = row.get('orderDate') or row.get('deliveryDate') or '-'
+    price = _number(row.get('totalPrice'))
+    price_text = f' / NT$ {int(price):,}' if price else ''
+    return f'- {row.get("orderNumber") or "-"} / {date} / {customer} / {row.get("status") or "未完成"}{price_text}'
+
+
+def _search_records(entity, keyword='', limit=5):
+    keyword = str(keyword or '').strip()
+    try:
+        query = keyword if keyword else ''
+        page_size = 100 if keyword else min(max(limit, 1), 100)
+        rows = list_records(entity, 1, page_size, query).get('items') or []
+    except Exception:
+        return []
+    if keyword:
+        rows = [row for row in rows if _matches_record(row, keyword)]
+    return rows[:limit]
+
+
+def _matches_record(row, keyword):
+    haystack = json.dumps(row or {}, ensure_ascii=False).lower()
+    compact_haystack = re.sub(r'\s+', '', haystack)
+    compact_keyword = re.sub(r'\s+', '', str(keyword or '').lower())
+    return compact_keyword in compact_haystack
+
+
+def _extract_keyword(text):
+    value = str(text or '').strip()
+    value = re.sub(r'^(查詢|查|找|搜尋|幫我查)\s*', '', value)
+    value = re.sub(r'^(工單|客戶|客人|廠商|應收|未收|收款|應付|未付|付款|庫存|材料)\s*', '', value)
+    value = re.sub(r'\s*(資料|狀態|多少|有哪些|幾筆)\s*$', '', value)
+    return value.strip()
+
+
+def _normalize_command(text):
+    return re.sub(r'\s+', '', str(text or '').strip()).lower()
+
+
+def _build_help_text():
+    return (
+        '可以這樣問我：\n'
+        '- 工單 115060162\n'
+        '- 未完成工單\n'
+        '- 客戶 三青\n'
+        '- 應收 佳德\n'
+        '- 應付 油墨\n'
+        '- 庫存 紙\n'
+        '- 狀態\n'
+        '- 提醒'
+    )
 
 
 def _build_status_summary():
@@ -197,7 +380,7 @@ def _build_status_summary():
         f'客戶：{counts["customers"]} 筆\n'
         f'應收：{counts["receivables"]} 筆\n'
         f'應付：{counts["payables"]} 筆\n'
-        f'通知目的地：{counts["lineDestinations"]} 個'
+        f'LINE 綁定：{counts["lineDestinations"]} 個'
     )
 
 
@@ -205,7 +388,7 @@ def _build_system_reminder():
     orders = list_records('orders', 1, 100).get('items') or []
     receivables = list_records('receivables', 1, 100).get('items') or []
     payables = list_records('payables', 1, 100).get('items') or []
-    pending = [row for row in orders if row.get('status') != '已完成']
+    pending = [row for row in orders if row.get('status') != DONE_STATUS]
     unpaid_receivables = [
         row for row in receivables
         if _number(row.get('amount')) > _number(row.get('received'))
@@ -217,7 +400,7 @@ def _build_system_reminder():
     lines = ['【三青系統提醒】', f'時間：{time.strftime("%Y-%m-%d %H:%M:%S")}', '']
     lines.append(f'未完成工單：{len(pending)} 筆')
     for row in pending[:5]:
-        lines.append(f'- {row.get("orderDate") or "-"} / {row.get("billingCustomer") or row.get("upstream") or "-"} / {row.get("status") or "未完成"}')
+        lines.append(_format_order(row))
     lines.append('')
     lines.append(f'應收未收：{len(unpaid_receivables)} 筆')
     for row in unpaid_receivables[:5]:
@@ -252,7 +435,7 @@ def _number(value):
 
 
 def _trim_text(text):
-    return str(text or '').strip()[:4900] or '目前沒有內容。'
+    return str(text or '').strip()[:4900] or '目前沒有可回覆的內容。'
 
 
 def _mask_destination(value):
