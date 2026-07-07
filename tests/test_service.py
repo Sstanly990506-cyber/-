@@ -32,6 +32,9 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(upsert.call_args.args[0], 'lineDestinations')
         self.assertEqual(upsert.call_args.args[1], 'U1234567890')
         self.assertEqual(line_post.call_args.args[0], 'https://api.line.me/v2/bot/message/reply')
+        message = line_post.call_args.args[1]['messages'][0]
+        self.assertIn('quickReply', message)
+        self.assertIn('未完成工單', [item['action']['label'] for item in message['quickReply']['items']])
 
     def test_line_query_requires_bound_destination(self):
         payload = {
@@ -74,6 +77,8 @@ class ServiceTests(unittest.TestCase):
         self.assertIn('【工單查詢】', reply_text)
         self.assertIn('WO-1', reply_text)
         self.assertIn('三青', reply_text)
+        labels = [item['action']['label'] for item in line_post.call_args.args[1]['messages'][0]['quickReply']['items']]
+        self.assertIn('查客戶', labels)
 
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):

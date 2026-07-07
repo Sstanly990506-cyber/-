@@ -46,3 +46,7 @@ Supported LINE reply commands include:
 - `應收 佳德`
 - `應付 油墨`
 - `庫存 紙`
+
+LINE replies also include quick-reply buttons for common actions, so users can
+tap `未完成工單`, `查工單`, `查客戶`, `查應收`, `查庫存`, `狀態`, `提醒`, or `說明`
+without memorizing command words.

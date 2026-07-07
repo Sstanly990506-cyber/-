@@ -178,11 +178,38 @@ def _is_active_destination(destination_id):
     return any((row.get('destinationId') or row.get('id')) == destination_id for row in _active_destinations())
 
 
-def _reply(reply_token, text):
+def _reply(reply_token, text, quick_reply=True):
     _line_api_post(LINE_REPLY_URL, {
         'replyToken': reply_token,
-        'messages': [{'type': 'text', 'text': _trim_text(text)}],
+        'messages': [_line_text_message(text, quick_reply)],
     })
+
+
+def _line_text_message(text, quick_reply=True):
+    message = {'type': 'text', 'text': _trim_text(text)}
+    if quick_reply:
+        message['quickReply'] = {'items': _quick_reply_items()}
+    return message
+
+
+def _quick_reply_items():
+    labels = [
+        ('未完成工單', '未完成工單'),
+        ('查工單', '工單'),
+        ('查客戶', '客戶'),
+        ('查應收', '應收'),
+        ('查庫存', '庫存'),
+        ('狀態', '狀態'),
+        ('提醒', '提醒'),
+        ('說明', '說明'),
+    ]
+    return [
+        {
+            'type': 'action',
+            'action': {'type': 'message', 'label': label, 'text': message},
+        }
+        for label, message in labels
+    ]
 
 
 def _build_reply_text(text, destination_id='', destination_type='user'):
