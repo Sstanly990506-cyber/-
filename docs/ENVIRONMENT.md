@@ -50,3 +50,7 @@ Supported LINE reply commands include:
 LINE replies also include quick-reply buttons for common actions, so users can
 tap `未完成工單`, `查工單`, `查客戶`, `查應收`, `查庫存`, `狀態`, `提醒`, or `說明`
 without memorizing command words.
+
+In groups or multi-person chats, the bot stays quiet during normal conversation.
+It only replies to explicit commands such as `綁定`, `未完成工單`, `工單 115060162`,
+or messages addressed to it, for example `三青 客戶 佳德`.
