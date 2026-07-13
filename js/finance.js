@@ -1,18 +1,10 @@
-import { $, COMPANY_INFO, money, downloadCsv, getTodayText } from './shared.js';
+﻿import { $, COMPANY_INFO, money, downloadCsv, getTodayText, escapeHtml } from './shared.js';
 import { getOrderReceivableKey } from './store.js';
 import { toTaiInch } from './pricing.js';
 
 const selectedInvoiceOrderIds = new Set();
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  }[char]));
-}
+// escapeHtml(value) is imported from shared.js so finance output uses one sanitizer.
 
 function inRange(state, dateText) {
   const { start, end } = state.reportRange;
@@ -23,7 +15,7 @@ function inRange(state, dateText) {
 }
 
 function getInvoiceEligibleOrders(state) {
-  return state.orders.filter((o) => ['已完成', '已送出'].includes(o.status));
+  return state.orders.filter((o) => ['撌脣???, '撌脤'].includes(o.status));
 }
 
 function getSelectedInvoiceOrders(state) {
@@ -58,10 +50,10 @@ function updateFinanceSmartHint(state) {
   if (!hint) return;
   const order = findOrderByNumber(state, $('recvOrderNumber')?.value || '');
   if (!order) {
-    hint.textContent = '智能建議：輸入工單編號可自動帶入客戶與金額。';
+    hint.textContent = '?箄撱箄降嚗撓?亙極?桃楊??芸?撣嗅摰Ｘ??憿?;
     return;
   }
-  hint.textContent = `智能建議：已找到工單 ${order.orderNumber || '-'}，可快速建立應收。`;
+  hint.textContent = `?箄撱箄降嚗歇?曉撌亙 ${order.orderNumber || '-'}嚗敹恍遣蝡??嗚;
 }
 
 function autofillReceivableFromOrder(state) {
@@ -89,12 +81,12 @@ function applyInvoiceBuyerBySelection(state) {
 
 function renderInvoiceMeta(meta) {
   return `<div class="meta">
-    <div>發票日期：${meta.date || '-'}</div>
-    <div>發票號碼：${meta.number || '-'}</div>
-    <div>買方名稱：${meta.buyerName || '-'}</div>
-    <div>買方統編：${meta.buyerTaxId || '-'}</div>
-    <div style="grid-column:1 / -1;">買方地址：${meta.buyerAddress || '-'}</div>
-    <div style="grid-column:1 / -1;">備註：${meta.note || '-'}</div>
+    <div>發票日期：${escapeHtml(meta.date || '-')}</div>
+    <div>發票號碼：${escapeHtml(meta.number || '-')}</div>
+    <div>買方名稱：${escapeHtml(meta.buyerName || '-')}</div>
+    <div>買方統編：${escapeHtml(meta.buyerTaxId || '-')}</div>
+    <div style="grid-column:1 / -1;">買方地址：${escapeHtml(meta.buyerAddress || '-')}</div>
+    <div style="grid-column:1 / -1;">備註：${escapeHtml(meta.note || '-')}</div>
   </div>`;
 }
 
@@ -106,8 +98,8 @@ function renderInvoicePicker(state) {
 
   const orders = getInvoiceEligibleOrders(state);
   if (!orders.length) {
-    wrap.innerHTML = '<p class="sub">目前沒有可開立發票工單。</p>';
-    summary.textContent = '已選 0 筆，合計 0 元';
+    wrap.innerHTML = '<p class="sub">?桀?瘝??舫?蝡蟡典極?柴?/p>';
+    summary.textContent = '撌脤 0 蝑??? 0 ??;
     return;
   }
 
@@ -115,38 +107,38 @@ function renderInvoicePicker(state) {
     const row = document.createElement('label');
     row.className = 'invoice-order-item';
     row.innerHTML = `
-      <input type="checkbox" data-invoice-order-id="${order.id}" ${selectedInvoiceOrderIds.has(order.id) ? 'checked' : ''} />
-      <strong>${order.orderNumber || '未填工單號'}</strong>
-      <span>${order.billingCustomer || order.downstream || order.upstream || '-'}</span>
-      <span>${order.orderDate || '-'}</span>
+      <input type="checkbox" data-invoice-order-id="${escapeHtml(order.id)}" ${selectedInvoiceOrderIds.has(order.id) ? 'checked' : ''} />
+      <strong>${escapeHtml(order.orderNumber || '?芸‵撌亙??)}</strong>
+      <span>${escapeHtml(order.billingCustomer || order.downstream || order.upstream || '-')}</span>
+      <span>${escapeHtml(order.orderDate || '-')}</span>
       <span>NT$ ${money(order.totalPrice || 0)}</span>`;
     wrap.append(row);
   });
 
   const selected = getSelectedInvoiceOrders(state);
   const total = selected.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0);
-  summary.textContent = `已選 ${selected.length} 筆，合計 ${money(total)} 元`;
+  summary.textContent = `撌脤 ${selected.length} 蝑??? ${money(total)} ?;
 }
 
 function openInvoiceWindow(state) {
   const selected = getSelectedInvoiceOrders(state);
   if (!selected.length) {
-    alert('請至少選擇一筆工單再匯出發票');
+    alert('隢撠??蝑極?桀??臬?潛巨');
     return;
   }
   const meta = getInvoiceMeta();
   const total = selected.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0);
   const rows = selected
-    .map((o, i) => `<tr><td>${i + 1}</td><td>${o.orderNumber || '-'}</td><td>${o.billingCustomer || o.downstream || o.upstream || '-'}</td><td>${o.orderDate || '-'}</td><td style="text-align:right;">${money(o.totalPrice || 0)}</td></tr>`)
+    .map((o, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(o.orderNumber || '-')}</td><td>${escapeHtml(o.billingCustomer || o.downstream || o.upstream || '-')}</td><td>${escapeHtml(o.orderDate || '-')}</td><td style="text-align:right;">${money(o.totalPrice || 0)}</td></tr>`)
     .join('');
 
-  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>發票匯出</title>
+  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>?潛巨?臬</title>
   <style>body{font-family:"Noto Sans TC",sans-serif;padding:16px}.copy{border:2px solid #555;padding:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:6px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}.sum{font-weight:700;text-align:right}</style></head><body>
-  <div class="copy"><h2>${COMPANY_INFO.name} 電子發票</h2><p>${COMPANY_INFO.address}</p>${renderInvoiceMeta(meta)}<table><thead><tr><th>#</th><th>工單</th><th>客戶</th><th>日期</th><th>金額</th></tr></thead><tbody>${rows}</tbody></table><div class="sum">合計：NT$ ${money(total)}</div></div>
+  <div class="copy"><h2>${escapeHtml(COMPANY_INFO.name)} ?餃??潛巨</h2><p>${escapeHtml(COMPANY_INFO.address)}</p>${renderInvoiceMeta(meta)}<table><thead><tr><th>#</th><th>撌亙</th><th>摰Ｘ</th><th>?交?</th><th>??</th></tr></thead><tbody>${rows}</tbody></table><div class="sum">??嚗T$ ${money(total)}</div></div>
   <script>window.print();</script></body></html>`;
 
   const win = window.open('', '_blank', 'width=980,height=760');
-  if (!win) return alert('請允許彈出視窗');
+  if (!win) return alert('隢?閮勗??箄?蝒?);
   win.document.write(html);
   win.document.close();
 }
@@ -155,7 +147,7 @@ export function getLinkedReceivablesData(state) {
   const orderMap = new Map();
 
   state.orders
-    .filter((o) => ['已完成', '已送出'].includes(o.status))
+    .filter((o) => ['撌脣???, '撌脤'].includes(o.status))
     .filter((o) => inRange(state, o.orderDate))
     .forEach((o) => {
       const key = getOrderReceivableKey(o);
@@ -185,7 +177,7 @@ export function getLinkedReceivablesData(state) {
         key,
         date: item.date || '',
         customer: item.customer || '-',
-        orderNumber: item.orderNumber || '(未填工單)',
+        orderNumber: item.orderNumber || '(?芸‵撌亙)',
         amount: Number(item.amount || 0),
         received: Number(item.received || 0),
       });
@@ -209,12 +201,12 @@ function getReportBData(state) {
 function getReportCData(state) {
   const map = new Map();
   state.receivables.filter((r) => inRange(state, r.date)).forEach((r) => {
-    const month = (r.date || '').slice(0, 7) || '未填日期';
+    const month = (r.date || '').slice(0, 7) || '?芸‵?交?';
     if (!map.has(month)) map.set(month, { month, income: 0, expense: 0 });
     map.get(month).income += Number(r.received || 0);
   });
   state.payables.filter((p) => inRange(state, p.date)).forEach((p) => {
-    const month = (p.date || '').slice(0, 7) || '未填日期';
+    const month = (p.date || '').slice(0, 7) || '?芸‵?交?';
     if (!map.has(month)) map.set(month, { month, income: 0, expense: 0 });
     map.get(month).expense += Number(p.paid || 0);
   });
@@ -254,7 +246,7 @@ function renderMonthClose(state, reportA) {
   if (monthInput && !monthInput.value) monthInput.value = currentMonthText();
   const data = getMonthCloseData(state, reportA, monthInput?.value);
   if ($('financeMonthSummary')) {
-    $('financeMonthSummary').textContent = `${data.month} 月結：已收 ${money(data.receivedTotal)}，已付 ${money(data.paidTotal)}，淨現金 ${money(data.cashNet)}，未收 ${money(data.receivableUnpaid)}，未付 ${money(data.payableUnpaid)}`;
+    $('financeMonthSummary').textContent = `${data.month} ??嚗歇??${money(data.receivedTotal)}嚗歇隞?${money(data.paidTotal)}嚗楊?暸? ${money(data.cashNet)}嚗??${money(data.receivableUnpaid)}嚗隞?${money(data.payableUnpaid)}`;
   }
   if ($('financeMonthCloseTbody')) {
     $('financeMonthCloseTbody').innerHTML = `
@@ -285,44 +277,44 @@ function getCustomerStatementRows(state, reportA) {
 function exportMonthClose(state, reportA) {
   const data = getMonthCloseData(state, reportA, $('financeCloseMonth')?.value);
   const rows = [
-    ['月份', '應收', '已收', '未收', '應付', '已付', '未付', '淨現金'],
+    ['?遢', '?', '撌脫', '?芣', '??', '撌脖?', '?芯?', '瘛函??],
     [data.month, data.receivableTotal, data.receivedTotal, data.receivableUnpaid, data.payableTotal, data.paidTotal, data.payableUnpaid, data.cashNet],
     [],
-    ['待收客戶', '工單', '日期', '應收', '已收', '未收'],
+    ['敺摰Ｘ', '撌亙', '?交?', '?', '撌脫', '?芣'],
     ...data.receivables.filter((r) => r.remain > 0).map((r) => [r.customer, r.orderNumber, r.date, r.amount, r.received, r.remain]),
     [],
-    ['待付供應商', '項目', '日期', '應付', '已付', '未付'],
+    ['敺?靘???, '?', '?交?', '??', '撌脖?', '?芯?'],
     ...data.payables.filter((p) => p.unpaid > 0).map((p) => [p.vendor, p.item, p.date, p.amount, p.paid, p.unpaid]),
   ];
-  downloadCsv(`月結-${data.month}.csv`, rows);
+  downloadCsv(`??-${data.month}.csv`, rows);
 }
 
 function exportCustomerStatement(state, reportA) {
   const statement = getCustomerStatementRows(state, reportA);
-  if (!statement.customer) return alert('請先輸入客戶名稱。');
-  if (!statement.rows.length) return alert('這個月份找不到該客戶的對帳資料。');
+  if (!statement.customer) return alert('隢?頛詨摰Ｘ?迂??);
+  if (!statement.rows.length) return alert('??隞賣銝閰脣恥?嗥?撠董鞈???);
   const totals = statement.rows.reduce((acc, r) => {
     acc.amount += Number(r.amount || 0);
     acc.received += Number(r.received || 0);
     acc.remain += Number(r.remain || 0);
     return acc;
   }, { amount: 0, received: 0, remain: 0 });
-  downloadCsv(`對帳單-${statement.customer}-${statement.month}.csv`, [
-    ['客戶', statement.customer],
-    ['月份', statement.month],
-    ['應收合計', totals.amount],
-    ['已收合計', totals.received],
-    ['未收合計', totals.remain],
+  downloadCsv(`撠董??${statement.customer}-${statement.month}.csv`, [
+    ['摰Ｘ', statement.customer],
+    ['?遢', statement.month],
+    ['???', totals.amount],
+    ['撌脫??', totals.received],
+    ['?芣??', totals.remain],
     [],
-    ['日期', '工單', '應收', '已收', '未收'],
+    ['?交?', '撌亙', '?', '撌脫', '?芣'],
     ...statement.rows.map((r) => [r.date, r.orderNumber, r.amount, r.received, r.remain]),
   ]);
 }
 
 function printCustomerStatement(state, reportA) {
   const statement = getCustomerStatementRows(state, reportA);
-  if (!statement.customer) return alert('請先輸入客戶名稱。');
-  if (!statement.rows.length) return alert('這個月份找不到該客戶的對帳資料。');
+  if (!statement.customer) return alert('隢?頛詨摰Ｘ?迂??);
+  if (!statement.rows.length) return alert('??隞賣銝閰脣恥?嗥?撠董鞈???);
   const totals = statement.rows.reduce((acc, r) => {
     acc.amount += Number(r.amount || 0);
     acc.received += Number(r.received || 0);
@@ -330,15 +322,15 @@ function printCustomerStatement(state, reportA) {
     return acc;
   }, { amount: 0, received: 0, remain: 0 });
   const rows = statement.rows.map((r) => `<tr><td>${escapeHtml(r.date || '-')}</td><td>${escapeHtml(r.orderNumber || '-')}</td><td>${money(r.amount)}</td><td>${money(r.received)}</td><td>${money(r.remain)}</td></tr>`).join('');
-  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>客戶對帳單</title>
+  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>摰Ｘ撠董??/title>
   <style>body{font-family:"Noto Sans TC",sans-serif;padding:18px;color:#111}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #777;padding:7px;text-align:left}.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;font-weight:700}</style></head><body>
-  <h2>${escapeHtml(COMPANY_INFO.name)} 客戶對帳單</h2>
-  <p>客戶：${escapeHtml(statement.customer)}　月份：${escapeHtml(statement.month)}</p>
-  <div class="sum"><span>應收：${money(totals.amount)}</span><span>已收：${money(totals.received)}</span><span>未收：${money(totals.remain)}</span></div>
-  <table><thead><tr><th>日期</th><th>工單</th><th>應收</th><th>已收</th><th>未收</th></tr></thead><tbody>${rows}</tbody></table>
+  <h2>${escapeHtml(COMPANY_INFO.name)} 摰Ｘ撠董??/h2>
+  <p>摰Ｘ嚗?{escapeHtml(statement.customer)}??遢嚗?{escapeHtml(statement.month)}</p>
+  <div class="sum"><span>?嚗?{money(totals.amount)}</span><span>撌脫嚗?{money(totals.received)}</span><span>?芣嚗?{money(totals.remain)}</span></div>
+  <table><thead><tr><th>?交?</th><th>撌亙</th><th>?</th><th>撌脫</th><th>?芣</th></tr></thead><tbody>${rows}</tbody></table>
   <script>window.print();</script></body></html>`;
   const win = window.open('', '_blank', 'width=980,height=760');
-  if (!win) return alert('請允許彈出視窗');
+  if (!win) return alert('隢?閮勗??箄?蝒?);
   win.document.write(html);
   win.document.close();
 }
@@ -351,8 +343,8 @@ function renderFinanceInsights(state, reportA) {
   const recent = [...state.audits].slice(0, 5);
   const recentWrap = $('financeRecentChanges');
   recentWrap.innerHTML = recent.length
-    ? recent.map((a) => `<li>${a.changedAt || '-'}｜${a.orderNumber || '-'}｜${a.field || '-'}：${a.before} → ${a.after}</li>`).join('')
-    : '<li>目前沒有異動紀錄</li>';
+    ? recent.map((a) => `<li>${escapeHtml(a.changedAt || '-')}嚚?{escapeHtml(a.orderNumber || '-')}嚚?{escapeHtml(a.field || '-')}嚗?{escapeHtml(a.before)} ??${escapeHtml(a.after)}</li>`).join('')
+    : '<li>?桀?瘝??啣?蝝??/li>';
 
   const dueLimit = new Date();
   dueLimit.setDate(dueLimit.getDate() + 7);
@@ -360,8 +352,8 @@ function renderFinanceInsights(state, reportA) {
   $('financeDueSoonCount').textContent = String(dueSoon.length);
   const dueWrap = $('financeDueSoonList');
   dueWrap.innerHTML = dueSoon.length
-    ? dueSoon.map((r) => `<li>${r.date}｜${r.customer}｜${r.orderNumber}｜未收 ${money(r.remain)}</li>`).join('')
-    : '<li>7 日內無快到期帳款</li>';
+    ? dueSoon.map((r) => `<li>${escapeHtml(r.date)}嚚?{escapeHtml(r.customer)}嚚?{escapeHtml(r.orderNumber)}嚚??${money(r.remain)}</li>`).join('')
+    : '<li>7 ?亙?∪翰?唳?撣單狡</li>';
 }
 
 function renderFinanceChartAndAnalysis(reportC, reportA) {
@@ -374,9 +366,9 @@ function renderFinanceChartAndAnalysis(reportC, reportA) {
     ? recent.map((row) => {
       const net = Number(row.net || 0);
       const width = Math.round((Math.abs(net) / maxNet) * 100);
-      return `<div class="chart-bar-row"><span>${row.month}</span><div class="chart-bar-track"><div class="chart-bar-fill ${net < 0 ? 'neg' : ''}" style="width:${width}%"></div></div><strong>${money(net)}</strong></div>`;
+      return `<div class="chart-bar-row"><span>${escapeHtml(row.month)}</span><div class="chart-bar-track"><div class="chart-bar-fill ${net < 0 ? 'neg' : ''}" style="width:${width}%"></div></div><strong>${money(net)}</strong></div>`;
     }).join('')
-    : '<p class="sub">目前沒有月報資料</p>';
+    : '<p class="sub">?桀?瘝??鞈?</p>';
 
   const totalRecv = reportA.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const totalReceived = reportA.reduce((sum, row) => sum + Number(row.received || 0), 0);
@@ -386,11 +378,11 @@ function renderFinanceChartAndAnalysis(reportC, reportA) {
   $('financeAvgNet6m').textContent = money(Math.round(avgNet));
 
   const insights = [];
-  if (avgNet < 0) insights.push('近 6 月平均淨額為負，建議優先檢視高成本工單與應付付款節奏。');
-  if (collectionRate < 70) insights.push(`收款率 ${collectionRate.toFixed(1)}% 偏低，建議啟動催收流程。`);
+  if (avgNet < 0) insights.push('餈?6 ?像?楊憿鞎?撱箄降?芸?瑼Ｚ?擃??砍極?株???隞狡蝭憟?);
+  if (collectionRate < 70) insights.push(`?嗆狡??${collectionRate.toFixed(1)}% ??嚗遣霅啣???嗆?蝔);
   const topOverdue = [...reportA].filter((r) => r.remain > 0).sort((a, b) => b.remain - a.remain).slice(0, 3);
-  if (topOverdue.length) insights.push(`未收風險前 3 名：${topOverdue.map((r) => `${r.customer}/${money(r.remain)}`).join('、')}`);
-  analysis.innerHTML = (insights.length ? insights : ['財務結構穩定，請持續追蹤帳齡與月報。']).map((line) => `<li>${line}</li>`).join('');
+  if (topOverdue.length) insights.push(`?芣憸券??3 ??${topOverdue.map((r) => `${r.customer}/${money(r.remain)}`).join('??)}`);
+  analysis.innerHTML = (insights.length ? insights : ['鞎∪?蝯?蝛拙?嚗???餈質馱撣喲翩???晞?]).map((line) => `<li>${escapeHtml(line)}</li>`).join('');
 }
 
 
@@ -405,10 +397,10 @@ function renderFinanceQuickActions(state, reportA) {
         <td>${escapeHtml(r.orderNumber || '-')}</td>
         <td>${money(r.remain)}</td>
         <td class="table-actions">
-          <button class="btn small" type="button" data-finance-receivable-done="${escapeHtml(r.key)}">收清</button>
-          <button class="btn small ghost" type="button" data-finance-receivable-delete="${escapeHtml(r.key)}">刪除</button>
+          <button class="btn small" type="button" data-finance-receivable-done="${escapeHtml(r.key)}">?嗆?</button>
+          <button class="btn small ghost" type="button" data-finance-receivable-delete="${escapeHtml(r.key)}">?芷</button>
         </td>
-      </tr>`).join('') : '<tr><td colspan="4">目前沒有待收款。</td></tr>';
+      </tr>`).join('') : '<tr><td colspan="4">?桀?瘝?敺甈整?/td></tr>';
   }
   if (payableWrap) {
     const rows = state.payables
@@ -422,10 +414,10 @@ function renderFinanceQuickActions(state, reportA) {
         <td>${escapeHtml(p.item || '-')}</td>
         <td>${money(p.unpaid)}</td>
         <td class="table-actions">
-          <button class="btn small" type="button" data-finance-payable-done="${escapeHtml(p.id)}">付清</button>
-          <button class="btn small ghost" type="button" data-finance-payable-delete="${escapeHtml(p.id)}">刪除</button>
+          <button class="btn small" type="button" data-finance-payable-done="${escapeHtml(p.id)}">隞?</button>
+          <button class="btn small ghost" type="button" data-finance-payable-delete="${escapeHtml(p.id)}">?芷</button>
         </td>
-      </tr>`).join('') : '<tr><td colspan="4">目前沒有待付款。</td></tr>';
+      </tr>`).join('') : '<tr><td colspan="4">?桀?瘝?敺?甈整?/td></tr>';
   }
 }
 
@@ -439,16 +431,16 @@ function buildTodayAlerts(state, reportA) {
   const dueSoon = reportA.filter((r) => r.remain > 0 && r.date && new Date(r.date) <= dueLimit);
 
   const alerts = [];
-  unpaidToday.forEach((p) => alerts.push(`應付未付：${p.vendor || '-'} / ${p.item || '-'} / 未付 ${money(Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)))}`));
-  dueSoon.forEach((r) => alerts.push(`應收提醒：${r.customer} / ${r.orderNumber} / 未收 ${money(r.remain)}`));
-  alerts.push(...auditToday.slice(0, 3).map((a) => `今日異動：${a.orderNumber || '-'} ${a.field || '-'} ${a.before}→${a.after}`));
-  return alerts.length ? alerts : ['今日暫無提醒'];
+  unpaidToday.forEach((p) => alerts.push(`???芯?嚗?{p.vendor || '-'} / ${p.item || '-'} / ?芯? ${money(Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)))}`));
+  dueSoon.forEach((r) => alerts.push(`???嚗?{r.customer} / ${r.orderNumber} / ?芣 ${money(r.remain)}`));
+  alerts.push(...auditToday.slice(0, 3).map((a) => `隞?啣?嚗?{a.orderNumber || '-'} ${a.field || '-'} ${a.before}??{a.after}`));
+  return alerts.length ? alerts : ['隞?怎??'];
 }
 
 function renderTodayAlerts(state, reportA) {
   const alerts = buildTodayAlerts(state, reportA);
   const wrap = $('financeTodayAlerts');
-  if (wrap) wrap.innerHTML = alerts.map((a) => `<li>${a}</li>`).join('');
+  if (wrap) wrap.innerHTML = alerts.map((a) => `<li>${escapeHtml(a)}</li>`).join('');
   return alerts;
 }
 
@@ -461,30 +453,30 @@ function buildFinanceLineReminder(state, reportA) {
     .slice(0, 5);
 
   const lines = [];
-  lines.push(`【${COMPANY_INFO.name} 財經智能提醒】`);
-  lines.push(`時間：${new Date().toLocaleString()}`);
+  lines.push(`??{COMPANY_INFO.name} 鞎∠??箄???);
+  lines.push(`??嚗?{new Date().toLocaleString()}`);
   lines.push('');
 
   if (dueCritical.length) {
-    lines.push('🔴 應收逾期（>=30天）');
-    dueCritical.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / 未收 ${money(r.remain)} / 帳齡 ${r.age} 天`));
+    lines.push('? ??暹?嚗?=30憭抬?');
+    dueCritical.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / ?芣 ${money(r.remain)} / 撣喲翩 ${r.age} 憭奈));
     lines.push('');
   }
 
   if (dueSoon.length) {
-    lines.push('🟠 應收警示（7~29天）');
-    dueSoon.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / 未收 ${money(r.remain)} / 帳齡 ${r.age} 天`));
+    lines.push('?? ?霅衣內嚗?~29憭抬?');
+    dueSoon.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / ?芣 ${money(r.remain)} / 撣喲翩 ${r.age} 憭奈));
     lines.push('');
   }
 
   if (unpaid.length) {
-    lines.push('🔵 應付待付款');
-    unpaid.forEach((p) => lines.push(`- ${p.vendor || '-'} / ${p.item || '-'} / 未付 ${money(p.unpaid)}`));
+    lines.push('? ??敺?甈?);
+    unpaid.forEach((p) => lines.push(`- ${p.vendor || '-'} / ${p.item || '-'} / ?芯? ${money(p.unpaid)}`));
     lines.push('');
   }
 
   if (!dueCritical.length && !dueSoon.length && !unpaid.length) {
-    lines.push('✅ 今日財經狀態正常，無需特別提醒。');
+    lines.push('??隞鞎∠???迤撣賂??⊿??孵????);
   }
 
   return lines.join('\n');
@@ -517,7 +509,7 @@ function ensureFinanceOverview(state, reportA) {
   const main = $('financeMainScreen');
   if (!main) return;
   const heading = main.querySelector(':scope > h3');
-  if (heading) heading.textContent = state.financeScreen === 'concerns' ? '疑慮待辦' : '財經重點';
+  if (heading) heading.textContent = state.financeScreen === 'concerns' ? '?敺齒' : '鞎∠???';
 
   if (!$('financeOverviewIntro')) {
     const intro = document.createElement('div');
@@ -525,13 +517,13 @@ function ensureFinanceOverview(state, reportA) {
     intro.className = 'finance-overview-intro';
     intro.innerHTML = `
       <div>
-        <strong>先看重點，需要時再深入</strong>
-        <p class="sub">首頁只顯示重要金額與疑慮數量，完整資料仍保留在各功能頁。</p>
+        <strong>????嚗?閬??楛??/strong>
+        <p class="sub">擐??芷＊蝷粹?閬?憿???賊?嚗??渲???靽??典????/p>
       </div>
       <div class="finance-overview-actions">
-        <button class="finance-action-card" type="button" data-finance-screen="concerns"><strong>疑慮待辦</strong><span>逾期應收、待付款與近期異動</span></button>
-        <button class="finance-action-card" type="button" data-finance-screen="entry"><strong>新增收付款</strong><span>登錄應收或應付資料</span></button>
-        <button class="finance-action-card" type="button" data-finance-screen="workspace"><strong>發票與報表</strong><span>發票、月結與客戶對帳</span></button>
+        <button class="finance-action-card" type="button" data-finance-screen="concerns"><strong>?敺齒</strong><span>?暹????隞狡?????/span></button>
+        <button class="finance-action-card" type="button" data-finance-screen="entry"><strong>?啣??嗡?甈?/strong><span>?駁????隞???/span></button>
+        <button class="finance-action-card" type="button" data-finance-screen="workspace"><strong>?潛巨?銵?/strong><span>?潛巨??蝯?摰Ｘ撠董</span></button>
       </div>`;
     heading?.after(intro);
 
@@ -539,7 +531,7 @@ function ensureFinanceOverview(state, reportA) {
     if (kpiGrid) {
       const concern = document.createElement('div');
       concern.className = 'kpi finance-concern-kpi';
-      concern.innerHTML = '<span>需要注意</span><strong id="financeConcernCount">0</strong>';
+      concern.innerHTML = '<span>?閬釣??/span><strong id="financeConcernCount">0</strong>';
       kpiGrid.append(concern);
     }
   }
@@ -587,9 +579,9 @@ export function renderFinance(state) {
   $('kpiExpense').textContent = money(monthRow.expense);
   $('kpiNet').textContent = money(monthRow.net);
 
-  $('reportATbody').innerHTML = reportA.map((r) => `<tr><td>${r.customer}</td><td>${r.orderNumber}</td><td>${money(r.amount)}</td><td>${money(r.received)}</td><td>${money(r.remain)}</td><td>${r.age}</td></tr>`).join('');
-  $('reportBTbody').innerHTML = reportB.map((r) => `<tr><td>${r.orderNumber}</td><td>${r.customer}</td><td>${money(r.revenue)}</td><td>${money(r.cost)}</td><td>${money(r.gross)}</td></tr>`).join('');
-  $('reportCTbody').innerHTML = reportC.map((r) => `<tr><td>${r.month}</td><td>${money(r.income)}</td><td>${money(r.expense)}</td><td>${money(r.net)}</td></tr>`).join('');
+  $('reportATbody').innerHTML = reportA.map((r) => `<tr><td>${escapeHtml(r.customer)}</td><td>${escapeHtml(r.orderNumber)}</td><td>${money(r.amount)}</td><td>${money(r.received)}</td><td>${money(r.remain)}</td><td>${escapeHtml(r.age)}</td></tr>`).join('');
+  $('reportBTbody').innerHTML = reportB.map((r) => `<tr><td>${escapeHtml(r.orderNumber)}</td><td>${escapeHtml(r.customer)}</td><td>${money(r.revenue)}</td><td>${money(r.cost)}</td><td>${money(r.gross)}</td></tr>`).join('');
+  $('reportCTbody').innerHTML = reportC.map((r) => `<tr><td>${escapeHtml(r.month)}</td><td>${money(r.income)}</td><td>${money(r.expense)}</td><td>${money(r.net)}</td></tr>`).join('');
 
   $('reportStart').value = state.reportRange.start;
   $('reportEnd').value = state.reportRange.end;
@@ -653,19 +645,19 @@ export function bindFinanceEvents(state, saveState, renderAll) {
   });
 
   $('exportReportABtn')?.addEventListener('click', () => {
-    const rows = [['客戶', '工單', '應收', '已收', '未收', '帳齡(天)']];
+    const rows = [['摰Ｘ', '撌亙', '?', '撌脫', '?芣', '撣喲翩(憭?']];
     getLinkedReceivablesData(state).forEach((r) => rows.push([r.customer, r.orderNumber, r.amount, r.received, r.remain, r.age]));
-    downloadCsv('report-A-應收帳齡.csv', rows);
+    downloadCsv('report-A-?撣喲翩.csv', rows);
   });
   $('exportReportBBtn')?.addEventListener('click', () => {
-    const rows = [['工單', '客戶', '收入', '估算成本(70%)', '毛利']];
+    const rows = [['撌亙', '摰Ｘ', '?嗅', '隡啁??(70%)', '瘥']];
     getReportBData(state).forEach((r) => rows.push([r.orderNumber, r.customer, r.revenue, r.cost, r.gross]));
-    downloadCsv('report-B-毛利.csv', rows);
+    downloadCsv('report-B-瘥.csv', rows);
   });
   $('exportReportCBtn')?.addEventListener('click', () => {
-    const rows = [['月份', '收入', '支出', '淨額']];
+    const rows = [['?遢', '?嗅', '?臬', '瘛券?']];
     getReportCData(state).forEach((r) => rows.push([r.month, r.income, r.expense, r.net]));
-    downloadCsv('report-C-收支月報.csv', rows);
+    downloadCsv('report-C-?嗆?.csv', rows);
   });
   $('financeCloseMonth')?.addEventListener('change', () => renderMonthClose(state, getLinkedReceivablesData(state)));
   $('exportMonthCloseBtn')?.addEventListener('click', () => exportMonthClose(state, getLinkedReceivablesData(state)));
@@ -693,9 +685,9 @@ export function bindFinanceEvents(state, saveState, renderAll) {
   $('sendLineReminderBtn')?.addEventListener('click', async () => {
     try {
       const result = await sendFinanceLineReminder(state, getLinkedReceivablesData(state));
-      alert(`LINE 財經提醒已送出：${result.sent || 0} 個聊天室。`);
+      alert(`LINE 鞎∠???撌脤嚗?{result.sent || 0} ??憭拙恕?);
     } catch (err) {
-      alert(`LINE 財經提醒失敗：${err.message}`);
+      alert(`LINE 鞎∠???憭望?嚗?{err.message}`);
     }
   });
 
@@ -714,8 +706,8 @@ export function bindFinanceEvents(state, saveState, renderAll) {
       }
     }
     if (remove) {
-      if (!item) return alert('這筆是從工單自動帶出的應收；請到工單調整金額或狀態。');
-      if (!window.confirm('確定要刪除這筆應收資料嗎？')) return;
+      if (!item) return alert('???臬?撌亙?芸?撣嗅???塚?隢撌亙隤踵??????);
+      if (!window.confirm('蝣箏?閬?日??鞈???')) return;
       state.receivables = state.receivables.filter((r) => r.id !== item.id);
     }
     saveState();
@@ -731,7 +723,7 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     if (!item) return;
     if (done) item.paid = Number(item.amount || 0);
     if (remove) {
-      if (!window.confirm('確定要刪除這筆應付資料嗎？')) return;
+      if (!window.confirm('蝣箏?閬?日???鞈???')) return;
       state.payables = state.payables.filter((p) => p.id !== id);
     }
     saveState();

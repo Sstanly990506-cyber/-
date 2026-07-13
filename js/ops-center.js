@@ -1,4 +1,4 @@
-import { $, money } from './shared.js';
+import { $, money, escapeHtml } from './shared.js';
 
 function olderThan(dateText, days) {
   if (!dateText) return false;
@@ -24,13 +24,13 @@ export function renderOpsCenter(state) {
 
   if ($('opsDelayedList')) {
     $('opsDelayedList').innerHTML = delayedOrders.length
-      ? delayedOrders.slice(0, 8).map((order) => `<li><button class="btn ops-link-btn" data-open-order="${order.id}">${order.orderNumber || '-'}｜${order.downstream || order.upstream || '-'}｜${order.orderDate || '-'}｜${order.status || '未完成'}</button></li>`).join('')
+      ? delayedOrders.slice(0, 8).map((order) => `<li><button class="btn ops-link-btn" data-open-order="${escapeHtml(order.id)}">${escapeHtml(order.orderNumber || '-')}｜${escapeHtml(order.downstream || order.upstream || '-')}｜${escapeHtml(order.orderDate || '-')}｜${escapeHtml(order.status || '未完成')}</button></li>`).join('')
       : '<li>目前沒有逾期待處理工單。</li>';
   }
 
   if ($('opsMissingDataList')) {
     $('opsMissingDataList').innerHTML = missingDataOrders.length
-      ? missingDataOrders.slice(0, 8).map((order) => `<li><button class="btn ops-link-btn" data-open-order="${order.id}">${order.orderNumber || '-'}｜缺少${!order.address ? '地址' : ''}${!order.address && Number(order.totalPrice || 0) <= 0 ? '、' : ''}${Number(order.totalPrice || 0) <= 0 ? '總價' : ''}</button></li>`).join('')
+      ? missingDataOrders.slice(0, 8).map((order) => `<li><button class="btn ops-link-btn" data-open-order="${escapeHtml(order.id)}">${escapeHtml(order.orderNumber || '-')}｜缺少${!order.address ? '地址' : ''}${!order.address && Number(order.totalPrice || 0) <= 0 ? '、' : ''}${Number(order.totalPrice || 0) <= 0 ? '總價' : ''}</button></li>`).join('')
       : '<li>目前沒有資料不完整的工單。</li>';
   }
 }

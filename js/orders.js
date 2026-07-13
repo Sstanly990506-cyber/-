@@ -2,6 +2,7 @@ import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
+import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
@@ -997,7 +998,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('exportOrderBtn')?.addEventListener('click', () => {
-    openOrderExportWindow(buildOrderFromForm(state));
+    openOrderExportWindowFromModule(buildOrderFromForm(state));
   });
 
   $('priceRuleForm')?.addEventListener('submit', (e) => {

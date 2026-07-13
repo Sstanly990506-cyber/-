@@ -1,4 +1,4 @@
-import { $, money, downloadCsv } from './shared.js';
+﻿import { $, money, downloadCsv, escapeHtml } from './shared.js';
 
 function buildItem(state) {
   return {
@@ -50,20 +50,20 @@ export function renderInventory(state) {
   const visible = getVisibleInventoryItems(state);
   if ($('inventoryItemsCount')) $('inventoryItemsCount').textContent = String(items.length);
   if ($('inventoryLowCount')) $('inventoryLowCount').textContent = String(items.filter((item) => Number(item.stock || 0) <= Number(item.safetyStock || 0)).length);
-  if ($('inventoryStockValue')) $('inventoryStockValue').textContent = `合計 ${money(items.reduce((sum, item) => sum + Number(item.stock || 0), 0))}`;
+  if ($('inventoryStockValue')) $('inventoryStockValue').textContent = `?? ${money(items.reduce((sum, item) => sum + Number(item.stock || 0), 0))}`;
   if (!body) return;
   body.innerHTML = visible.map((item) => {
     const low = Number(item.stock || 0) <= Number(item.safetyStock || 0);
     const danger = Number(item.stock || 0) <= Number(item.safetyStock || 0) * 0.5;
     return `<tr>
-      <td><span class="${danger ? 'stock-danger' : low ? 'stock-warning' : ''}">${item.material || '-'}</span></td>
-      <td>${item.category || '-'}</td>
-      <td>${money(item.stock)} ${item.unit || ''}</td>
-      <td>${money(item.safetyStock)} ${item.unit || ''}</td>
-      <td><span class="tag ${danger ? 'danger' : low ? 'warn' : ''}">${danger ? '危險' : low ? '低庫存' : '正常'}</span></td>
-      <td>${item.note || '-'}</td>
-      <td>${item.updatedAt || '-'}</td>
-      <td><button class="btn" data-edit-inventory="${item.id}">編輯</button></td>
+      <td><span class="${danger ? 'stock-danger' : low ? 'stock-warning' : ''}">${escapeHtml(item.material || '-')}</span></td>
+      <td>${escapeHtml(item.category || '-')}</td>
+      <td>${money(item.stock)} ${escapeHtml(item.unit || '')}</td>
+      <td>${money(item.safetyStock)} ${escapeHtml(item.unit || '')}</td>
+      <td><span class="tag ${danger ? 'danger' : low ? 'warn' : ''}">${danger ? '?梢' : low ? '雿澈摮? : '甇?虜'}</span></td>
+      <td>${escapeHtml(item.note || '-')}</td>
+      <td>${escapeHtml(item.updatedAt || '-')}</td>
+      <td><button class="btn" data-edit-inventory="${escapeHtml(item.id)}">蝺刻摩</button></td>
     </tr>`;
   }).join('');
 }
@@ -72,7 +72,7 @@ export function bindInventoryEvents(state, saveState, renderAll) {
   $('inventoryForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const item = buildItem(state);
-    if (!item.material) return alert('請輸入品項名稱');
+    if (!item.material) return alert('隢撓?亙???蝔?);
     const idx = state.inventoryItems.findIndex((row) => row.id === item.id);
     if (idx >= 0) state.inventoryItems[idx] = item;
     else state.inventoryItems.unshift(item);
@@ -86,7 +86,7 @@ export function bindInventoryEvents(state, saveState, renderAll) {
   $('inventorySort')?.addEventListener('change', () => renderInventory(state));
 
   $('inventoryExportBtn')?.addEventListener('click', () => {
-    const rows = [['品項', '分類', '庫存量', '單位', '安全庫存', '備註', '更新時間']];
+    const rows = [['??', '??', '摨怠???, '?桐?', '摰摨怠?', '?酉', '?湔??']];
     getVisibleInventoryItems(state).forEach((item) => rows.push([item.material, item.category, item.stock, item.unit, item.safetyStock, item.note, item.updatedAt]));
     downloadCsv('inventory-items.csv', rows);
   });

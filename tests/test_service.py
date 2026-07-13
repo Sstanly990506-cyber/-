@@ -159,6 +159,32 @@ class ServiceTests(unittest.TestCase):
             handle_line_webhook(body, signature)
         self.assertIn('媽媽公司', line_post.call_args.args[1]['messages'][0]['text'])
 
+    def test_line_group_chat_ignores_unlisted_member_when_allowlist_is_set(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'group', 'groupId': 'G1234567890', 'userId': 'UOTHER'},
+                'message': {'type': 'text', 'text': '@銝? 摰Ｘ 慦賢直'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        with patch.dict('os.environ', {
+            'LINE_CHANNEL_SECRET': 'secret',
+            'LINE_CHANNEL_ACCESS_TOKEN': 'token',
+            'LINE_ALLOWED_USER_IDS': 'UADMIN',
+        }), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        line_post.assert_not_called()
+
+    def test_line_allowlist_helper_parses_config(self):
+        from api import line_bot
+        with patch.dict('os.environ', {'LINE_ALLOWED_USER_IDS': 'UADMIN,UOTHER'}):
+            self.assertTrue(line_bot._is_line_user_allowed({'userId': 'UOTHER'}))
+            self.assertFalse(line_bot._is_line_user_allowed({'userId': 'UUNKNOWN'}))
+
     def test_line_group_chat_replies_to_line_mention_metadata(self):
         mention_text = '@官方帳號 客戶 媽媽'
         payload = {

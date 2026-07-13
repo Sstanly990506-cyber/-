@@ -1,34 +1,53 @@
 # 系統架構
 
-## 後端
+## 前端載入流程
 
-- `api/service.py`：共用 API 服務層，集中登入、權限、資料 API 與車趟最佳化驗證。
-- `api/records.py`：單筆紀錄儲存、分頁搜尋、刪除標記、增量同步與後端報表。
-- `api_server.py`：Flask 傳輸層；未安裝 Flask 時負責啟動內建伺服器。
-- `api/http_server.py`：Python 內建 HTTP 傳輸層。
-- `api/storage.py`：帳號、Session、舊版狀態與 PostgreSQL 基礎儲存。
+- `index.html`: 只保留網站外殼與必要資源。
+- `js/view-loader.js`: 載入 `views/app-shell.html`。
+- `views/app-shell.html`: 放主要畫面結構。
+- `js/main.js`: 啟動應用、登入、同步資料、權限與模組切換。
 
-傳輸層只負責讀取請求與輸出回應，登入、權限與業務驗證集中在 `api/service.py`，避免兩種伺服器行為不同。
+各功能拆在 `js/` 目錄：
 
-正式環境的營運資料使用 PostgreSQL `app_records`，每筆資料以 `(entity, record_id)` 為主鍵獨立更新，並以 `updated_at` 索引支援增量同步。第一次啟動會自動將舊版整包狀態遷移為單筆紀錄。
+- `orders.js`: 工單新增、列表、狀態與 AI 識別入口。
+- `orders-export.js`: 工單列印與輸出 HTML。
+- `orders-pricing.js` / `pricing.js`: 報價規則與價格計算。
+- `customers.js`: 客戶與廠商資料。
+- `finance.js`: 應收、應付、報表、發票與財務提醒。
+- `trips.js` 與 `js/trips/`: 車趟與路線。
+- `inventory.js`: 庫存。
+- `audit.js`: 稽核紀錄。
+- `notifications.js`: 通知與 LINE 設定狀態。
+- `settings.js`: 系統設定、帳號權限與容量檢測。
 
-## 資料 API
+## 後端流程
 
-- `GET /api/bootstrap`：只載入輕量設定。
-- `GET /api/data/<entity>`：分頁與搜尋，預設 100 筆、上限 500 筆。
-- `PUT/DELETE /api/data/<entity>/<id>`：單筆新增、更新與刪除。
-- `GET /api/changes`：只取得指定時間後的變更。
-- `GET /api/reports/summary`：由後端計算摘要報表。
+- `api_server.py`: 本機 Flask 入口。
+- `api/index.py`: Vercel 入口，重用同一個 Flask app。
+- `api/routes.py`: API 路由。
+- `api/service.py`: 登入、權限、資料 API、報表與設定邏輯。
+- `api/records.py`: 統一資料讀寫介面。
+- `api/storage.py`: PostgreSQL 與本機 JSON 儲存實作。
+- `api/line_bot.py`: LINE webhook、推播、綁定與查詢回覆。
+- `api/openai_client.py`: AI 工單辨識。
 
-## 前端
+所有資料讀寫應集中經過 `api/records.py` / `api/service.py`，避免前端、本機伺服器與 Vercel 各自維護一份邏輯。
 
-- `js/main.js`：應用程式啟動、頁面導航與角色顯示。
-- `js/store.js`：前端分頁狀態、單筆儲存與增量同步；`localStorage` 只保存介面設定。
-- `js/shared.js`：共用格式化、設定合併與純文字清理。
-- 其他 `js/*.js`：各功能模組。
+## 儲存模式
 
-所有可設定文字進入動態畫面前，必須經過 `sanitizePlainText()` 或使用 `textContent` 寫入。新增功能畫面應放在對應模組，避免繼續擴大 `index.html`。
+正式環境建議設定 `DATABASE_URL` 使用 PostgreSQL。若沒有設定，系統會使用本機 JSON 檔，適合開發與測試，但不適合正式部署。
+
+## 安全原則
+
+- 使用者輸入或資料庫資料要放進 HTML 時，必須先使用 `escapeHtml()`，或改用 `textContent`。
+- 不要在前端硬編敏感金鑰。
+- 正式環境必須設定 `APP_SESSION_SECRET`。
+- LINE 群組查詢可用 `LINE_ALLOWED_USER_IDS` 限制可查詢的人。
 
 ## 測試
 
-`tests/` 使用 Python 標準函式庫 `unittest`。CI 會執行 Python 編譯、共用服務測試、分頁紀錄測試與靜態架構檢查。容量說明請見 [CAPACITY.md](CAPACITY.md)。
+主要測試位於 `tests/`，使用 Python `unittest`。執行：
+
+```bash
+python -m unittest discover -s tests -v
+```

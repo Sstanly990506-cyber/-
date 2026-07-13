@@ -58,6 +58,16 @@ export const getTodayText = () => new Date().toISOString().slice(0, 10);
 export const getDefaultSettings = () => JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 export const formatTs = (ts) => ts ? new Date(ts).toLocaleTimeString() : '已儲存';
 
+export function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[char]));
+}
+
 export function sanitizePlainText(value, maxLength = 200) {
   return String(value ?? '').replace(/[<>\u0000-\u001f]/g, '').trim().slice(0, maxLength);
 }

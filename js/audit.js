@@ -1,4 +1,4 @@
-import { $, downloadCsv } from './shared.js';
+﻿import { $, downloadCsv, escapeHtml } from './shared.js';
 
 export function getFilteredAudits(state) {
   const { start, end, keyword, user = '', field = '', anomalyOnly = false } = state.auditFilter;
@@ -21,7 +21,7 @@ function isAnomalyAudit(audit) {
     const diff = Math.abs(after - before);
     if (before > 0 && diff / before >= 0.3) return true;
   }
-  return /刪除|清空|取消|異常/i.test(String(audit.after || ''));
+  return /?芷|皜征|??|?啣虜/i.test(String(audit.after || ''));
 }
 
 function renderAuditInsights(state) {
@@ -31,19 +31,19 @@ function renderAuditInsights(state) {
   const filtered = getFilteredAudits(state);
   const trend = new Map();
   filtered.forEach((row) => {
-    const key = String(row.changedAt || '').slice(0, 10) || '未填日期';
+    const key = String(row.changedAt || '').slice(0, 10) || '?芸‵?交?';
     trend.set(key, (trend.get(key) || 0) + 1);
   });
   const rows = [...trend.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-10);
   const max = Math.max(1, ...rows.map(([, count]) => count));
   trendWrap.innerHTML = rows.length
-    ? rows.map(([day, count]) => `<div class="chart-bar-row"><span>${day}</span><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${Math.round((count / max) * 100)}%"></div></div><strong>${count}</strong></div>`).join('')
-    : '<p class="sub">目前無趨勢資料</p>';
+    ? rows.map(([day, count]) => `<div class="chart-bar-row"><span>${escapeHtml(day)}</span><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${Math.round((count / max) * 100)}%"></div></div><strong>${count}</strong></div>`).join('')
+    : '<p class="sub">?桀??∟隅?Ｚ???/p>';
 
   const anomalies = filtered.filter((row) => isAnomalyAudit(row)).slice(0, 8);
   anomalyWrap.innerHTML = anomalies.length
-    ? anomalies.map((row) => `<li>${row.changedAt || '-'}｜${row.orderNumber || '-'}｜${row.field || '-'}：${row.before} → ${row.after}</li>`).join('')
-    : '<li>目前未偵測到明顯異常。</li>';
+    ? anomalies.map((row) => `<li>${escapeHtml(row.changedAt || '-')}｜${escapeHtml(row.orderNumber || '-')}｜${escapeHtml(row.field || '-')}：${escapeHtml(row.before)} → ${escapeHtml(row.after)}</li>`).join('')
+    : '<li>?桀??芸皜砍?＊?啣虜??/li>';
 }
 
 function refreshFieldFilterOptions(state) {
@@ -51,7 +51,7 @@ function refreshFieldFilterOptions(state) {
   if (!select) return;
   const current = select.value;
   const fields = [...new Set(state.audits.map((a) => a.field).filter(Boolean))];
-  select.innerHTML = '<option value="">全部欄位</option>' + fields.map((field) => `<option value="${field}">${field}</option>`).join('');
+  select.innerHTML = '<option value="">?券甈?</option>' + fields.map((field) => `<option value="${escapeHtml(field)}">${escapeHtml(field)}</option>`).join('');
   select.value = fields.includes(current) ? current : '';
 }
 
@@ -63,13 +63,13 @@ export function renderAudits(state) {
   getFilteredAudits(state).forEach((a) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${a.orderNumber}</td>
-      <td>${a.field}</td>
-      <td>${a.before}</td>
-      <td>${a.after}</td>
-      <td>${a.changedAt}</td>
-      <td>${a.user}</td>
-      <td>${a.device}</td>`;
+      <td>${escapeHtml(a.orderNumber)}</td>
+      <td>${escapeHtml(a.field)}</td>
+      <td>${escapeHtml(a.before)}</td>
+      <td>${escapeHtml(a.after)}</td>
+      <td>${escapeHtml(a.changedAt)}</td>
+      <td>${escapeHtml(a.user)}</td>
+      <td>${escapeHtml(a.device)}</td>`;
     body.append(tr);
   });
   renderAuditInsights(state);
@@ -94,7 +94,7 @@ export function bindAuditEvents(state, saveState, renderAll) {
   });
 
   $('exportAuditBtn')?.addEventListener('click', () => {
-    const rows = [['工單', '欄位', '修改前', '修改後', '時間', '操作者', '裝置/IP']];
+    const rows = [['撌亙', '甈?', '靽格??, '靽格敺?, '??', '????, '鋆蔭/IP']];
     getFilteredAudits(state).forEach((a) => rows.push([a.orderNumber, a.field, a.before, a.after, a.changedAt, a.user, a.device]));
     downloadCsv('audit-log.csv', rows);
   });
@@ -110,8 +110,8 @@ export function bindAuditEvents(state, saveState, renderAll) {
       if (!orderNumber && !field && !changedAt) return;
       state.audits.unshift({
         id: crypto.randomUUID(),
-        orderNumber: orderNumber || '(外部資料)',
-        field: field || '外部欄位',
+        orderNumber: orderNumber || '(憭鞈?)',
+        field: field || '憭甈?',
         before: before || '',
         after: after || '',
         changedAt: changedAt || new Date().toLocaleString(),

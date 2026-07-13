@@ -98,6 +98,20 @@ def _channel_access_token():
     return os.environ.get('LINE_CHANNEL_ACCESS_TOKEN', '').strip()
 
 
+def _allowed_line_user_ids():
+    raw = os.environ.get('LINE_ALLOWED_USER_IDS', '').strip()
+    if not raw:
+        return set()
+    return {item.strip() for item in re.split(r'[,;\s]+', raw) if item.strip()}
+
+
+def _is_line_user_allowed(source):
+    allowed_ids = _allowed_line_user_ids()
+    if not allowed_ids:
+        return True
+    return str((source or {}).get('userId') or '') in allowed_ids
+
+
 def _verify_signature(body, signature):
     digest = hmac.new(_channel_secret().encode('utf-8'), body, hashlib.sha256).digest()
     expected = base64.b64encode(digest).decode('ascii')
@@ -141,6 +155,8 @@ def _handle_event(event):
     text = str((event.get('message') or {}).get('text') or '').strip()
     message = event.get('message') or {}
     if destination_type in {'group', 'room'}:
+        if not _is_line_user_allowed(source):
+            return
         if not _should_reply_in_shared_chat(text, message):
             return
         text = _strip_shared_chat_mention(text, message)

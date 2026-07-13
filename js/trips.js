@@ -1,4 +1,4 @@
-import { $, money } from './shared.js';
+import { $, money, escapeHtml } from './shared.js';
 import { DEFAULT_FACTORY } from './trips/constants.js';
 import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js';
 import { formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js';
@@ -25,7 +25,7 @@ function renderTripTypeOptions(state) {
   if (!select) return;
   const current = select.value;
   const types = getEnabledTripTypes(state);
-  select.innerHTML = types.map((type) => `<option value="${type}">${typeLabel(type)}</option>`).join('');
+  select.innerHTML = types.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(typeLabel(type))}</option>`).join('');
   select.value = types.includes(current) ? current : types[0];
 }
 
@@ -82,16 +82,16 @@ function renderOrdersPool(state) {
     const checked = selectedOrderIds.has(order.id) ? 'checked' : '';
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input type="checkbox" data-trip-order-check="${order.id}" ${checked} /></td>
-      <td>${order.orderNumber || '-'}</td>
-      <td>${order.downstream || order.upstream || '-'}</td>
-      <td>${order.address || '-'}</td>
+      <td><input type="checkbox" data-trip-order-check="${escapeHtml(order.id)}" ${checked} /></td>
+      <td>${escapeHtml(order.orderNumber || '-')}</td>
+      <td>${escapeHtml(order.downstream || order.upstream || '-')}</td>
+      <td>${escapeHtml(order.address || '-')}</td>
       <td>
-        <select data-trip-order-type="${order.id}">
-          ${types.map((type) => `<option value="${type}" ${getOrderStopType(order.id, state) === type ? 'selected' : ''}>${typeLabel(type)}</option>`).join('')}
+        <select data-trip-order-type="${escapeHtml(order.id)}">
+          ${types.map((type) => `<option value="${escapeHtml(type)}" ${getOrderStopType(order.id, state) === type ? 'selected' : ''}>${escapeHtml(typeLabel(type))}</option>`).join('')}
         </select>
       </td>
-      <td>${order.status || '未完成'}</td>`;
+      <td>${escapeHtml(order.status || '未完成')}</td>`;
     body.append(tr);
   });
 }
@@ -102,9 +102,9 @@ function renderSelectedStops(state) {
   body.innerHTML = '';
   const stops = allStops(state);
   stops.forEach((s, idx) => {
-    const canDelete = s.note === 'from-order-pool' ? '' : `<button class="btn" data-del-stop="${s.id}">刪除</button>`;
+    const canDelete = s.note === 'from-order-pool' ? '' : `<button class="btn" data-del-stop="${escapeHtml(s.id)}">刪除</button>`;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${idx + 1}</td><td>${s.name}</td><td>${typeLabel(s.type)}</td><td>${s.relatedOrderId || '-'}</td><td>${s.address || '-'}</td><td>${canDelete}</td>`;
+    tr.innerHTML = `<td>${idx + 1}</td><td>${escapeHtml(s.name)}</td><td>${escapeHtml(typeLabel(s.type))}</td><td>${escapeHtml(s.relatedOrderId || '-')}</td><td>${escapeHtml(s.address || '-')}</td><td>${canDelete}</td>`;
     body.append(tr);
   });
   $('tripStopsCount').textContent = String(stops.length);

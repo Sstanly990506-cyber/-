@@ -1,26 +1,28 @@
 # Factory Operations System
 
-三青實業內部營運系統，整合工單、客戶、車趟、庫存、通知、財務與稽核功能。
+三青上光內部營運系統，用來管理工單、客戶、車趟、庫存、財務、稽核、通知與 LINE 查詢。
 
-## 快速開始
+## 快速啟動
 
-### Windows
+Windows:
 
-雙擊 `start.bat`，然後開啟啟動畫面顯示的網址。
+```bat
+start.bat
+```
 
-### Mac / Linux
+Mac / Linux:
 
 ```bash
 ./start.sh
 ```
 
-### 手動啟動
+手動啟動:
 
 ```bash
 python api_server.py --host 127.0.0.1 --port 4173
 ```
 
-預設網址為 <http://127.0.0.1:4173>。未設定 `DATABASE_URL` 時，系統會使用本機 JSON 儲存；設定後則使用 PostgreSQL。
+開啟 <http://127.0.0.1:4173>。
 
 ## 測試
 
@@ -28,19 +30,22 @@ python api_server.py --host 127.0.0.1 --port 4173
 python -m unittest discover -s tests -v
 ```
 
-每次推送與 Pull Request 都會由 GitHub Actions 執行編譯檢查與自動測試。
+GitHub Actions 會在推送與 Pull Request 時執行同一組測試。
+
+## 重要環境變數
+
+- `DATABASE_URL`: 正式環境請使用 PostgreSQL，避免資料只存在暫存檔。
+- `APP_SESSION_SECRET`: 登入 session 加密用，正式環境必填。
+- `OPENAI_API_KEY`: 啟用 AI 工單辨識時使用。
+- `LINE_CHANNEL_SECRET`: LINE Messaging API 簽章驗證。
+- `LINE_CHANNEL_ACCESS_TOKEN`: LINE 主動推播與回覆。
+- `LINE_ALLOWED_USER_IDS`: 選填。設定後，群組裡只有列入的 LINE userId 可以觸發查詢。
 
 ## 文件
 
-- [部署與區域網路使用](docs/DEPLOYMENT.md)
-- [正式環境變數](docs/ENVIRONMENT.md)
+- [部署說明](docs/DEPLOYMENT.md)
+- [環境變數](docs/ENVIRONMENT.md)
 - [容量與效能](docs/CAPACITY.md)
 - [安全設定](docs/SECURITY.md)
 - [故障排除](docs/TROUBLESHOOTING.md)
 - [系統架構](docs/ARCHITECTURE.md)
-
-## 重要提醒
-
-- 正式環境必須設定 `APP_SESSION_SECRET`、各角色初始化密碼與 PostgreSQL。
-- 手機不可使用 `127.0.0.1` 連接電腦，請使用電腦的區域網路 IP。
-- `start-no-python.bat` 是純前端模式，不支援伺服器同步與大量資料模式。
