@@ -19,6 +19,7 @@ LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply'
 LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push'
 LINE_DESTINATION_ENTITY = 'lineDestinations'
 DONE_STATUS = '已完成'
+BOT_MENTION_ALIASES = ('三青實業有限公司', '三青系統', '三青', 'sanqing')
 
 
 class LineBotError(Exception):
@@ -139,8 +140,10 @@ def _handle_event(event):
 
     text = str((event.get('message') or {}).get('text') or '').strip()
     message = event.get('message') or {}
-    if destination_type in {'group', 'room'} and not _should_reply_in_shared_chat(text, message):
-        return
+    if destination_type in {'group', 'room'}:
+        if not _should_reply_in_shared_chat(text, message):
+            return
+        text = _strip_shared_chat_mention(text, message)
     response = _build_reply_text(text, destination_id, destination_type)
     if reply_token and response:
         _reply(reply_token, response, quick_reply=destination_type == 'user')
@@ -241,20 +244,23 @@ def _build_query_reply(text):
     text = _strip_bot_prefix(text)
     normalized = _normalize_command(text)
     keyword = _extract_keyword(text)
-    if any(word in normalized for word in ('未完成工單', '待處理工單', '未結工單')):
+    order_keyword = _extract_order_keyword(text)
+    if _is_pending_order_question(normalized):
         return _reply_pending_orders(keyword)
-    if '工單' in normalized:
-        return _reply_orders(keyword)
-    if '客戶' in normalized or '客人' in normalized or '廠商' in normalized:
+    if _is_order_question(normalized, order_keyword):
+        return _reply_orders(order_keyword or keyword)
+    if _is_customer_question(normalized):
         return _reply_customers(keyword)
-    if '應收' in normalized or '未收' in normalized or '收款' in normalized:
+    if _is_receivable_question(normalized):
         return _reply_receivables(keyword)
-    if '應付' in normalized or '未付' in normalized or '付款' in normalized:
+    if _is_payable_question(normalized):
         return _reply_payables(keyword)
-    if '庫存' in normalized or '材料' in normalized:
+    if _is_inventory_question(normalized):
         return _reply_inventory(keyword)
+    if order_keyword:
+        return _reply_orders(order_keyword)
     if keyword:
-        return _reply_global_search(keyword)
+        return _reply_smart_summary(keyword)
     return ''
 
 
@@ -334,6 +340,47 @@ def _reply_inventory(keyword=''):
     return '\n'.join(lines)
 
 
+def _reply_smart_summary(keyword):
+    orders = _search_records('orders', keyword, 5)
+    customers = _search_records('customers', keyword, 3)
+    receivables = [
+        row for row in _search_records('receivables', keyword, 100)
+        if _number(row.get('amount')) > _number(row.get('received'))
+    ]
+    payables = [
+        row for row in _search_records('payables', keyword, 100)
+        if _number(row.get('amount')) > _number(row.get('paid'))
+    ]
+    inventory = _search_records('inventory', keyword, 3)
+    if not any((orders, customers, receivables, payables, inventory)):
+        return _build_not_found_hint(keyword)
+
+    lines = [f'【智能查詢：{keyword}】']
+    if customers:
+        lines.append('客戶/廠商：')
+        for row in customers[:3]:
+            phone = row.get('phone') or '-'
+            address = row.get('address') or '-'
+            lines.append(f'- {row.get("name") or "-"} / {row.get("role") or "-"} / {phone} / {address}')
+    if orders:
+        lines.append('工單：')
+        for row in orders[:5]:
+            lines.append(_format_order(row))
+    if receivables:
+        total = sum(_number(row.get('amount')) - _number(row.get('received')) for row in receivables)
+        lines.append(f'應收未收：{len(receivables)} 筆 / NT$ {int(total):,}')
+        for row in receivables[:3]:
+            remain = _number(row.get('amount')) - _number(row.get('received'))
+            lines.append(f'- {row.get("customer") or "-"} / {row.get("orderNumber") or "-"} / NT$ {int(remain):,}')
+    if payables:
+        total = sum(_number(row.get('amount')) - _number(row.get('paid')) for row in payables)
+        lines.append(f'應付未付：{len(payables)} 筆 / NT$ {int(total):,}')
+    if inventory:
+        lines.append('庫存：' + '、'.join(str(row.get('material') or row.get('name') or '-') for row in inventory))
+    lines.append('想縮小範圍可以問：工單、客戶、應收、應付、庫存。')
+    return '\n'.join(lines)
+
+
 def _reply_global_search(keyword):
     sections = []
     orders = _search_records('orders', keyword, 3)
@@ -380,9 +427,9 @@ def _matches_record(row, keyword):
 
 def _extract_keyword(text):
     value = _strip_bot_prefix(text)
-    value = re.sub(r'^(查詢|查|找|搜尋|幫我查)\s*', '', value)
+    value = re.sub(r'^(請問|麻煩|幫我|幫忙|可以|可不可以|能不能|查詢|查|找|搜尋|幫我查)\s*', '', value)
     value = re.sub(r'^(工單|客戶|客人|廠商|應收|未收|收款|應付|未付|付款|庫存|材料)\s*', '', value)
-    value = re.sub(r'\s*(資料|狀態|多少|有哪些|幾筆)\s*$', '', value)
+    value = re.sub(r'\s*(資料|狀態|多少|有哪些|幾筆|電話|地址|統編|欠多少|好了嗎|完成了嗎|做完了嗎|收了嗎|付了嗎|嗎|呢|啊|呀|喔|一下|\\?|？)\s*$', '', value)
     return value.strip()
 
 
@@ -390,34 +437,133 @@ def _normalize_command(text):
     return re.sub(r'\s+', '', str(text or '').strip()).lower()
 
 
+def _extract_order_keyword(text):
+    value = _strip_bot_prefix(text)
+    match = re.search(r'(?<![A-Za-z0-9])([A-Za-z]{1,6}[- ]?\d{2,}|\d{5,})(?![A-Za-z0-9])', value)
+    if match:
+        return match.group(1).replace(' ', '')
+    return ''
+
+
+def _has_any(normalized, words):
+    return any(word in normalized for word in words)
+
+
+def _is_pending_order_question(normalized):
+    return _has_any(normalized, (
+        '未完成工單', '待處理工單', '未結工單', '還沒好', '沒做完',
+        '待辦工單', '今天要做什麼', '今天做什麼', '要做什麼', '待辦',
+    ))
+
+
+def _is_order_question(normalized, order_keyword=''):
+    return bool(order_keyword) or _has_any(normalized, (
+        '工單', '訂單', '編號', '好了嗎', '完成了嗎', '做完了嗎',
+        '交貨', '交期', '哪一天', '哪天',
+    ))
+
+
+def _is_customer_question(normalized):
+    return _has_any(normalized, (
+        '客戶', '客人', '廠商', '電話', '地址', '統編', '聯絡',
+        '上游', '下游', '公司資料',
+    ))
+
+
+def _is_receivable_question(normalized):
+    return _has_any(normalized, (
+        '應收', '未收', '收款', '欠多少', '欠款', '還沒收',
+        '收了嗎', '有沒有收', '對帳',
+    ))
+
+
+def _is_payable_question(normalized):
+    return _has_any(normalized, (
+        '應付', '未付', '付款', '還沒付', '付了嗎', '有沒有付',
+    ))
+
+
+def _is_inventory_question(normalized):
+    return _has_any(normalized, ('庫存', '材料', '紙', '油', '膠', '剩多少'))
+
+
+def _build_not_found_hint(keyword):
+    return (
+        f'查不到「{keyword}」。\n'
+        '你可以這樣問：\n'
+        f'- 工單 {keyword}\n'
+        f'- 客戶 {keyword}\n'
+        f'- 應收 {keyword}\n'
+        '或直接按下面的查詢按鈕。'
+    )
+
+
 def _strip_bot_prefix(text):
     value = str(text or '').strip()
-    value = re.sub(r'^@?\s*(三青實業有限公司|三青系統|三青|sanqing)\s*[,，:：]?\s*', '', value, flags=re.IGNORECASE)
+    value = _remove_invisible_chars(value)
+    value = re.sub(rf'^@?\s*({_bot_alias_pattern()})\s*[,，:：]?\s*', '', value, flags=re.IGNORECASE)
     return value.strip()
 
 
 def _strip_bot_mention(text):
     value = str(text or '').strip()
-    return re.sub(r'^@\s*(三青實業有限公司|三青系統|三青|sanqing)\s*[,，:：]?\s*', '', value, flags=re.IGNORECASE).strip()
+    value = _remove_invisible_chars(value)
+    return re.sub(rf'^@\s*({_bot_alias_pattern()})\s*[,，:：]?\s*', '', value, flags=re.IGNORECASE).strip()
 
 
-def _message_mentions_bot(message):
+def _bot_alias_pattern():
+    return '|'.join(re.escape(alias) for alias in BOT_MENTION_ALIASES)
+
+
+def _remove_invisible_chars(text):
+    return re.sub(r'[\ufeff\u200b\u200c\u200d]', '', str(text or ''))
+
+
+def _find_bot_mention(text, message):
     bot_user_id = os.environ.get('LINE_BOT_USER_ID', '').strip()
-    if not bot_user_id:
-        return False
     mention = (message or {}).get('mention') or {}
     for item in mention.get('mentionees') or []:
-        if str(item.get('userId') or '') == bot_user_id:
-            return True
-    return False
+        if item.get('isSelf') is True:
+            return item
+        if bot_user_id and str(item.get('userId') or '') == bot_user_id:
+            return item
+        segment = _mention_segment(text, item)
+        if segment and re.search(rf'^@\s*({_bot_alias_pattern()})\s*$', _remove_invisible_chars(segment).strip(), re.IGNORECASE):
+            return item
+    return None
+
+
+def _mention_segment(text, mentionee):
+    try:
+        index = int(mentionee.get('index'))
+        length = int(mentionee.get('length'))
+    except (TypeError, ValueError):
+        return ''
+    if index < 0 or length <= 0:
+        return ''
+    return str(text or '')[index:index + length]
+
+
+def _strip_shared_chat_mention(text, message=None):
+    value = str(text or '').strip()
+    stripped = _strip_bot_mention(value)
+    if stripped != _remove_invisible_chars(value).strip():
+        return stripped
+    mentionee = _find_bot_mention(value, message)
+    if not mentionee:
+        return value
+    segment = _mention_segment(value, mentionee)
+    if not segment:
+        return value
+    return value.replace(segment, '', 1).strip(' \t\r\n,，:：')
 
 
 def _should_reply_in_shared_chat(text, message=None):
     value = str(text or '').strip()
-    mentioned_text = _strip_bot_mention(value)
-    if mentioned_text != value:
+    mentioned_text = _strip_shared_chat_mention(value, message)
+    if mentioned_text != _remove_invisible_chars(value).strip():
         return bool(mentioned_text)
-    return _message_mentions_bot(message)
+    return False
 
 
 def _build_help_text():

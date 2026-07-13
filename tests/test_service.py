@@ -136,6 +136,109 @@ class ServiceTests(unittest.TestCase):
         self.assertIn('媽媽公司', reply_text)
         self.assertNotIn('quickReply', line_post.call_args.args[1]['messages'][0])
 
+    def test_line_group_chat_replies_for_other_members_when_addressed(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'group', 'groupId': 'G1234567890', 'userId': 'UOTHER'},
+                'message': {'type': 'text', 'text': '@三青 客戶 媽媽'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'lineDestinations':
+                return {'items': [{'id': 'G1234567890', 'destinationId': 'G1234567890', 'active': True}]}
+            if entity == 'customers':
+                return {'items': [{'id': 'c1', 'name': '媽媽公司', 'role': '上游'}]}
+            return {'items': []}
+
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        self.assertIn('媽媽公司', line_post.call_args.args[1]['messages'][0]['text'])
+
+    def test_line_group_chat_replies_to_line_mention_metadata(self):
+        mention_text = '@官方帳號 客戶 媽媽'
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'group', 'groupId': 'G1234567890', 'userId': 'UOTHER'},
+                'message': {
+                    'type': 'text',
+                    'text': mention_text,
+                    'mention': {'mentionees': [{'index': 0, 'length': len('@官方帳號'), 'isSelf': True}]},
+                },
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'lineDestinations':
+                return {'items': [{'id': 'G1234567890', 'destinationId': 'G1234567890', 'active': True}]}
+            if entity == 'customers':
+                return {'items': [{'id': 'c1', 'name': '媽媽公司', 'role': '上游'}]}
+            return {'items': []}
+
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        reply_text = line_post.call_args.args[1]['messages'][0]['text']
+        self.assertIn('【客戶/廠商查詢】', reply_text)
+        self.assertIn('媽媽公司', reply_text)
+
+    def test_line_smart_query_understands_receivable_question(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'user', 'userId': 'U1234567890'},
+                'message': {'type': 'text', 'text': '佳德欠多少'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'lineDestinations':
+                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'active': True}]}
+            if entity == 'receivables':
+                return {'items': [{'id': 'r1', 'customer': '佳德印刷有限公司', 'orderNumber': 'WO-2', 'amount': 3000, 'received': 1000}]}
+            return {'items': []}
+
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        reply_text = line_post.call_args.args[1]['messages'][0]['text']
+        self.assertIn('【應收未收】', reply_text)
+        self.assertIn('NT$ 2,000', reply_text)
+
+    def test_line_smart_query_understands_bare_order_number(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'user', 'userId': 'U1234567890'},
+                'message': {'type': 'text', 'text': '115060162好了嗎'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'lineDestinations':
+                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'active': True}]}
+            if entity == 'orders':
+                return {'items': [{'id': 'o1', 'orderNumber': '115060162', 'billingCustomer': '三青', 'status': '未完成'}]}
+            return {'items': []}
+
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        reply_text = line_post.call_args.args[1]['messages'][0]['text']
+        self.assertIn('【工單查詢】', reply_text)
+        self.assertIn('115060162', reply_text)
+
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):
             with self.assertRaises(ApiError) as caught:
