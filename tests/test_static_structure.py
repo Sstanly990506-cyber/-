@@ -519,6 +519,21 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('event.isComposing', orders)
         self.assertIn("linked_receivables", service)
 
+    def test_order_size_notation_supports_tai_inches_and_configurable_presets(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        pricing = (ROOT / 'js' / 'pricing.js').read_text(encoding='utf-8')
+        settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')
+        self.assertIn('id="sizeNotation"', view)
+        self.assertIn('id="settingsPricingSizePresets"', view)
+        self.assertIn('parseSizeNotation', pricing)
+        self.assertIn('台寸', pricing)
+        self.assertIn('橘', pricing)
+        self.assertIn("from './size-notation.js'", orders)
+        self.assertIn('applySizeNotation', (ROOT / 'js' / 'size-notation.js').read_text(encoding='utf-8'))
+        self.assertIn('sizeNotation:', orders)
+        self.assertIn('settingsPricingSizePresets', settings)
+
     def test_order_preview_rows_open_for_edit(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')

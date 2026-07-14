@@ -1,6 +1,7 @@
 import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
+import { applySizeNotation } from './size-notation.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
 import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
@@ -18,10 +19,9 @@ const ORDER_ENTRY_FIELD_IDS = [
   'orderAddress',
   'sheetCountText',
   'sheetCount',
+  'sizeNotation',
   'sizeLength',
-  'sizeWidth',
-  'sizeUnit',
-  'machineType',
+  'sizeWidth', 'sizeUnit', 'machineType',
   'glossType',
   'totalPrice',
   'orderStatus',
@@ -56,8 +56,6 @@ function bindOrderEnterNavigation() {
     });
   });
 }
-
-
 function findCustomerByName(state, keyword) {
   const key = (keyword || '').trim().toLowerCase();
   if (!key) return null;
@@ -388,6 +386,7 @@ function buildOrderFromForm(state) {
     address: $('orderAddress').value.trim(),
     sheetCount,
     sheetCountText: $('sheetCountText').value.trim() || (sheetCount ? String(sheetCount) : ''),
+    sizeNotation: $('sizeNotation').value.trim(),
     sizeLength: Number($('sizeLength').value || 0),
     sizeWidth: Number($('sizeWidth').value || 0),
     sizeUnit: $('sizeUnit').value || 'mm',
@@ -692,6 +691,7 @@ export function clearOrderForm() {
   $('orderId').value = '';
   $('orderDate').value = getTodayText();
   $('sizeUnit').value = 'tai-inch';
+  $('sizeNotation').value = '';
   $('machineType').value = '';
   $('sizeTaiInch').value = '';
   lastAutoPrice = 0;
@@ -713,6 +713,7 @@ export function openOrderForEdit(state, orderId) {
   $('orderAddress').value = order.address || '';
   $('sheetCountText').value = order.sheetCountText || (order.sheetCount ? String(order.sheetCount) : '');
   $('sheetCount').value = order.sheetCount || '';
+  $('sizeNotation').value = order.sizeNotation || '';
   $('sizeLength').value = order.sizeLength || '';
   $('sizeWidth').value = order.sizeWidth || '';
   $('sizeUnit').value = order.sizeUnit || 'tai-inch';
@@ -739,6 +740,7 @@ function copyOrderAsNew(state, orderId) {
   $('orderAddress').value = order.address || '';
   $('sheetCountText').value = order.sheetCountText || (order.sheetCount ? String(order.sheetCount) : '');
   $('sheetCount').value = order.sheetCount || '';
+  $('sizeNotation').value = order.sizeNotation || '';
   $('sizeLength').value = order.sizeLength || '';
   $('sizeWidth').value = order.sizeWidth || '';
   $('sizeUnit').value = order.sizeUnit || 'tai-inch';
@@ -759,7 +761,7 @@ function applyRecognizedOrder(state, order) {
   const fields = {
     orderNumber: order.orderNumber, orderDate: order.orderDate, billingCustomerInput: billingCustomer, upstreamInput: order.upstream,
     downstreamInput: order.downstream, orderAddress: order.address, sheetCountText: order.sheetCountText, sheetCount: order.sheetCount,
-    sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, machineType: order.machineType, totalPrice: order.totalPrice,
+    sizeNotation: order.sizeNotation, sizeLength: order.sizeLength, sizeWidth: order.sizeWidth, sizeUnit: order.sizeUnit, machineType: order.machineType, totalPrice: order.totalPrice,
   };
   Object.entries(fields).forEach(([id, value]) => {
     if (value === '' || value === null || value === undefined || value === 0) return;
@@ -940,7 +942,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
       renderAll();
       return;
     }
-
     const moveBtn = e.target.closest('button[data-order-move]');
     if (moveBtn) {
       const moved = moveOrderByStep(state, moveBtn.dataset.orderMove, Number(moveBtn.dataset.orderDirection));
@@ -950,7 +951,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
       }
       return;
     }
-
     const quickBtn = e.target.closest('button[data-quick-status]');
     if (quickBtn) {
       const order = state.orders.find((o) => o.id === quickBtn.dataset.id);
@@ -996,6 +996,8 @@ export function bindOrderEvents(state, saveState, renderAll) {
     $(id)?.addEventListener('input', () => { updateTaiInchPreview(); updateOrderSmartHint(state); });
     $(id)?.addEventListener('change', () => { updateTaiInchPreview(); updateOrderSmartHint(state); });
   });
+  $('sizeNotation')?.addEventListener('change', () => { applySizeNotation(state, updateTaiInchPreview); updateOrderSmartHint(state); });
+  $('sizeNotation')?.addEventListener('blur', () => { applySizeNotation(state, updateTaiInchPreview); updateOrderSmartHint(state); });
   updateTaiInchPreview();
 
   $('downstreamInput')?.addEventListener('change', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });

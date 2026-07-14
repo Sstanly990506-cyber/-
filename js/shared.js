@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS = {
       showAiTools: true,
       pricingRules: {
         divisor: 4680,
+        sizePresets: '',
         dimensionThresholds: {
           small: { shortMax: 18, longMax: 26 },
           regular: { shortMax: 25, longMax: 35 },

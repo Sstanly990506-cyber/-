@@ -128,6 +128,7 @@
 
               <label>數量說明<input id="sheetCountText" type="text" maxlength="120" placeholder="例如：3箱×20張＋散裝5張" /></label>
               <label>計算張數<input id="sheetCount" type="number" min="0" step="0.01" placeholder="供價格估算與報表使用" /></label>
+              <label class="span-2">尺寸寫法（可選）<input id="sizeNotation" type="text" maxlength="60" placeholder="例如：25×35台寸、25x35台吋、4K、菊5" /></label>
               <label>天<input id="sizeLength" type="number" step="0.01" min="0" /></label>
               <label>地<input id="sizeWidth" type="number" step="0.01" min="0" /></label>
               <label>單位
@@ -138,6 +139,7 @@
                   <option value="inch">inch</option>
                 </select>
               </label>
+              <p id="sizeNotationHint" class="sub span-2">輸入尺寸後會換算成台吋；K 數與菊版請先在設定的報價公式中填入對應天×地。</p>
               <label>尺寸級距
                 <select id="machineType">
                   <option value="" selected>依天／地自動判斷</option>
@@ -771,6 +773,8 @@
                 <h4>報價公式</h4>
                 <p class="sub">級距判斷：天／地較短邊 ≤ 小台短邊上限，且較長邊 ≤ 小台長邊上限，就是小台；超過小台但仍在常規短邊/長邊上限內，就是常規；超過常規上限就是大台。</p>
                 <p class="sub">計價公式：大台、常規＝天台吋 × 地台吋 × 張數 × 元／令 ÷（公式除數 × 100）；小台＝張數 × 單張價。最低收費會在最後套用。</p>
+                <label class="span-2">K 數／菊版尺寸對照（台吋）<textarea id="settingsPricingSizePresets" rows="4" maxlength="2000" placeholder="每行一個，例如：&#10;4K=18x25&#10;菊5=天x地"></textarea></label>
+                <p class="sub span-2">名稱可填 2K、4K、菊5；輸入「橘5」會自動視為「菊5」。請填你們實際裁切後的天×地台吋，避免誤用其他紙廠規格。</p>
                 <label>公式除數<input id="settingsPricingDivisor" type="number" min="1" step="0.01" /></label>
                 <label>小台較短邊上限<input id="settingsPricingSmallShortMax" type="number" min="1" step="0.01" /></label>
                 <label>小台較長邊上限<input id="settingsPricingSmallLongMax" type="number" min="1" step="0.01" /></label>

@@ -1,6 +1,6 @@
 window.__appBootstrapped = false;
 
-const APP_ASSET_VERSION = '20260714-orders-compact-1';
+const APP_ASSET_VERSION = '20260714-size-notation-1';
 const mount = document.getElementById('appMount');
 const apiWarmup = fetch('/api/health', { cache: 'no-store' }).catch(() => null);
 

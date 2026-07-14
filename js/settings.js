@@ -183,6 +183,7 @@ function fillForm(settings) {
     settingsPayableWarningDays: settings.payableWarningDays,
     settingsInventoryLowStockDefault: settings.inventoryLowStockDefault,
     settingsDefaultLandingView: settings.defaultLandingView,
+    settingsPricingSizePresets: pricing.sizePresets,
     settingsPricingDivisor: pricing.divisor,
     settingsPricingSmallShortMax: pricing.dimensionThresholds.small.shortMax,
     settingsPricingSmallLongMax: pricing.dimensionThresholds.small.longMax,
@@ -283,6 +284,7 @@ function collectSettings() {
           '已完成': !!$('settingsOrderQuickDone')?.checked,
         },
         pricingRules: {
+          sizePresets: $('settingsPricingSizePresets')?.value.trim().slice(0, 2000) || '',
           divisor: toPositiveNumber($('settingsPricingDivisor')?.value, defaults.moduleInternals.orders.pricingRules.divisor),
           dimensionThresholds: {
             small: {

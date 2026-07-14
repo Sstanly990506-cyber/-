@@ -4,6 +4,8 @@ export const COATING_TYPES = ['PVA', 'PVB', 'WEAR', 'PRESS'];
 
 export const DEFAULT_PRICING_RULES = {
   divisor: 4680,
+  // One line per paper shorthand, for example: "菊5=18x25". Values are always 台吋.
+  sizePresets: '',
   dimensionThresholds: {
     small: { shortMax: 18, longMax: 26 },
     regular: { shortMax: 25, longMax: 35 },
@@ -19,8 +21,72 @@ export const DEFAULT_PRICING_RULES = {
 export function toTaiInch(value, unit = 'mm') {
   const num = Number(value || 0);
   if (!num) return 0;
-  const mm = unit === 'cm' ? num * 10 : unit === 'inch' ? num * 25.4 : unit === 'tai-inch' ? num * 30.3 : num;
+  const normalizedUnit = String(unit || 'mm').trim().toLowerCase();
+  const mm = normalizedUnit === 'cm' ? num * 10
+    : ['inch', 'in', '英吋'].includes(normalizedUnit) ? num * 25.4
+      : ['tai-inch', 'tai-cun', '台吋', '台寸'].includes(normalizedUnit) ? num * 30.3
+        : num;
   return mm / 30.3;
+}
+
+function normalizePresetName(value = '') {
+  return String(value || '')
+    .trim()
+    .replaceAll('臺', '台')
+    .replace(/橘(?=\s*\d|\s*[Kk])/g, '菊')
+    .replace(/\s+/g, '')
+    .toUpperCase();
+}
+
+export function normalizeSizePresetText(value = '') {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 80)
+    .join('\n');
+}
+
+export function parseSizePresets(value = '') {
+  const presets = new Map();
+  normalizeSizePresetText(value).split('\n').forEach((line) => {
+    const match = line.match(/^\s*(.+?)\s*(?:=|：|:)\s*(\d+(?:\.\d+)?)\s*[xX×＊*]\s*(\d+(?:\.\d+)?)\s*(?:台(?:吋|寸))?\s*$/u);
+    if (!match) return;
+    const name = String(match[1] || '').trim();
+    const length = Number(match[2]);
+    const width = Number(match[3]);
+    if (!name || !length || !width) return;
+    presets.set(normalizePresetName(name), { name, length, width });
+  });
+  return presets;
+}
+
+export function parseSizeNotation(value = '', presetText = '') {
+  const original = String(value || '').trim();
+  if (!original) return { matched: false, empty: true };
+  const normalized = original.replaceAll('臺', '台').replace(/橘(?=\s*\d|\s*[Kk])/g, '菊');
+  const dimensions = normalized.match(/(\d+(?:\.\d+)?)\s*[xX×＊*]\s*(\d+(?:\.\d+)?)(?:\s*(台(?:吋|寸)|mm|公釐|cm|公分|英吋|inch|in))?/iu);
+  if (dimensions) {
+    const unitText = String(dimensions[3] || '台吋').trim().toLowerCase();
+    const unit = ['台吋', '台寸'].includes(unitText) ? 'tai-inch'
+      : ['公釐', 'mm'].includes(unitText) ? 'mm'
+        : ['公分', 'cm'].includes(unitText) ? 'cm'
+          : ['英吋', 'inch', 'in'].includes(unitText) ? 'inch'
+            : 'tai-inch';
+    const length = toTaiInch(dimensions[1], unit);
+    const width = toTaiInch(dimensions[2], unit);
+    return {
+      matched: Boolean(length && width),
+      source: 'dimensions',
+      label: `${dimensions[1]}×${dimensions[2]}${unitText === 'tai-inch' ? '台吋' : unitText}`,
+      length,
+      width,
+    };
+  }
+
+  const preset = parseSizePresets(presetText).get(normalizePresetName(normalized));
+  if (preset) return { matched: true, source: 'preset', label: preset.name, length: preset.length, width: preset.width };
+  return { matched: false, empty: false, key: normalized };
 }
 
 function positive(value, fallback) {
@@ -59,6 +125,7 @@ export function normalizePricingRules(value = {}) {
   if (dimensionThresholds.regular.longMax < dimensionThresholds.small.longMax) dimensionThresholds.regular.longMax = dimensionThresholds.small.longMax;
   return {
     divisor: positive(source.divisor, DEFAULT_PRICING_RULES.divisor),
+    sizePresets: normalizeSizePresetText(source.sizePresets),
     dimensionThresholds,
     tierPrices: normalizeTierPrices(source.tierPrices, source.basePrices),
     minimumCharges: Object.fromEntries(PRICING_TIERS.map((tier) => [
