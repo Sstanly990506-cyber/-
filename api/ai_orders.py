@@ -283,8 +283,8 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
                 {'type': 'input_image', 'image_url': image, 'detail': image_detail},
             ],
         }],
-        # The strict schema is compact, so a smaller response budget finishes sooner.
-        'max_output_tokens': 900,
+        # Complex tables can consume reasoning tokens before the compact JSON is emitted.
+        'max_output_tokens': 3000,
         'text': {
             'format': {
                 'type': 'json_schema',
@@ -360,7 +360,11 @@ def get_order_recognition_result(response_id):
     if status != 'completed':
         detail = (result.get('error') or {}).get('message') if isinstance(result.get('error'), dict) else ''
         reason = (result.get('incomplete_details') or {}).get('reason') if isinstance(result.get('incomplete_details'), dict) else ''
-        raise OrderRecognitionError(detail or reason or f'AI 辨識未完成（{status or "unknown"}）')
+        reason_messages = {
+            'max_output_tokens': 'AI 辨識內容較複雜，輸出額度不足，請重新辨識。',
+            'content_filter': 'AI 無法處理這張圖片的內容，請改用更清楚的工單照片。',
+        }
+        raise OrderRecognitionError(detail or reason_messages.get(reason) or reason or f'AI 辨識未完成（{status or "unknown"}）')
     model = str(result.get('model') or os.environ.get('OPENAI_ORDER_MODEL', '').strip() or 'gpt-5.4-mini')
     return {
         'recognitionId': recognition_id,

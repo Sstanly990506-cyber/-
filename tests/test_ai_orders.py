@@ -49,6 +49,17 @@ class CompletedBackgroundResponse(FakeResponse):
         return json.dumps(result).encode()
 
 
+class IncompleteBackgroundResponse:
+    def __enter__(self): return self
+    def __exit__(self, *_args): return False
+    def read(self):
+        return json.dumps({
+            'id': 'resp_test12345678',
+            'status': 'incomplete',
+            'incomplete_details': {'reason': 'max_output_tokens'},
+        }).encode()
+
+
 def capture_background_request(request, timeout=None):
     CapturingResponse.payload = json.loads(request.data.decode('utf-8'))
     return BackgroundResponse()
@@ -91,13 +102,19 @@ class AiOrderTests(unittest.TestCase):
         self.assertEqual(result['status'], 'completed')
         self.assertEqual(result['order']['orderNumber'], 'WO-1')
 
+    def test_explains_incomplete_background_recognition(self):
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}), patch('api.ai_orders.urlopen', return_value=IncompleteBackgroundResponse()):
+            with self.assertRaises(ai_orders.OrderRecognitionError) as caught:
+                ai_orders.get_order_recognition_result('resp_test12345678')
+        self.assertIn('輸出額度不足', str(caught.exception))
+
     def test_uses_high_image_detail_for_precision_by_default(self):
         image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
         with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}, clear=True), patch('api.ai_orders.urlopen', side_effect=capture_request):
             ai_orders.recognize_order_image(image, ['PVA光'])
         content = CapturingResponse.payload['input'][0]['content']
         self.assertEqual(content[1]['detail'], 'high')
-        self.assertEqual(CapturingResponse.payload['max_output_tokens'], 900)
+        self.assertEqual(CapturingResponse.payload['max_output_tokens'], 3000)
 
     def test_precision_review_is_added_after_the_compact_model_response(self):
         self.assertNotIn('fieldConfidence', ai_orders.ORDER_SCHEMA['properties'])
