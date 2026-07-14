@@ -80,6 +80,8 @@ class AiOrderTests(unittest.TestCase):
         self.assertIn('delivery date / handover date', ai_orders.BUSINESS_RULES)
         self.assertIn('leave orderDate empty', ai_orders.BUSINESS_RULES)
         self.assertIn('largest or most prominent full company name', ai_orders.BUSINESS_RULES)
+        self.assertIn('Never lengthen, autocomplete, or replace it', ai_orders.BUSINESS_RULES)
+        self.assertIn('禹利有限公司 must remain 禹利有限公司', ai_orders.BUSINESS_RULES)
         self.assertIn('upstream means the company upstream of 三青', ai_orders.BUSINESS_RULES)
         self.assertIn('separate from billingCustomer', ai_orders.BUSINESS_RULES)
         self.assertIn('廠商', ai_orders.BUSINESS_RULES)
@@ -93,6 +95,14 @@ class AiOrderTests(unittest.TestCase):
         self.assertIn('sizeWidth maps exactly to 地', ai_orders.BUSINESS_RULES)
         self.assertIn('台吋 maps to tai-inch', ai_orders.BUSINESS_RULES)
         self.assertIn('1362車+238張', ai_orders.BUSINESS_RULES)
+
+    def test_customer_list_is_only_an_exact_spelling_hint(self):
+        image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}, clear=True), patch('api.ai_orders.urlopen', side_effect=capture_request):
+            ai_orders.recognize_order_image(image, customer_names=['瑪利電子分色有限公司'])
+        prompt = CapturingResponse.payload['input'][0]['content'][0]['text']
+        self.assertIn('spelling hints only', prompt)
+        self.assertIn('never use fuzzy or partial-name autocomplete', prompt)
 
     def test_keeps_billing_customer_and_upstream_separate(self):
         result = ai_orders.normalize_recognized_order({'billingCustomer': '客人A', 'upstream': '上游B'})

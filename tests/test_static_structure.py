@@ -559,6 +559,7 @@ class StaticStructureTests(unittest.TestCase):
         ai_orders = (ROOT / 'api' / 'ai_orders.py').read_text(encoding='utf-8')
         self.assertIn('delivery date / handover date', ai_orders)
         self.assertIn('largest or most prominent full company name', ai_orders)
+        self.assertIn('禹利有限公司 must remain 禹利有限公司', ai_orders)
         self.assertIn('upstream means the company upstream of 三青', ai_orders)
         self.assertIn('separate from billingCustomer', ai_orders)
         self.assertIn('row or column labeled 三青', ai_orders)

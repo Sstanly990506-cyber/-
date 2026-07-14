@@ -3,7 +3,7 @@ import { syncOrderToReceivables } from './store.js';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
-import { bindOrderDrag } from './orders-drag.js?v=20260714-ai-rules-1';
+import { bindOrderDrag } from './orders-drag.js?v=20260714-ai-rules-2';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
