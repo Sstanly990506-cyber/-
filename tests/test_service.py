@@ -265,6 +265,38 @@ class ServiceTests(unittest.TestCase):
         self.assertIn('【工單查詢】', reply_text)
         self.assertIn('115060162', reply_text)
 
+    def test_line_query_understands_delivery_question(self):
+        payload = {
+            'events': [{
+                'type': 'message',
+                'replyToken': 'reply-token',
+                'source': {'type': 'user', 'userId': 'U1234567890'},
+                'message': {'type': 'text', 'text': '有哪些要送'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'lineDestinations':
+                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'active': True}]}
+            if entity == 'orders':
+                return {'items': [
+                    {'id': 'o1', 'orderNumber': 'WO-SEND', 'orderDate': '2026-07-14', 'billingCustomer': '富盛', 'downstream': '成峰', 'address': '新北市測試路1號', 'status': '未完成'},
+                    {'id': 'o2', 'orderNumber': 'WO-SENT', 'orderDate': '2026-07-14', 'billingCustomer': '富盛', 'downstream': '成峰', 'address': '新北市測試路2號', 'status': '已送出'},
+                    {'id': 'o3', 'orderNumber': 'WO-DONE', 'orderDate': '2026-07-13', 'billingCustomer': '富盛', 'downstream': '成峰', 'address': '新北市測試路3號', 'status': '已完成'},
+                ]}
+            return {'items': []}
+
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        reply_text = line_post.call_args.args[1]['messages'][0]['text']
+        self.assertIn('【待送工單】', reply_text)
+        self.assertIn('WO-SEND', reply_text)
+        self.assertIn('送往：成峰', reply_text)
+        self.assertNotIn('WO-SENT', reply_text)
+        self.assertNotIn('WO-DONE', reply_text)
+
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):
             with self.assertRaises(ApiError) as caught:

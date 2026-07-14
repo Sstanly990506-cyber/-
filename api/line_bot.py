@@ -261,6 +261,8 @@ def _build_query_reply(text):
     normalized = _normalize_command(text)
     keyword = _extract_keyword(text)
     order_keyword = _extract_order_keyword(text)
+    if _is_delivery_question(normalized):
+        return _reply_delivery_orders(_extract_delivery_keyword(text))
     if _is_pending_order_question(normalized):
         return _reply_pending_orders(keyword)
     if _is_order_question(normalized, order_keyword):
@@ -298,6 +300,20 @@ def _reply_pending_orders(keyword=''):
     lines = [f'【未完成工單】共 {len(pending)} 筆，先列前 8 筆']
     for row in pending[:8]:
         lines.append(_format_order(row))
+    return '\n'.join(lines)
+
+
+def _reply_delivery_orders(keyword=''):
+    rows = _search_records('orders', keyword, 100)
+    delivery_rows = [row for row in rows if _is_delivery_order(row)]
+    delivery_rows.sort(key=lambda row: (str(row.get('orderDate') or row.get('deliveryDate') or '9999-99-99'), str(row.get('orderNumber') or '')))
+    if not delivery_rows:
+        return f'【待送工單】目前沒有需要送出的工單{f"：{keyword}" if keyword else "。"}'
+    lines = [f'【待送工單】共 {len(delivery_rows)} 筆，先列前 10 筆']
+    for row in delivery_rows[:10]:
+        lines.append(_format_delivery_order(row))
+    if len(delivery_rows) > 10:
+        lines.append(f'還有 {len(delivery_rows) - 10} 筆，可再縮小客人或工單關鍵字。')
     return '\n'.join(lines)
 
 
@@ -421,6 +437,16 @@ def _format_order(row):
     return f'- {row.get("orderNumber") or "-"} / {date} / {customer} / {row.get("status") or "未完成"}{price_text}'
 
 
+def _format_delivery_order(row):
+    number = row.get('orderNumber') or '-'
+    date = row.get('orderDate') or row.get('deliveryDate') or '-'
+    customer = row.get('billingCustomer') or row.get('upstream') or '-'
+    destination = row.get('downstream') or row.get('billingCustomer') or row.get('upstream') or '-'
+    address = row.get('address') or '地址未填'
+    status = row.get('status') or '未完成'
+    return f'- {number} / {date} / 客人：{customer} / 送往：{destination} / {address} / {status}'
+
+
 def _search_records(entity, keyword='', limit=5):
     keyword = str(keyword or '').strip()
     try:
@@ -453,6 +479,17 @@ def _normalize_command(text):
     return re.sub(r'\s+', '', str(text or '').strip()).lower()
 
 
+def _extract_delivery_keyword(text):
+    value = _strip_bot_prefix(text)
+    value = re.sub(
+        r'(有哪些要送|哪些要送|要送哪些|今天要送|明天要送|要送的|要送|待送|送貨|配送|出貨|送出|送出的|待配送|請問|幫我|查一下|查)',
+        ' ',
+        value,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r'\s+', ' ', value).strip(' ，,。?？')
+
+
 def _extract_order_keyword(text):
     value = _strip_bot_prefix(text)
     match = re.search(r'(?<![A-Za-z0-9])([A-Za-z]{1,6}[- ]?\d{2,}|\d{5,})(?![A-Za-z0-9])', value)
@@ -470,6 +507,20 @@ def _is_pending_order_question(normalized):
         '未完成工單', '待處理工單', '未結工單', '還沒好', '沒做完',
         '待辦工單', '今天要做什麼', '今天做什麼', '要做什麼', '待辦',
     ))
+
+
+def _is_delivery_question(normalized):
+    return _has_any(normalized, (
+        '有哪些要送', '哪些要送', '要送哪些', '今天要送', '明天要送', '要送的',
+        '要送', '待送', '送貨', '配送', '出貨', '送出', '送出的', '待配送',
+    ))
+
+
+def _is_delivery_order(row):
+    status = str((row or {}).get('status') or '').strip()
+    if status in {DONE_STATUS, '已送出', '已出貨', '完成', '送出'}:
+        return False
+    return bool((row or {}).get('orderNumber') or (row or {}).get('downstream') or (row or {}).get('address'))
 
 
 def _is_order_question(normalized, order_keyword=''):
