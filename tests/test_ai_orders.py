@@ -48,13 +48,25 @@ class AiOrderTests(unittest.TestCase):
         self.assertEqual(result['upstream'], '')
         self.assertEqual(result['model'], 'gpt-5.4-mini')
 
-    def test_uses_fast_image_detail_by_default(self):
+    def test_uses_high_image_detail_for_precision_by_default(self):
         image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
         with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}, clear=True), patch('api.ai_orders.urlopen', side_effect=capture_request):
             ai_orders.recognize_order_image(image, ['PVA光'])
         content = CapturingResponse.payload['input'][0]['content']
-        self.assertEqual(content[1]['detail'], 'auto')
+        self.assertEqual(content[1]['detail'], 'high')
         self.assertEqual(CapturingResponse.payload['max_output_tokens'], 900)
+
+    def test_precision_schema_requires_field_level_review(self):
+        self.assertIn('fieldConfidence', ai_orders.ORDER_SCHEMA['properties'])
+        self.assertIn('reviewFields', ai_orders.ORDER_SCHEMA['properties'])
+        self.assertEqual(set(ai_orders.ORDER_SCHEMA['properties']['fieldConfidence']['required']), set(ai_orders.REVIEWABLE_FIELDS))
+
+    def test_customer_candidate_requires_review_and_never_replaces_visible_text(self):
+        recognized = {'billingCustomer': '禹利電子分色有限公司', 'confidence': 0.9}
+        result = ai_orders.add_recognition_review(recognized, ['瑪利電子分色有限公司', '禹利電子分色有限公'])
+        self.assertEqual(result['billingCustomer'], '禹利電子分色有限公司')
+        self.assertIn('billingCustomer', result['reviewFields'])
+        self.assertEqual(result['customerCandidates']['billingCustomer'][0], '禹利電子分色有限公')
 
     def test_prompt_includes_known_billing_vendors(self):
         image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()

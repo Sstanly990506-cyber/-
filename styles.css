@@ -442,6 +442,19 @@ input[type="checkbox"] { width: auto; }
 }
 .ai-order-recognizer p { margin: 4px 0 0; }
 .ai-order-recognizer .sync-detail { grid-column: 1 / -1; }
+.ai-recognition-review {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.08);
+}
+.ai-recognition-review strong { color: #fbbf24; }
+.ai-recognition-review p { margin: 0; }
+.ai-review-item { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ai-review-item .btn { min-height: 32px; padding: 5px 10px; font-size: 13px; }
 .ai-review-required {
   border-color: #f59e0b !important;
   box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);

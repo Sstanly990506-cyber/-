@@ -95,12 +95,13 @@
             <section id="aiOrderRecognizer" class="ai-order-recognizer">
               <div>
                 <strong>AI 識別工單</strong>
-                <p class="sub">拍照或上傳工單，AI 只會填入下方表單，確認後再儲存。</p>
+                <p class="sub">拍照或上傳工單後，系統會先提升文字對比並分區辨識；不確定欄位會標示給你確認，再儲存。</p>
               </div>
               <input id="aiOrderImage" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" />
-              <button id="recognizeOrderBtn" class="btn" type="button">開始識別</button>
+              <button id="recognizeOrderBtn" class="btn" type="button">開始精準辨識</button>
               <button id="reportAiCorrectionBtn" class="btn hidden" type="button">回報修正，讓下次更準</button>
               <span id="aiOrderStatus" class="sync-detail"></span>
+              <div id="aiRecognitionReview" class="ai-recognition-review hidden" aria-live="polite"></div>
             </section>
             <form id="orderForm" class="form-grid order-grid">
               <input id="orderId" type="hidden" />

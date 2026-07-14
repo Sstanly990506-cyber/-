@@ -1,4 +1,5 @@
 import base64
+import difflib
 import json
 import os
 import re
@@ -37,6 +38,77 @@ BUSINESS_RULES = (
 
 
 CUSTOMER_CODE_PATTERN = re.compile(r'^[A-Z]{1,5}[-_ ]*\d{2,}$', re.IGNORECASE)
+REVIEWABLE_FIELDS = (
+    'orderNumber', 'orderDate', 'billingCustomer', 'upstream', 'downstream', 'address',
+    'sheetCountText', 'sheetCount', 'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType',
+)
+
+
+def _mark_review_fields(recognized, fields):
+    current = recognized.get('reviewFields')
+    review_fields = list(current) if isinstance(current, list) else []
+    for field in fields:
+        if field in REVIEWABLE_FIELDS and field not in review_fields:
+            review_fields.append(field)
+    recognized['reviewFields'] = review_fields
+
+
+def _ensure_recognition_review(recognized):
+    """Keep older model responses usable while requiring field-level review data."""
+    field_confidence = recognized.get('fieldConfidence')
+    if not isinstance(field_confidence, dict):
+        field_confidence = {}
+    fallback = float(recognized.get('confidence') or 0)
+    for field in REVIEWABLE_FIELDS:
+        try:
+            value = float(field_confidence.get(field, fallback))
+        except (TypeError, ValueError):
+            value = fallback
+        field_confidence[field] = max(0.0, min(1.0, value))
+    recognized['fieldConfidence'] = field_confidence
+    _mark_review_fields(recognized, [])
+    return recognized
+
+
+def _company_key(value):
+    return re.sub(r'[\s()（）,，.．_-]+', '', str(value or '')).lower()
+
+
+def add_recognition_review(recognized, customer_names):
+    """Offer possible master-data matches for review, without ever replacing text."""
+    if not isinstance(recognized, dict):
+        return recognized
+    _ensure_recognition_review(recognized)
+    names = []
+    for name in customer_names or []:
+        text = str(name or '').strip()
+        if text and text not in names:
+            names.append(text)
+    candidates_by_field = {}
+    for field in ('billingCustomer', 'upstream', 'downstream'):
+        value = str(recognized.get(field) or '').strip()
+        if not value or not names:
+            continue
+        value_key = _company_key(value)
+        exact = any(_company_key(name) == value_key for name in names)
+        if exact:
+            continue
+        ranked = sorted(
+            ((difflib.SequenceMatcher(None, value_key, _company_key(name)).ratio(), name) for name in names),
+            key=lambda item: item[0], reverse=True,
+        )
+        matches = [name for score, name in ranked[:3] if score >= 0.58]
+        if matches:
+            candidates_by_field[field] = matches
+            _mark_review_fields(recognized, [field])
+    recognized['customerCandidates'] = candidates_by_field
+    if not str(recognized.get('orderDate') or '').strip():
+        _mark_review_fields(recognized, ['orderDate'])
+    if str(recognized.get('sheetCountText') or '').strip() and not recognized.get('sheetCount'):
+        _mark_review_fields(recognized, ['sheetCount'])
+    if (recognized.get('sizeLength') or recognized.get('sizeWidth')) and not str(recognized.get('sizeUnit') or '').strip():
+        _mark_review_fields(recognized, ['sizeUnit'])
+    return recognized
 
 
 def _looks_like_customer_code(value):
@@ -75,7 +147,8 @@ def normalize_recognized_order(recognized):
         if message not in notes:
             notes.append(message)
         recognized['notes'] = notes
-    return recognized
+        _mark_review_fields(recognized, [key for key, value in company_fields.items() if not recognized.get(key)])
+    return _ensure_recognition_review(recognized)
 
 ORDER_SCHEMA = {
     'type': 'object',
@@ -95,10 +168,20 @@ ORDER_SCHEMA = {
         'totalPrice': {'type': 'number'},
         'confidence': {'type': 'number'},
         'notes': {'type': 'array', 'items': {'type': 'string'}},
+        'fieldConfidence': {
+            'type': 'object',
+            'properties': {field: {'type': 'number'} for field in REVIEWABLE_FIELDS},
+            'required': list(REVIEWABLE_FIELDS),
+            'additionalProperties': False,
+        },
+        'reviewFields': {
+            'type': 'array',
+            'items': {'type': 'string', 'enum': list(REVIEWABLE_FIELDS)},
+        },
     },
     'required': [
         'orderNumber', 'orderDate', 'billingCustomer', 'upstream', 'downstream', 'address', 'sheetCountText', 'sheetCount',
-        'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType', 'totalPrice', 'confidence', 'notes',
+        'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType', 'totalPrice', 'confidence', 'notes', 'fieldConfidence', 'reviewFields',
     ],
     'additionalProperties': False,
 }
@@ -159,24 +242,28 @@ def _correction_examples(corrections):
     return json.dumps(examples, ensure_ascii=False, separators=(',', ':'))
 
 
-def recognize_order_image(data_url, gloss_options=None, corrections=None, customer_names=None):
+def recognize_order_image(data_url, gloss_options=None, corrections=None, customer_names=None, precision=True):
     api_key = os.environ.get('OPENAI_API_KEY', '').strip()
     if not api_key:
         raise OrderRecognitionError('AI 尚未啟用：請先在 Vercel 設定 OPENAI_API_KEY，然後重新部署。')
     image = _validate_image_data_url(data_url)
     model = os.environ.get('OPENAI_ORDER_MODEL', '').strip() or 'gpt-5.4-mini'
-    image_detail = os.environ.get('OPENAI_ORDER_IMAGE_DETAIL', '').strip().lower() or 'auto'
+    image_detail = os.environ.get('OPENAI_ORDER_IMAGE_DETAIL', '').strip().lower() or ('high' if precision else 'auto')
     if image_detail not in {'auto', 'low', 'high'}:
         image_detail = 'auto'
     gloss_text = ', '.join(str(item) for item in (gloss_options or [])[:30])
     customer_text = ', '.join(str(item) for item in (customer_names or [])[:50] if str(item or '').strip())
     prompt = (
-        'Extract a single factory work order from this image. Do not invent unreadable values. '
+        'Extract a single factory work order from this image. First read the document by regions: header/customer, '
+        'upstream supplier, 三青 process row, downstream process row, quantities, and size fields. '
+        'Then map only visible values to the JSON fields. Do not invent unreadable values. '
         'Use an empty string or zero when uncertain. orderDate must be YYYY-MM-DD when visible. '
         'Preserve the visible quantity wording and math symbols in sheetCountText. '
         'Put a numeric quantity in sheetCount only when the document separately shows one explicit calculation quantity. '
         f'{BUSINESS_RULES}'
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
+        'For every fieldConfidence value, assess that individual field rather than the whole document. '
+        'Put every ambiguous, missing, or weakly visible field in reviewFields. Do not include your reasoning in the output. '
         f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '
         f'Known company names from our customer system, when visible in the image: {customer_text or "none supplied"}. '
         'These names are spelling hints only. Use one only when the full visible text matches; never use fuzzy or partial-name autocomplete. '

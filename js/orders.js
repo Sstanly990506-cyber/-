@@ -4,6 +4,7 @@ import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normali
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
 import { bindOrderDrag } from './orders-drag.js?v=20260714-ai-rules-3';
+import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
@@ -694,6 +695,7 @@ export function clearOrderForm() {
   lastRecognizedOrder = null;
   $('reportAiCorrectionBtn')?.classList.add('hidden');
   document.querySelectorAll('.ai-review-required').forEach((input) => input.classList.remove('ai-review-required'));
+  clearAiRecognitionReview();
 }
 
 export function openOrderForEdit(state, orderId) {
@@ -749,38 +751,6 @@ function copyOrderAsNew(state, orderId) {
   return true;
 }
 
-async function prepareOrderImage(file) {
-  if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('請選擇 JPEG、PNG 或 WebP 圖片。');
-  if (file.size > 12 * 1024 * 1024) throw new Error('原始圖片不可超過 12 MB。');
-  const source = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('無法讀取圖片。'));
-    reader.readAsDataURL(file);
-  });
-  const image = await new Promise((resolve, reject) => {
-    const value = new Image();
-    value.onload = () => resolve(value);
-    value.onerror = () => reject(new Error('圖片格式無法解析。'));
-    value.src = source;
-  });
-  // Full camera photos are larger than the recognition request needs.
-  let maxDimension = 1024;
-  let quality = 0.68;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(image.width * scale));
-    canvas.height = Math.max(1, Math.round(image.height * scale));
-    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-    const encoded = canvas.toDataURL('image/jpeg', quality);
-    if (encoded.length <= 900_000) return encoded;
-    maxDimension = Math.round(maxDimension * 0.82);
-    quality = Math.max(0.55, quality - 0.06);
-  }
-  throw new Error('圖片壓縮後仍過大，請裁切圖片或改拍較清晰的工單。');
-}
-
 function applyRecognizedOrder(state, order) {
   const billingCustomer = order.billingCustomer || order.upstream || '';
   const fields = {
@@ -804,10 +774,15 @@ function applyRecognizedOrder(state, order) {
   lastRecognizedOrder = { ...order, address: $('orderAddress')?.value.trim() || '' };
   $('reportAiCorrectionBtn')?.classList.remove('hidden');
   document.querySelectorAll('.ai-review-required').forEach((input) => input.classList.remove('ai-review-required'));
-  if (Number(order.confidence || 0) < 0.8) {
-    Object.keys(fields).forEach((id) => $(id)?.classList.add('ai-review-required'));
-    $('glossType')?.classList.add('ai-review-required');
+  const fieldConfidence = order.fieldConfidence && typeof order.fieldConfidence === 'object' ? order.fieldConfidence : {};
+  const reviewFields = new Set(Array.isArray(order.reviewFields) ? order.reviewFields : []);
+  Object.entries(AI_RECOGNITION_FIELDS).forEach(([field, meta]) => {
+    if (reviewFields.has(field) || Number(fieldConfidence[field] || 1) < 0.85) $(meta.input)?.classList.add('ai-review-required');
+  });
+  if (!reviewFields.size && Number(order.confidence || 0) < 0.8) {
+    Object.values(AI_RECOGNITION_FIELDS).forEach(({ input }) => $(input)?.classList.add('ai-review-required'));
   }
+  renderAiRecognitionReview(order);
   return addressFilledFromCustomer;
 }
 
@@ -846,13 +821,14 @@ async function recognizeOrderFromImage(state) {
   const status = $('aiOrderStatus');
   const startedAt = performance.now();
   button.disabled = true;
-  status.textContent = '正在壓縮圖片並識別，通常需要 5 至 30 秒…';
+  status.textContent = '正在提升文字對比並分區辨識，通常需要 15 至 40 秒…';
+  clearAiRecognitionReview();
   try {
     const image = await prepareOrderImage(file);
     const response = await fetch('/api/orders/recognize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
-      body: JSON.stringify({ image, glossOptions: state.glossOptions }),
+      body: JSON.stringify({ image, glossOptions: state.glossOptions, precision: true }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
@@ -861,7 +837,8 @@ async function recognizeOrderFromImage(state) {
     const confidence = Math.round(Number(data.order?.confidence || 0) * 100);
     const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
     const notes = (data.order?.notes || []).filter(Boolean).join('；');
-    status.textContent = `識別完成，耗時 ${elapsedSeconds} 秒，信心度 ${confidence}%${addressFilledFromCustomer ? '。送貨地址已使用下游客戶系統地址' : ''}${notes ? `。請確認：${notes}` : '。請確認欄位後再儲存。'}`;
+    const needsReview = Array.isArray(data.order?.reviewFields) && data.order.reviewFields.length;
+    status.textContent = `識別完成，耗時 ${elapsedSeconds} 秒，信心度 ${confidence}%${addressFilledFromCustomer ? '。送貨地址已使用下游客戶系統地址。' : ''}${needsReview ? ' 已標示需要確認的欄位。' : ' 請確認表單後再儲存。'}${notes ? ` ${notes}` : ''}`;
   } catch (err) {
     status.textContent = `識別失敗：${err.message}`;
     alert(`AI 識別工單失敗：${err.message}`);
@@ -873,6 +850,17 @@ async function recognizeOrderFromImage(state) {
 export function bindOrderEvents(state, saveState, renderAll) {
   $('recognizeOrderBtn')?.addEventListener('click', () => recognizeOrderFromImage(state));
   $('reportAiCorrectionBtn')?.addEventListener('click', () => reportAiCorrection(state));
+  $('aiRecognitionReview')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-ai-candidate-field]');
+    if (!button) return;
+    const meta = AI_RECOGNITION_FIELDS[button.dataset.aiCandidateField];
+    const input = meta ? $(meta.input) : null;
+    if (!input) return;
+    input.value = button.dataset.aiCandidateValue || '';
+    input.classList.remove('ai-review-required');
+    if (button.dataset.aiCandidateField === 'downstream') syncAddressFromDownstream(state);
+    updateOrderSmartHint(state);
+  });
   $('refreshAiCorrectionsBtn')?.addEventListener('click', () => loadAiCorrections(state).catch((err) => alert(`載入 AI 修正紀錄失敗：${err.message}`)));
   $('exportAiCorrectionsBtn')?.addEventListener('click', () => exportAiCorrections());
   $('aiCorrectionsTbody')?.addEventListener('click', async (e) => {

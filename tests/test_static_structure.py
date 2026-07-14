@@ -245,6 +245,7 @@ class StaticStructureTests(unittest.TestCase):
 
     def test_order_pricing_helpers_are_split_out(self):
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        ai_ui = (ROOT / 'js' / 'orders-ai.js').read_text(encoding='utf-8')
         pricing_ui = (ROOT / 'js' / 'orders-pricing.js').read_text(encoding='utf-8')
         self.assertIn("from './orders-pricing.js'", orders)
         self.assertIn('export function pricingTierLabel', pricing_ui)
@@ -541,14 +542,17 @@ class StaticStructureTests(unittest.TestCase):
     def test_ai_order_recognition_fills_existing_form(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        ai_ui = (ROOT / 'js' / 'orders-ai.js').read_text(encoding='utf-8')
         self.assertIn('id="aiOrderImage"', view)
         self.assertIn('交貨日期<input id="orderDate"', view)
         self.assertIn('id="billingCustomerInput"', view)
         self.assertIn('id="billingCustomerOptions"', view)
         self.assertIn("fetch('/api/orders/recognize'", orders)
         self.assertNotIn("fetch('/api/orders/recognize/status'", orders)
-        self.assertIn("encoded.length <= 900_000", orders)
-        self.assertIn("maxDimension = 1024", orders)
+        self.assertIn("encoded.length <= 1_800_000", ai_ui)
+        self.assertIn("maxDimension = 1600", ai_ui)
+        self.assertIn("getImageData", ai_ui)
+        self.assertIn("renderAiRecognitionReview", ai_ui)
         self.assertIn('applyRecognizedOrder', orders)
         self.assertIn('id="upstreamInput"', view)
         self.assertIn('id="upstreamOptions"', view)
@@ -616,9 +620,9 @@ class StaticStructureTests(unittest.TestCase):
 
     def test_ai_recognition_has_vercel_runtime_limits(self):
         vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')
-        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        ai_ui = (ROOT / 'js' / 'orders-ai.js').read_text(encoding='utf-8')
         self.assertIn('"maxDuration": 60', vercel)
-        self.assertIn('encoded.length <= 900_000', orders)
+        self.assertIn('encoded.length <= 1_800_000', ai_ui)
 
 
 if __name__ == '__main__':
