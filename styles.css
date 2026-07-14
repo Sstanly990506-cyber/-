@@ -540,7 +540,7 @@ tbody tr:hover {
 .orders-list-head h3,
 .orders-list-head p { margin: 0; }
 .orders-list-head input { width: 100%; }
-.orders-table-wrap { max-height: 620px; }
+.orders-table-wrap { max-height: 620px; overflow: auto; }
 .orders-table th {
   position: sticky;
   top: 0;
@@ -646,10 +646,12 @@ tbody tr:hover {
 .order-row-actions {
   display: flex;
   gap: 6px;
-  min-width: 96px;
-  flex-wrap: wrap;
+  min-width: 180px;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+  align-items: center;
 }
+.order-position-actions { display: flex; gap: 4px; flex: 0 0 auto; }
 .order-row-actions .btn {
   padding: 7px 10px;
   transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
@@ -1143,59 +1145,17 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
     grid-column: 2;
     width: fit-content;
   }
-  .orders-table-wrap {
-    overflow: visible;
-    max-height: none;
-    border-radius: 0;
-  }
-  .orders-table,
-  .orders-table tbody { display: block; }
-  .orders-table thead { display: none; }
-  .orders-table tr {
-    display: grid;
-    gap: 0;
-    margin-bottom: 12px;
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    background: rgba(15, 23, 42, 0.42);
-  }
-  .orders-table td {
-    display: grid;
-    grid-template-columns: 88px minmax(0, 1fr);
-    gap: 10px;
-    align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-  }
-  .orders-table td::before {
-    content: attr(data-label);
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .orders-table td:last-child { border-bottom: 0; }
-  .orders-table .order-position-actions,
-  .orders-table .order-row-actions {
-    display: flex;
-    min-width: 0;
-  }
-  .orders-table .order-position-actions::before,
-  .orders-table .order-row-actions::before {
-    width: 78px;
-    flex: 0 0 78px;
-  }
-  .orders-table .order-position-actions .btn { width: 48px; }
-  .orders-table .order-row-actions .btn {
-    width: auto;
-    flex: 1 1 78px;
-  }
-  .orders-table .orders-empty-row { padding: 0; }
-  .orders-table .orders-empty-row td {
-    display: block;
-    padding: 28px 12px;
-  }
-  .orders-table .orders-empty-row td::before { content: none; }
+  .orders-table-wrap { overflow: auto; max-height: 66vh; border-radius: 12px; }
+  .orders-table { min-width: 780px; table-layout: fixed; }
+  .orders-table thead { display: table-header-group; }
+  .orders-table tbody { display: table-row-group; }
+  .orders-table tr { display: table-row; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+  .orders-table td { display: table-cell; padding: 9px 8px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+  .orders-table td::before { content: none; }
+  .orders-table .order-row-actions { min-width: 180px; }
+  .orders-table .order-position-actions .btn { width: auto; }
+  .orders-table .order-row-actions .btn { flex: 0 0 auto; }
+  .orders-table .orders-empty-row td { display: table-cell; padding: 28px 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

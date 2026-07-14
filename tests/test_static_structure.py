@@ -488,7 +488,8 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('.order-row-actions .order-sent-action', styles)
         self.assertIn('@keyframes orderRowEnter', styles)
         self.assertIn('@keyframes orderRowComplete', styles)
-        self.assertIn('.orders-table thead { display: none; }', styles)
+        self.assertIn('.orders-table { min-width: 780px; table-layout: fixed; }', styles)
+        self.assertIn('.orders-table thead { display: table-header-group; }', styles)
         self.assertIn('const displayTotal=', store)
 
     def test_navigation_and_order_list_have_light_motion(self):
