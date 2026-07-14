@@ -302,8 +302,10 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("fetch('/api/trips/execute'", trips)
         self.assertIn("textContent = '執行中…'", trips)
         self.assertIn("function canExecuteOrder(order)", trips)
+        self.assertIn('return state.orders.filter(canExecuteOrder);', trips)
+        self.assertIn('目前沒有尚未送出的工單', trips)
         self.assertIn("已完成」的工單後再執行車趟。已送出的工單不能重複送出", trips)
-        self.assertIn("${status}（不可執行）", trips)
+        self.assertNotIn("${status}（不可執行）", trips)
         self.assertIn("'/api/trips/execute'", routes)
 
     def test_module_settings_use_two_level_navigation(self):

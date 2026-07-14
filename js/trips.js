@@ -37,7 +37,7 @@ function findCustomer(state, keyword) {
 }
 
 function getTripOrders(state) {
-  return state.orders;
+  return state.orders.filter(canExecuteOrder);
 }
 
 function canExecuteOrder(order) {
@@ -83,24 +83,25 @@ function renderOrdersPool(state) {
   Object.keys(orderStopTypes).forEach((id) => {
     if (!orders.some((o) => o.id === id)) delete orderStopTypes[id];
   });
+  if (!orders.length) {
+    body.innerHTML = '<tr><td colspan="6">目前沒有尚未送出的工單</td></tr>';
+    return;
+  }
   orders.forEach((order) => {
-    const executable = canExecuteOrder(order);
-    const checked = executable && selectedOrderIds.has(order.id) ? 'checked' : '';
-    const disabled = executable ? '' : 'disabled';
+    const checked = selectedOrderIds.has(order.id) ? 'checked' : '';
     const status = String(order.status || '未完成').trim();
-    const statusLabel = executable ? status : `${status}（不可執行）`;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input type="checkbox" data-trip-order-check="${escapeHtml(order.id)}" ${checked} ${disabled} /></td>
+      <td><input type="checkbox" data-trip-order-check="${escapeHtml(order.id)}" ${checked} /></td>
       <td>${escapeHtml(order.orderNumber || '-')}</td>
       <td>${escapeHtml(order.downstream || order.upstream || '-')}</td>
       <td>${escapeHtml(order.address || '-')}</td>
       <td>
-        <select data-trip-order-type="${escapeHtml(order.id)}" ${disabled}>
+        <select data-trip-order-type="${escapeHtml(order.id)}">
           ${types.map((type) => `<option value="${escapeHtml(type)}" ${getOrderStopType(order.id, state) === type ? 'selected' : ''}>${escapeHtml(typeLabel(type))}</option>`).join('')}
         </select>
       </td>
-      <td>${escapeHtml(statusLabel)}</td>`;
+      <td>${escapeHtml(status)}</td>`;
     body.append(tr);
   });
 }

@@ -16,7 +16,7 @@ import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './cu
 import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20260714-ai-background-1';
 import { renderFinance, bindFinanceEvents } from './finance.js?v=20260714-trip-route-text-1';
 import { renderAudits, bindAuditEvents } from './audit.js?v=20260714-trip-route-text-1';
-import { renderTrips, bindTripEvents } from './trips.js?v=20260714-ai-rules-3';
+import { renderTrips, bindTripEvents } from './trips.js?v=20260714-trip-sent-filter-1';
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714-trip-route-text-1';
 import { renderInventory, bindInventoryEvents } from './inventory.js?v=20260714-trip-route-text-1';
 import { renderNotifications, bindNotificationEvents } from './notifications.js?v=20260714-trip-route-text-1';
