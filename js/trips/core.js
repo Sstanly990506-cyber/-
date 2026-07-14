@@ -1,4 +1,4 @@
-import { DEFAULT_FACTORY } from './constants.js';
+import { DEFAULT_FACTORY } from './constants.js?v=20260714-factory-address-1';
 
 /** @typedef {'delivery'|'pickup'} StopType */
 /**

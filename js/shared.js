@@ -1,6 +1,6 @@
 export const COMPANY_INFO = {
   name: '三青實業有限公司',
-  address: 'No. 53, Liyan St, Zhonghe District, New Taipei City, Taiwan 235',
+  address: '新北市中和區立言街53號',
 };
 
 export const MODULE_DEFINITIONS = [

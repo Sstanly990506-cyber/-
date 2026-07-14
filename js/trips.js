@@ -1,6 +1,6 @@
 import { $, escapeHtml } from './shared.js';
-import { DEFAULT_FACTORY } from './trips/constants.js?v=20260714-trip-route-text-1';
-import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20260714-trip-route-text-1';
+import { DEFAULT_FACTORY } from './trips/constants.js?v=20260714-factory-address-1';
+import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20260714-factory-address-1';
 import { formatDistance, formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20260714-customer-order-km-1';
 
 let manualStops = [];

@@ -78,6 +78,15 @@ class StaticStructureTests(unittest.TestCase):
         for broken in ('嚗', '撠', '蝮', '銝', '', '?strong', '??'):
             self.assertNotIn(broken, trips_ui)
 
+    def test_trip_factory_uses_the_registered_address(self):
+        constants = (ROOT / 'js' / 'trips' / 'constants.js').read_text(encoding='utf-8')
+        shared = (ROOT / 'js' / 'shared.js').read_text(encoding='utf-8')
+        self.assertIn("address: '新北市中和區立言街53號'", constants)
+        self.assertIn('lat: 25.0118144', constants)
+        self.assertIn('lng: 121.4775296', constants)
+        self.assertIn("address: '新北市中和區立言街53號'", shared)
+        self.assertNotIn('121.4982', constants)
+
     def test_scalable_data_routes_exist_in_both_servers(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')
