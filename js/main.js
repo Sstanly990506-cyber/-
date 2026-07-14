@@ -21,7 +21,7 @@ import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js';
 import { renderInventory, bindInventoryEvents } from './inventory.js';
 import { renderNotifications, bindNotificationEvents } from './notifications.js';
 
-const APP_BUILD = '2026-07-14-fast-login-1';
+const APP_BUILD = '2026-07-14-fast-login-2';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
@@ -83,7 +83,7 @@ function hasViewPermission(viewId) {
 
 async function callUserApi(payload) {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  const timeout = window.setTimeout(() => controller.abort(), 30000);
   let res;
   try {
     res = await fetch('/api/users', {
@@ -93,7 +93,7 @@ async function callUserApi(payload) {
       signal: controller.signal,
     });
   } catch (err) {
-    if (err?.name === 'AbortError') throw new Error('登入逾時，伺服器回應太慢，請重新按一次。');
+    if (err?.name === 'AbortError') throw new Error('登入逾時，伺服器超過 30 秒沒有回應，請重新按一次。');
     throw err;
   } finally {
     window.clearTimeout(timeout);
