@@ -11,6 +11,7 @@ let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
 let lastAutoPrice = 0;
 let highlightedOrderId = null;
+let pendingOrderMove = null;
 const ORDER_ENTRY_FIELD_IDS = [
   'orderNumber',
   'orderDate',
@@ -107,9 +108,10 @@ function moveOrderByStep(state, orderId, direction) {
   const currentIndex = ordered.findIndex((order) => order.id === orderId);
   const targetIndex = currentIndex + direction;
   if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.length) return false;
+  const displacedId = ordered[targetIndex].id;
   [ordered[currentIndex], ordered[targetIndex]] = [ordered[targetIndex], ordered[currentIndex]];
   ordered.forEach((order, index) => { order.sortOrder = index; });
-  return true;
+  return { movedId: orderId, displacedId, direction };
 }
 
 function findSmartPriceSuggestion(state, editingId = '') {
@@ -624,6 +626,7 @@ export function renderOrders(state, renderCustomerOptions) {
   if (aiEnabled) renderAiCorrectionCenter();
   const body = $('ordersTbody');
   body.innerHTML = '';
+  const move = pendingOrderMove; body.closest('table')?.classList.toggle('is-reordering', !!move); pendingOrderMove = null;
 
   const visibleStatuses = new Set(getEnabledOrderStatuses(state));
   const keyword = getOrderSearchKeyword();
@@ -661,7 +664,8 @@ export function renderOrders(state, renderCustomerOptions) {
         ? `<button class="btn primary small" type="button" data-quick-status="已完成" data-id="${escapeHtml(order.id)}" ${completed ? 'disabled' : ''}>${completed ? '已完成' : '完成'}</button>`
         : '',
     ].filter(Boolean).join('');
-    tr.className = `order-preview-row${highlightedOrderId === order.id ? ' is-just-completed' : ''}`;
+    const moveClass = move?.movedId === order.id ? (move.direction < 0 ? ' order-moving-up' : ' order-moving-down') : move?.displacedId === order.id ? (move.direction < 0 ? ' order-shifting-down' : ' order-shifting-up') : '';
+    tr.className = `order-preview-row${moveClass}${highlightedOrderId === order.id ? ' is-just-completed' : ''}`;
     tr.dataset.edit = order.id;
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
@@ -937,8 +941,9 @@ export function bindOrderEvents(state, saveState, renderAll) {
     }
     const moveBtn = e.target.closest('button[data-order-move]');
     if (moveBtn) {
-      const moved = moveOrderByStep(state, moveBtn.dataset.orderMove, Number(moveBtn.dataset.orderDirection));
-      if (moved) {
+      const movement = moveOrderByStep(state, moveBtn.dataset.orderMove, Number(moveBtn.dataset.orderDirection));
+      if (movement) {
+        pendingOrderMove = movement;
         saveState();
         renderAll();
       }
@@ -949,6 +954,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       const order = state.orders.find((o) => o.id === quickBtn.dataset.id);
       if (!order) return;
       if (order.status === '已送出') return;
+      const shouldPrint = quickBtn.dataset.quickStatus === '已完成' && order.status !== '已完成';
       const before = order.status;
       order.status = quickBtn.dataset.quickStatus;
       order.updatedAt = new Date().toLocaleString();
@@ -965,6 +971,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       highlightedOrderId = order.id;
       saveState();
       renderAll();
+      if (shouldPrint) openOrderExportWindowFromModule(order);
       return;
     }
 

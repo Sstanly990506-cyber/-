@@ -511,6 +511,15 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('prefers-reduced-motion: reduce', styles)
         self.assertIn('highlightedOrderId = order.id', orders)
         self.assertIn('is-just-completed', orders)
+        self.assertIn('pendingOrderMove = movement', orders)
+        self.assertIn('order-moving-up', orders)
+        self.assertIn('@keyframes orderMoveFromBelow', styles)
+        self.assertIn('@keyframes orderMoveFromAbove', styles)
+
+    def test_completing_an_order_opens_the_print_view(self):
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        self.assertIn("quickBtn.dataset.quickStatus === '已完成'", orders)
+        self.assertIn('if (shouldPrint) openOrderExportWindowFromModule(order);', orders)
 
     def test_orders_can_be_deleted_and_enter_moves_between_fields(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')

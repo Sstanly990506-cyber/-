@@ -578,6 +578,29 @@ tbody tr:hover {
 .orders-table .order-preview-row.is-just-completed {
   animation: orderRowComplete 0.86s ease both;
 }
+.orders-table.is-reordering .order-preview-row { animation: none; }
+.orders-table.is-reordering .order-moving-up,
+.orders-table.is-reordering .order-shifting-up {
+  position: relative;
+  z-index: 2;
+  animation: orderMoveFromBelow 0.46s cubic-bezier(0.2, 0.82, 0.24, 1) both;
+}
+.orders-table.is-reordering .order-moving-down,
+.orders-table.is-reordering .order-shifting-down {
+  position: relative;
+  z-index: 2;
+  animation: orderMoveFromAbove 0.46s cubic-bezier(0.2, 0.82, 0.24, 1) both;
+}
+@keyframes orderMoveFromBelow {
+  0% { opacity: 0.7; transform: translateY(calc(100% + 6px)); background: rgba(245, 158, 11, 0.2); }
+  65% { opacity: 1; background: rgba(245, 158, 11, 0.12); }
+  100% { transform: translateY(0); background: rgba(255,255,255,0.02); }
+}
+@keyframes orderMoveFromAbove {
+  0% { opacity: 0.7; transform: translateY(calc(-100% - 6px)); background: rgba(168, 85, 247, 0.2); }
+  65% { opacity: 1; background: rgba(168, 85, 247, 0.11); }
+  100% { transform: translateY(0); background: rgba(255,255,255,0.02); }
+}
 @keyframes orderRowEnter {
   from {
     opacity: 0;
