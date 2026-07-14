@@ -49,7 +49,10 @@ class StaticStructureTests(unittest.TestCase):
         loader = (ROOT / 'js' / 'view-loader.js').read_text(encoding='utf-8')
         self.assertNotIn('ordersView', index)
         self.assertIn('ordersView', view)
-        self.assertIn("fetch('views/app-shell.html'", loader)
+        self.assertIn('APP_ASSET_VERSION', loader)
+        self.assertIn('views/app-shell.html?v=', loader)
+        self.assertIn("import(`./main.js?v=", loader)
+        self.assertIn('js/view-loader.js?v=', index)
         self.assertNotIn('innerHTML', loader)
 
     def test_scalable_data_routes_exist_in_both_servers(self):

@@ -1,10 +1,11 @@
 window.__appBootstrapped = false;
 
+const APP_ASSET_VERSION = '20260714-login-guard-2';
 const mount = document.getElementById('appMount');
 const apiWarmup = fetch('/api/health', { cache: 'no-store' }).catch(() => null);
 
 async function loadApplicationView() {
-  const response = await fetch('views/app-shell.html');
+  const response = await fetch(`views/app-shell.html?v=${APP_ASSET_VERSION}`, { cache: 'no-store' });
   if (!response.ok) throw new Error(`無法載入畫面元件：HTTP ${response.status}`);
 
   const source = new DOMParser().parseFromString(await response.text(), 'text/html');
@@ -12,7 +13,7 @@ async function loadApplicationView() {
   if (!applicationMain) throw new Error('畫面元件缺少 main.app-shell');
 
   mount.replaceWith(document.importNode(applicationMain, true));
-  await import('./main.js');
+  await import(`./main.js?v=${APP_ASSET_VERSION}`);
   apiWarmup.catch(() => null);
 }
 
