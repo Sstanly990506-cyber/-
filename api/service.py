@@ -245,7 +245,7 @@ def user_action_payload(token,payload):
         if not username or not password:raise ApiError('missing login fields',400)
         account=authenticate_user(username,password)
         if not account:raise ApiError('invalid credentials',401)
-        return {'ok':True,'account':account,'token':create_session_token(account),'bootstrap':build_bootstrap_payload(account)}
+        return {'ok':True,'account':account,'token':create_session_token(account),'bootstrap':build_bootstrap_payload(account,include_pages=False)}
     if action=='verify_finance_password':
         account=require_account(token)
         if not account_can_view(account,'financeView'):raise ApiError('finance role required',403)

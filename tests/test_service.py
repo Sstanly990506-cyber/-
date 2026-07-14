@@ -310,12 +310,13 @@ class ServiceTests(unittest.TestCase):
 
     def test_login_returns_session(self):
         account = {'username': 'ops', 'display': 'Ops', 'role': 'ops'}
-        bootstrap = {'scalableDataApi': True, 'initialPages': {'orders': {'items': []}}}
-        with patch('api.service.authenticate_user', return_value=account), patch('api.service.create_session_token', return_value='token'), patch('api.service.build_bootstrap_payload', return_value=bootstrap):
+        bootstrap = {'scalableDataApi': True}
+        with patch('api.service.authenticate_user', return_value=account), patch('api.service.create_session_token', return_value='token'), patch('api.service.build_bootstrap_payload', return_value=bootstrap) as build_bootstrap:
             result = user_action_payload('', {'action': 'login', 'username': 'ops', 'password': 'secret'})
         self.assertEqual(result['token'], 'token')
         self.assertEqual(result['account'], account)
         self.assertEqual(result['bootstrap'], bootstrap)
+        build_bootstrap.assert_called_once_with(account, include_pages=False)
 
     def test_session_verification_does_not_query_users(self):
         account = {'username': 'ops', 'display': 'Ops', 'role': 'ops'}
