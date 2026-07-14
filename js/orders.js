@@ -636,7 +636,7 @@ export function renderOrders(state, renderCustomerOptions) {
   if (summary) summary.textContent = `顯示 ${filtered.length} 筆，共 ${state.orders.length} 筆工單`;
 
   if (!filtered.length) {
-    body.innerHTML = '<tr class="orders-empty-row"><td colspan="4">目前沒有符合條件的工單。</td></tr>';
+    body.innerHTML = '<tr class="orders-empty-row"><td colspan="5">目前沒有符合條件的工單。</td></tr>';
     return;
   }
 
@@ -660,6 +660,7 @@ export function renderOrders(state, renderCustomerOptions) {
     tr.dataset.edit = order.id;
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
+      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><strong>${escapeHtml(order.orderNumber || '-')}</strong><small>雙擊複製</small></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="客人" class="order-preview-customer"><strong>${escapeHtml(customer)}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
@@ -982,8 +983,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       openOrderForEdit(state, btn.dataset.edit);
       return;
     }
-
-    const row = e.target.closest('tr[data-edit]');
+    const row = e.target.closest('[data-copy-order]') ? null : e.target.closest('tr[data-edit]');
     if (row) openOrderForEdit(state, row.dataset.edit);
   });
   $('ordersTbody')?.addEventListener('dblclick', (e) => {

@@ -72,6 +72,9 @@ class StaticStructureTests(unittest.TestCase):
         trips_ui = (ROOT / 'js' / 'trips' / 'ui.js').read_text(encoding='utf-8')
         for text in ('候選路線數', '建議順序', '預估時間', '預估距離', '用 Google Maps 開啟', '固定點', '上移', '下移'):
             self.assertIn(text, trips_ui)
+        self.assertIn('formatDistance', trips_ui)
+        self.assertIn('公里', trips_ui)
+        self.assertNotIn('totalDistanceM)} m', trips_ui)
         for broken in ('嚗', '撠', '蝮', '銝', '', '?strong', '??'):
             self.assertNotIn(broken, trips_ui)
 
@@ -203,7 +206,8 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('taxId = normalizeTaxId', customers)
         self.assertIn('c.taxId ||', customers)
         self.assertIn('normalizeCustomerRole', customers)
-        self.assertIn("role === '客人' ? '上游' : role", customers)
+        self.assertIn("role === '客人' ? '兩者' : role", customers)
+        self.assertIn("const items = ['兩者', '上游', '下游']", customers)
         self.assertIn('const billingAndUpstream', customers)
         self.assertIn("['上游', '兩者'].includes(normalizeCustomerRole(c.role))", customers)
         self.assertNotIn("['上游', '客人', '兩者'].includes(c.role)", customers)
@@ -222,6 +226,11 @@ class StaticStructureTests(unittest.TestCase):
         self.assertNotIn('dashboardSmartTip', view)
         self.assertNotIn('dashboardHeroTitle', view)
         self.assertIn('summaries = {', main)
+        dashboard_block = main[main.index('function renderDashboard()'):main.index('function renderAll()')]
+        self.assertNotIn('formatDashboardMoney', dashboard_block)
+        self.assertNotIn('NT$', dashboard_block)
+        self.assertIn('pendingReceivables', dashboard_block)
+        self.assertIn('pendingPayables', dashboard_block)
         self.assertIn("priority.dataset.dashboardTarget === 'financeView'", main)
         self.assertIn('.dashboard-module-grid { grid-template-columns: repeat(2', styles)
 
@@ -459,10 +468,13 @@ class StaticStructureTests(unittest.TestCase):
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
         self.assertIn('id="ordersListSummary"', view)
         self.assertIn('class="orders-table"', view)
-        self.assertIn('<th>交貨日期</th><th>客人</th><th>狀態</th><th>操作</th>', view)
+        self.assertIn('<th>工單單號</th><th>交貨日期</th><th>客人</th><th>狀態</th><th>操作</th>', view)
         self.assertIn('order-preview-row', orders)
         self.assertIn("tr.style.setProperty('--row-index'", orders)
+        self.assertIn('data-label="工單單號"', orders)
         self.assertIn('data-label="客人"', orders)
+        self.assertIn('data-copy-order', orders)
+        self.assertIn('雙擊複製', orders)
         self.assertIn('data-quick-status="已送出"', orders)
         self.assertIn('data-quick-status="已完成"', orders)
         self.assertIn("settings.quickActions?.['已送出'] !== false", orders)
@@ -506,8 +518,9 @@ class StaticStructureTests(unittest.TestCase):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
-        self.assertIn('點一下可編輯', view)
-        self.assertIn("const row = e.target.closest('tr[data-edit]')", orders)
+        self.assertIn('點其他欄位可編輯', view)
+        self.assertIn("e.target.closest('[data-copy-order]') ? null", orders)
+        self.assertIn("e.target.closest('tr[data-edit]')", orders)
         self.assertIn('openOrderForEdit(state, row.dataset.edit)', orders)
         self.assertIn("sortOrder:o.sortOrder===null", store)
 
@@ -516,7 +529,7 @@ class StaticStructureTests(unittest.TestCase):
         render_block = orders[orders.index('export function renderOrders'):orders.index('export function clearOrderForm')]
         self.assertNotIn('data-delete-order', render_block)
         self.assertNotIn('data-move-order', render_block)
-        self.assertNotIn('data-copy-order', render_block)
+        self.assertIn('data-copy-order', render_block)
         self.assertIn('moveOrder(state', orders)
         self.assertIn('data-copy-order', orders)
         self.assertIn("addEventListener('dblclick'", orders)
@@ -588,7 +601,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('copyOrderAsNew', orders)
         self.assertIn("$('orderNumber').value = ''", orders)
         self.assertIn("$('orderNumber')?.focus()", orders)
-        self.assertNotIn('雙擊複製', view)
+        self.assertIn('雙擊工單單號可複製成新工單', view)
         self.assertIn("sortOrder:o.sortOrder===null", store)
 
     def test_ai_recognition_has_vercel_runtime_limits(self):

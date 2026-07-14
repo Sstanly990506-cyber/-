@@ -1,7 +1,7 @@
-import { $, money, escapeHtml } from './shared.js';
+import { $, escapeHtml } from './shared.js';
 import { DEFAULT_FACTORY } from './trips/constants.js?v=20260714-trip-route-text-1';
 import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20260714-trip-route-text-1';
-import { formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20260714-trip-route-text-1';
+import { formatDistance, formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20260714-customer-order-km-1';
 
 let manualStops = [];
 let selectedOrderIds = new Set();
@@ -118,7 +118,7 @@ function updateManualHint() {
   }
   const score = evaluateRoute(manualRoute);
   const confirmNote = manualRouteConfirmed ? '（已確認）' : '（尚未確認）';
-  $('tripManualHint').textContent = `手動路線預估：${formatDuration(score.totalDurationSec)} / ${money(score.totalDistanceM)} m ${confirmNote}`;
+  $('tripManualHint').textContent = `手動路線預估：${formatDuration(score.totalDurationSec)} / ${formatDistance(score.totalDistanceM)} ${confirmNote}`;
 }
 
 function renderAll(state) {

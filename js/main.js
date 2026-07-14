@@ -12,16 +12,16 @@ import {
   getIntegrityReport,
   appendSystemEvent,
 } from './store.js';
-import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20260714-trip-route-text-1';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20260714-order-sent-action-1';
+import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20260714-customer-order-km-1';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20260714-customer-order-km-1';
 import { renderFinance, bindFinanceEvents } from './finance.js?v=20260714-trip-route-text-1';
 import { renderAudits, bindAuditEvents } from './audit.js?v=20260714-trip-route-text-1';
-import { renderTrips, bindTripEvents } from './trips.js?v=20260714-trip-execute-sent-1';
+import { renderTrips, bindTripEvents } from './trips.js?v=20260714-customer-order-km-1';
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714-trip-route-text-1';
 import { renderInventory, bindInventoryEvents } from './inventory.js?v=20260714-trip-route-text-1';
 import { renderNotifications, bindNotificationEvents } from './notifications.js?v=20260714-trip-route-text-1';
 
-const APP_BUILD = '2026-07-14-trip-execute-sent-1';
+const APP_BUILD = '2026-07-14-customer-order-km-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
@@ -270,11 +270,6 @@ function getRiskScore(alerts) {
   return alerts.reduce((sum, a) => sum + (a.level === 'critical' ? 4 : a.level === 'warning' ? 2 : 1), 0);
 }
 
-function formatDashboardMoney(value) {
-  const compact = new Intl.NumberFormat('zh-TW', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value || 0));
-  return `NT$ ${compact}`;
-}
-
 function pushGlobalLineReminder(alerts) {
   const text = buildGlobalLineMessage(alerts);
   const score = getRiskScore(alerts);
@@ -336,8 +331,8 @@ function renderDashboard() {
   const today = new Date().toISOString().slice(0, 10);
   const todayCount = state.orders.filter((o) => (o.orderDate || '').slice(0, 10) === today).length;
   const pending = state.orders.filter((o) => (o.status || '未完成') !== '已完成').length;
-  const recvOutstanding = state.receivables.reduce((sum, r) => sum + Math.max(0, Number(r.amount || 0) - Number(r.received || 0)), 0);
-  const payableOutstanding = state.payables.reduce((sum, p) => sum + Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)), 0);
+  const pendingReceivables = state.receivables.filter((r) => Number(r.amount || 0) > Number(r.received || 0)).length;
+  const pendingPayables = state.payables.filter((p) => Number(p.amount || 0) > Number(p.paid || 0)).length;
   const inventoryWarnings = state.inventoryItems.filter((item) => Number(item.stock || 0) <= Number(item.safetyStock || 0));
   const alerts = proactiveNotify();
   const integrity = getIntegrityReport();
@@ -345,7 +340,7 @@ function renderDashboard() {
   const summaries = {
     admin: [
       ['未完成工單', pending, 'ordersView'],
-      ['應收未收', formatDashboardMoney(recvOutstanding), 'financeView'],
+      ['低庫存', inventoryWarnings.length, 'inventoryView'],
       ['重要提醒', alerts.length, 'notificationsView'],
     ],
     ops: [
@@ -354,8 +349,8 @@ function renderDashboard() {
       ['重要提醒', alerts.length, 'notificationsView'],
     ],
     finance: [
-      ['應收未收', formatDashboardMoney(recvOutstanding), 'financeView'],
-      ['應付未付', formatDashboardMoney(payableOutstanding), 'financeView'],
+      ['待收款項', pendingReceivables, 'financeView'],
+      ['待付款項', pendingPayables, 'financeView'],
       ['重要提醒', alerts.length, 'notificationsView'],
     ],
     audit: [

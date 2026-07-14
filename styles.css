@@ -539,13 +539,15 @@ tbody tr:hover {
   table-layout: fixed;
 }
 .orders-table th:nth-child(1),
-.orders-table td:nth-child(1) { width: 34%; }
+.orders-table td:nth-child(1) { width: 19%; }
 .orders-table th:nth-child(2),
-.orders-table td:nth-child(2) { width: 34%; }
+.orders-table td:nth-child(2) { width: 18%; }
 .orders-table th:nth-child(3),
-.orders-table td:nth-child(3) { width: 18%; }
+.orders-table td:nth-child(3) { width: 25%; }
 .orders-table th:nth-child(4),
 .orders-table td:nth-child(4) { width: 14%; }
+.orders-table th:nth-child(5),
+.orders-table td:nth-child(5) { width: 24%; }
 .orders-table tbody tr:hover { background: rgba(255,255,255,0.035); }
 .orders-table .order-preview-row {
   cursor: pointer;
@@ -597,7 +599,7 @@ tbody tr:hover {
   white-space: nowrap;
 }
 .order-number-copy {
-  min-width: 150px;
+  cursor: copy;
 }
 .order-number-copy strong,
 .order-number-copy small,

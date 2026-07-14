@@ -2,12 +2,12 @@ import { $ } from './shared.js';
 
 function getCustomerRoles(state) {
   const roles = state.settings?.moduleInternals?.customers?.roles || { '上游': true, '下游': true, '兩者': true };
-  const items = ['上游', '下游', '兩者'].filter((role) => roles[role] !== false);
-  return items.length ? items : ['上游'];
+  const items = ['兩者', '上游', '下游'].filter((role) => roles[role] !== false);
+  return items.length ? items : ['兩者'];
 }
 
 function normalizeCustomerRole(role) {
-  return role === '客人' ? '上游' : role;
+  return role === '客人' ? '兩者' : role;
 }
 
 function renderCustomerRoleOptions(state) {
@@ -184,6 +184,7 @@ export function bindCustomerEvents(state, saveState, renderAll) {
     }
     saveState();
     e.target.reset();
+    renderCustomerRoleOptions(state);
     updateCustomerSmartHint(state);
     renderAll();
   });
