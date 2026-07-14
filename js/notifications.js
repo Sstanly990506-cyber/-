@@ -62,8 +62,9 @@ async function refreshLineStatus(state) {
       }
     }
   } catch (err) {
-    $('lineConfiguredStatus').textContent = '瑼Ｘ憭望?';
-    if ($('lineStatusDetail')) $('lineStatusDetail').textContent = `LINE ??炎?亙仃??${err.message}`;
+    const status = $('lineConfiguredStatus');
+    if (status) status.textContent = '檢查失敗';
+    if ($('lineStatusDetail')) $('lineStatusDetail').textContent = `LINE 狀態檢查失敗：${err.message}`;
   }
 }
 
