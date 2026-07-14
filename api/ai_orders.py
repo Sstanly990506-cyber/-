@@ -10,23 +10,26 @@ ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
 MAX_IMAGE_BYTES = 2_500_000
 BUSINESS_RULES = (
     'This system is used by a coating/varnishing factory. '
+    'billingCustomer means our customer. Normally use the largest or most prominent full company name at the top of the work order, '
+    'especially a name ending in 公司, 有限公司, or 股份有限公司. This is a strong clue, but an explicitly labeled field takes priority. '
+    'upstream means the company upstream of 三青 and is separate from billingCustomer. Read the company labeled 廠商, 供應商, 印刷, '
+    'or another printing-vendor label that identifies who supplied the printed sheets to 三青. It is usually a printing company. '
+    'Never copy billingCustomer into upstream merely because one field is missing; set them equal only when the image clearly supports it. '
     'The orderDate field means delivery date / handover date, not issue date. Prefer labels such as 交貨日期, 到貨, 完成寄出, or delivery date. '
     'If only 發單日期/issue date is visible and no delivery date is visible, leave orderDate empty. '
-    'The billing customer and upstream customer must be the same printing factory/vendor because the upstream vendor is who we bill. '
-    'Set billingCustomer and upstream to the same value. Prefer the upstream/printing company/vendor that sends printed sheets to us, '
-    'or the visible customer field when it clearly identifies a real company name that should be billed. '
-    'Do not use alphanumeric customer codes or item codes such as HC003, H C003, CLNT001, or similar 客戶代號 as billingCustomer/upstream. '
-    'On outsourced processing forms such as 鼎易/鼎義 委外加工單, the 客戶 field can be the issuer printer/vendor customer, not our customer. '
-    'For those forms, if 富盛 is visible, use 富盛 as billingCustomer and upstream instead of HC003. '
-    'The downstream customer is normally the company shown on a process after 上光, especially 裁切, 軋合, 軋型, or similar finishing rows. '
-    'Do not treat the company on the 上光 row as upstream or downstream because that row commonly identifies our own factory. '
+    'Read orderNumber only from a work-order label such as 工單編號, 工單號碼, 工單NO, or work order number; do not use a customer code. '
+    'Do not use alphanumeric customer codes or item codes such as HC003, H C003, CLNT001, or similar 客戶代號 as any company name. '
+    'The downstream customer is the next process after 三青/上光. Prefer a company shown beside 軋盒, 軋工, 軋合, 裁切, 軋型, '
+    'or another clearly labeled next-process row. Do not treat 三青 or the company on the 上光 row as upstream or downstream. '
     'The address field means the delivery destination after coating, so it belongs to the downstream company. '
     'Never use the document issuer, header, advertising-design company, upstream printing company, or coating-factory address as the delivery address. '
     'Only return an address from the image when it is explicitly identified as the downstream/next-process delivery destination; otherwise leave it empty. '
-    'Read quantity primarily from the 印刷 row, preserving expressions such as 1362車+238張 in sheetCountText. '
-    'Do not calculate or simplify quantity expressions. For example, preserve 1362車+238張 exactly and set sheetCount to zero '
-    'unless the document separately shows one explicit numeric calculation quantity. '
-    'Do not prefer 訂購數量 or 紙張 row quantity when a more specific 印刷 row quantity exists. '
+    'Read quantity primarily from the row or column labeled 三青. sheetCountText is a quantity note/remark field: copy the complete visible wording, '
+    'including Chinese text and symbols, and preserve expressions such as 1362車+238張 exactly. '
+    'sheetCount is the explicit true numeric quantity used for calculation. Use the single explicit quantity from the 三青 field when visible. '
+    'Do not calculate or simplify quantity expressions; if only an expression is visible and no separate total is printed, set sheetCount to zero. '
+    'sizeLength maps exactly to 天 and sizeWidth maps exactly to 地; do not swap or sort them by numeric size. '
+    'Preserve the printed size unit: 台吋 maps to tai-inch, mm to mm, cm to cm, and 英吋/吋 to inch. If no unit is visible, leave sizeUnit empty. '
 )
 
 
@@ -48,25 +51,27 @@ def _looks_like_customer_code(value):
 def normalize_recognized_order(recognized):
     if not isinstance(recognized, dict):
         return recognized
-    billing = str(recognized.get('billingCustomer') or '').strip()
-    upstream = str(recognized.get('upstream') or '').strip()
-    billing_is_code = _looks_like_customer_code(billing)
-    upstream_is_code = _looks_like_customer_code(upstream)
-    if upstream_is_code and billing and not billing_is_code:
-        customer = billing
-    elif billing_is_code and upstream and not upstream_is_code:
-        customer = upstream
-    elif billing_is_code or upstream_is_code:
-        customer = ''
+    cleared = []
+    company_fields = {
+        'billingCustomer': '客人',
+        'upstream': '上游客戶',
+        'downstream': '下游客戶',
+    }
+    for key, label in company_fields.items():
+        value = str(recognized.get(key) or '').strip()
+        if _looks_like_customer_code(value):
+            recognized[key] = ''
+            cleared.append(label)
+        else:
+            recognized[key] = value
+    if cleared:
         notes = recognized.get('notes')
         if not isinstance(notes, list):
             notes = []
-        notes.append('客人/上游客戶像內部代號，已留空，請改選真正交紙給我們的上游廠商。')
+        message = f'{"、".join(cleared)}像內部代號，已留空，請選真正的公司名稱。'
+        if message not in notes:
+            notes.append(message)
         recognized['notes'] = notes
-    else:
-        customer = upstream or billing
-    recognized['billingCustomer'] = customer
-    recognized['upstream'] = customer
     return recognized
 
 ORDER_SCHEMA = {
@@ -170,7 +175,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
         f'{BUSINESS_RULES}'
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
         f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '
-        f'Known billing/upstream vendors from our customer system, when visible in the image: {customer_text or "none supplied"}. '
+        f'Known company names from our customer system, when visible in the image: {customer_text or "none supplied"}. '
         'Use the following recent human corrections as hints for recurring recognition mistakes, '
         'but only apply them when supported by the current image: '
         f'{_correction_examples(corrections) or "none supplied"}.'

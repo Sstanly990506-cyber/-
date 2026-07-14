@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from api.line_bot import handle_line_webhook
-from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, execute_trip_payload, get_state_payload, health_payload, import_customers_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
+from api.service import ApiError, _customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, execute_trip_payload, get_state_payload, health_payload, import_customers_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -587,15 +587,15 @@ class ServiceTests(unittest.TestCase):
             result = recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ=='})
         self.assertEqual(result, {'ok': True, 'order': recognized})
 
-    def test_ai_recognition_passes_known_billing_vendors(self):
+    def test_ai_recognition_passes_known_company_names(self):
         recognized = {'orderNumber': 'WO-1'}
         customers = {'items': [{'name': '富盛', 'role': '上游'}, {'name': '成峰', 'role': '下游'}]}
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', side_effect=[{'items': []}, customers]), patch('api.service.recognize_order_image', return_value=recognized) as recognize:
             result = recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ==', 'glossOptions': ['PVA光']})
         self.assertEqual(result, {'ok': True, 'order': recognized})
-        self.assertEqual(recognize.call_args.args[3], ['富盛'])
+        self.assertEqual(recognize.call_args.args[3], ['富盛', '成峰'])
 
-    def test_ai_billing_vendor_names_ignore_downstream_and_inactive_customers(self):
+    def test_ai_company_names_include_all_active_roles(self):
         customers = {'items': [
             {'name': '富盛', 'role': '上游'},
             {'name': '雙向公司', 'role': '兩者'},
@@ -604,7 +604,7 @@ class ServiceTests(unittest.TestCase):
             {'name': '停用廠商', 'role': '上游', 'active': False},
         ]}
         with patch('api.service.list_records', return_value=customers):
-            self.assertEqual(_billing_customer_names_for_ai(), ['富盛', '雙向公司', '舊客人'])
+            self.assertEqual(_customer_names_for_ai(), ['富盛', '雙向公司', '舊客人', '成峰'])
 
     def test_ai_recognition_uses_downstream_address_from_customer_system(self):
         recognized = {'downstream': '威峰', 'address': ''}

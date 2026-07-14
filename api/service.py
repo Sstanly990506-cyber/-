@@ -174,14 +174,11 @@ def _fill_recognized_customer_address(recognized):
     elif str(recognized.get('address') or '').strip():
         recognized['addressSource']='image-downstream-destination'
     return recognized
-def _billing_customer_names_for_ai():
+def _customer_names_for_ai():
     rows=list_records('customers',1,200).get('items') or []
     names=[]
     for row in rows:
         if row.get('active') is False:continue
-        role=str(row.get('role') or '').strip()
-        if role=='客人':role='上游'
-        if role and role not in {'上游','兩者'}:continue
         name=str(row.get('name') or '').strip()
         if name and name not in names:names.append(name)
     return names[:80]
@@ -413,7 +410,7 @@ def recognize_order_payload(token,payload):
     if not account_can_view(account,'ordersView'):raise ApiError('permission denied',403)
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     corrections=list_records('aiCorrections',1,20).get('items') or []
-    customers=_billing_customer_names_for_ai()
+    customers=_customer_names_for_ai()
     try:recognized=_fill_recognized_customer_address(normalize_recognized_order(recognize_order_image(payload.get('image'),payload.get('glossOptions'),corrections,customers)))
     except ValueError as err:raise ApiError(str(err),400) from err
     except OrderRecognitionError as err:raise ApiError(str(err),503) from err
