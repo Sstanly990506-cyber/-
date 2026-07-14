@@ -3,6 +3,7 @@ import { syncOrderToReceivables } from './store.js';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
+import { bindOrderDrag } from './orders-drag.js?v=20260714-order-drag-1';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
@@ -101,15 +102,16 @@ function normalizeOrderPositions(state) {
   });
 }
 
-function moveOrder(state, orderId, direction) {
-  normalizeOrderPositions(state);
+function reorderOrder(state, orderId, targetId, after = false) {
+  if (!orderId || !targetId || orderId === targetId) return false;
   const ordered = sortedOrders(state);
-  const index = ordered.findIndex((order) => order.id === orderId);
-  const targetIndex = index + direction;
-  if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return false;
-  const current = ordered[index];
-  const target = ordered[targetIndex];
-  [current.sortOrder, target.sortOrder] = [target.sortOrder, current.sortOrder];
+  const sourceIndex = ordered.findIndex((order) => order.id === orderId);
+  if (sourceIndex < 0) return false;
+  const [current] = ordered.splice(sourceIndex, 1);
+  const targetIndex = ordered.findIndex((order) => order.id === targetId);
+  if (targetIndex < 0) return false;
+  ordered.splice(targetIndex + (after ? 1 : 0), 0, current);
+  ordered.forEach((order, index) => { order.sortOrder = index; });
   return true;
 }
 
@@ -660,7 +662,7 @@ export function renderOrders(state, renderCustomerOptions) {
     tr.dataset.edit = order.id;
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
-      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><strong>${escapeHtml(order.orderNumber || '-')}</strong><small>雙擊複製</small></td>
+      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><button class="order-drag-handle" type="button" data-order-drag-handle="${escapeHtml(order.id)}" title="長按後拖拉調整順序">拖拉</button><span><strong>${escapeHtml(order.orderNumber || '-')}</strong><small>雙擊複製</small></span></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="客人" class="order-preview-customer"><strong>${escapeHtml(customer)}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
@@ -926,15 +928,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
   });
 
   $('ordersTbody')?.addEventListener('click', (e) => {
-    const moveBtn = e.target.closest('button[data-move-order]');
-    if (moveBtn) {
-      if (moveOrder(state, moveBtn.dataset.id, Number(moveBtn.dataset.moveOrder))) {
-        saveState();
-        renderAll();
-      }
-      return;
-    }
-
     const deleteBtn = e.target.closest('button[data-delete-order]');
     if (deleteBtn) {
       const index = state.orders.findIndex((order) => order.id === deleteBtn.dataset.deleteOrder);
@@ -983,7 +976,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       openOrderForEdit(state, btn.dataset.edit);
       return;
     }
-    const row = e.target.closest('[data-copy-order]') ? null : e.target.closest('tr[data-edit]');
+    const row = e.target.closest('[data-copy-order], [data-order-drag-handle]') ? null : e.target.closest('tr[data-edit]');
     if (row) openOrderForEdit(state, row.dataset.edit);
   });
   $('ordersTbody')?.addEventListener('dblclick', (e) => {
@@ -991,6 +984,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (!cell) return;
     copyOrderAsNew(state, cell.dataset.copyOrder);
   });
+  bindOrderDrag($('ordersTbody'), (orderId, targetId, after) => reorderOrder(state, orderId, targetId, after), saveState, renderAll);
 
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });
   bindOrderEnterNavigation();

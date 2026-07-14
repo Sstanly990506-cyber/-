@@ -77,7 +77,7 @@
             <div class="orders-list-head">
               <div>
                 <h3>工單列表</h3>
-                <p class="sub"><span id="ordersListSummary">共 0 筆工單</span>｜點其他欄位可編輯；雙擊工單單號可複製成新工單</p>
+                <p class="sub"><span id="ordersListSummary">共 0 筆工單</span>｜長按「拖拉」可調整順序；雙擊工單單號可複製成新工單</p>
               </div>
               <input id="orderSearch" placeholder="搜尋工單編號 / 客戶 / 地址 / 狀態" />
             </div>
@@ -104,7 +104,7 @@
             </section>
             <form id="orderForm" class="form-grid order-grid">
               <input id="orderId" type="hidden" />
-              <label>工單編號<input id="orderNumber" /></label>
+              <label>工單編號<input id="orderNumber" autocomplete="off" /></label>
               <label>交貨日期<input id="orderDate" type="date" /></label>
               <div class="customer-price-row span-2">
                 <label>客人
