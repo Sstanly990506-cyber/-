@@ -15,7 +15,7 @@ function inRange(state, dateText) {
 }
 
 function getInvoiceEligibleOrders(state) {
-  return state.orders.filter((o) => ['撌脣???, '撌脤'].includes(o.status));
+  return state.orders.filter((o) => ['未完成', '進行中'].includes(o.status || '未完成'));
 }
 
 function getSelectedInvoiceOrders(state) {
@@ -50,10 +50,10 @@ function updateFinanceSmartHint(state) {
   if (!hint) return;
   const order = findOrderByNumber(state, $('recvOrderNumber')?.value || '');
   if (!order) {
-    hint.textContent = '?箄撱箄降嚗撓?亙極?桃楊??芸?撣嗅摰Ｘ??憿?;
+    hint.textContent = '輸入工單編號後，系統會自動帶入客人、日期與金額。';
     return;
   }
-  hint.textContent = `?箄撱箄降嚗歇?曉撌亙 ${order.orderNumber || '-'}嚗敹恍遣蝡??嗚;
+  hint.textContent = `已找到工單 ${order.orderNumber || '-'}，可自動帶入應收款資料。`;
 }
 
 function autofillReceivableFromOrder(state) {
@@ -98,8 +98,8 @@ function renderInvoicePicker(state) {
 
   const orders = getInvoiceEligibleOrders(state);
   if (!orders.length) {
-    wrap.innerHTML = '<p class="sub">?桀?瘝??舫?蝡蟡典極?柴?/p>';
-    summary.textContent = '撌脤 0 蝑??? 0 ??;
+    wrap.innerHTML = '<p class="sub">目前沒有可開發票的工單。</p>';
+    summary.textContent = '已選 0 筆，總價 0 元';
     return;
   }
 
@@ -108,7 +108,7 @@ function renderInvoicePicker(state) {
     row.className = 'invoice-order-item';
     row.innerHTML = `
       <input type="checkbox" data-invoice-order-id="${escapeHtml(order.id)}" ${selectedInvoiceOrderIds.has(order.id) ? 'checked' : ''} />
-      <strong>${escapeHtml(order.orderNumber || '?芸‵撌亙??)}</strong>
+      <strong>${escapeHtml(order.orderNumber || '未命名工單')}</strong>
       <span>${escapeHtml(order.billingCustomer || order.downstream || order.upstream || '-')}</span>
       <span>${escapeHtml(order.orderDate || '-')}</span>
       <span>NT$ ${money(order.totalPrice || 0)}</span>`;
@@ -117,13 +117,13 @@ function renderInvoicePicker(state) {
 
   const selected = getSelectedInvoiceOrders(state);
   const total = selected.reduce((sum, o) => sum + Number(o.totalPrice || 0), 0);
-  summary.textContent = `撌脤 ${selected.length} 蝑??? ${money(total)} ?;
+  summary.textContent = `已選 ${selected.length} 筆，總價 ${money(total)} 元`;
 }
 
 function openInvoiceWindow(state) {
   const selected = getSelectedInvoiceOrders(state);
   if (!selected.length) {
-    alert('隢撠??蝑極?桀??臬?潛巨');
+    alert('請先選擇要開發票的工單。');
     return;
   }
   const meta = getInvoiceMeta();
@@ -132,13 +132,13 @@ function openInvoiceWindow(state) {
     .map((o, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(o.orderNumber || '-')}</td><td>${escapeHtml(o.billingCustomer || o.downstream || o.upstream || '-')}</td><td>${escapeHtml(o.orderDate || '-')}</td><td style="text-align:right;">${money(o.totalPrice || 0)}</td></tr>`)
     .join('');
 
-  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>?潛巨?臬</title>
+  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>發票預覽</title>
   <style>body{font-family:"Noto Sans TC",sans-serif;padding:16px}.copy{border:2px solid #555;padding:12px;margin-bottom:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:6px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}.sum{font-weight:700;text-align:right}</style></head><body>
-  <div class="copy"><h2>${escapeHtml(COMPANY_INFO.name)} ?餃??潛巨</h2><p>${escapeHtml(COMPANY_INFO.address)}</p>${renderInvoiceMeta(meta)}<table><thead><tr><th>#</th><th>撌亙</th><th>摰Ｘ</th><th>?交?</th><th>??</th></tr></thead><tbody>${rows}</tbody></table><div class="sum">??嚗T$ ${money(total)}</div></div>
+  <div class="copy"><h2>${escapeHtml(COMPANY_INFO.name)} 發票</h2><p>${escapeHtml(COMPANY_INFO.address)}</p>${renderInvoiceMeta(meta)}<table><thead><tr><th>#</th><th>工單</th><th>客人</th><th>日期</th><th>金額</th></tr></thead><tbody>${rows}</tbody></table><div class="sum">總計：NT$ ${money(total)}</div></div>
   <script>window.print();</script></body></html>`;
 
   const win = window.open('', '_blank', 'width=980,height=760');
-  if (!win) return alert('隢?閮勗??箄?蝒?);
+  if (!win) return alert('請允許瀏覽器開啟彈出視窗。');
   win.document.write(html);
   win.document.close();
 }
@@ -147,7 +147,7 @@ export function getLinkedReceivablesData(state) {
   const orderMap = new Map();
 
   state.orders
-    .filter((o) => ['撌脣???, '撌脤'].includes(o.status))
+    .filter((o) => ['未完成', '進行中'].includes(o.status || '未完成'))
     .filter((o) => inRange(state, o.orderDate))
     .forEach((o) => {
       const key = getOrderReceivableKey(o);
@@ -177,7 +177,7 @@ export function getLinkedReceivablesData(state) {
         key,
         date: item.date || '',
         customer: item.customer || '-',
-        orderNumber: item.orderNumber || '(?芸‵撌亙)',
+        orderNumber: item.orderNumber || '(未命名工單)',
         amount: Number(item.amount || 0),
         received: Number(item.received || 0),
       });
@@ -277,44 +277,44 @@ function getCustomerStatementRows(state, reportA) {
 function exportMonthClose(state, reportA) {
   const data = getMonthCloseData(state, reportA, $('financeCloseMonth')?.value);
   const rows = [
-    ['?遢', '?', '撌脫', '?芣', '??', '撌脖?', '?芯?', '瘛函??],
+    ['月份', '應收', '已收', '未收', '應付', '已付', '未付', '現金淨額'],
     [data.month, data.receivableTotal, data.receivedTotal, data.receivableUnpaid, data.payableTotal, data.paidTotal, data.payableUnpaid, data.cashNet],
     [],
-    ['敺摰Ｘ', '撌亙', '?交?', '?', '撌脫', '?芣'],
+    ['應收客戶', '工單', '日期', '應收', '已收', '未收'],
     ...data.receivables.filter((r) => r.remain > 0).map((r) => [r.customer, r.orderNumber, r.date, r.amount, r.received, r.remain]),
     [],
-    ['敺?靘???, '?', '?交?', '??', '撌脖?', '?芯?'],
+    ['應付廠商', '項目', '日期', '應付', '已付', '未付'],
     ...data.payables.filter((p) => p.unpaid > 0).map((p) => [p.vendor, p.item, p.date, p.amount, p.paid, p.unpaid]),
   ];
-  downloadCsv(`??-${data.month}.csv`, rows);
+  downloadCsv(`month-close-${data.month}.csv`, rows);
 }
 
 function exportCustomerStatement(state, reportA) {
   const statement = getCustomerStatementRows(state, reportA);
-  if (!statement.customer) return alert('隢?頛詨摰Ｘ?迂??);
-  if (!statement.rows.length) return alert('??隞賣銝閰脣恥?嗥?撠董鞈???);
+  if (!statement.customer) return alert('請先輸入客人關鍵字。');
+  if (!statement.rows.length) return alert('這個月份沒有符合條件的對帳資料。');
   const totals = statement.rows.reduce((acc, r) => {
     acc.amount += Number(r.amount || 0);
     acc.received += Number(r.received || 0);
     acc.remain += Number(r.remain || 0);
     return acc;
   }, { amount: 0, received: 0, remain: 0 });
-  downloadCsv(`撠董??${statement.customer}-${statement.month}.csv`, [
-    ['摰Ｘ', statement.customer],
-    ['?遢', statement.month],
-    ['???', totals.amount],
-    ['撌脫??', totals.received],
-    ['?芣??', totals.remain],
+  downloadCsv(`statement-${statement.customer}-${statement.month}.csv`, [
+    ['客人', statement.customer],
+    ['月份', statement.month],
+    ['應收總額', totals.amount],
+    ['已收總額', totals.received],
+    ['未收總額', totals.remain],
     [],
-    ['?交?', '撌亙', '?', '撌脫', '?芣'],
+    ['日期', '工單', '應收', '已收', '未收'],
     ...statement.rows.map((r) => [r.date, r.orderNumber, r.amount, r.received, r.remain]),
   ]);
 }
 
 function printCustomerStatement(state, reportA) {
   const statement = getCustomerStatementRows(state, reportA);
-  if (!statement.customer) return alert('隢?頛詨摰Ｘ?迂??);
-  if (!statement.rows.length) return alert('??隞賣銝閰脣恥?嗥?撠董鞈???);
+  if (!statement.customer) return alert('請先輸入客人關鍵字。');
+  if (!statement.rows.length) return alert('這個月份沒有符合條件的對帳資料。');
   const totals = statement.rows.reduce((acc, r) => {
     acc.amount += Number(r.amount || 0);
     acc.received += Number(r.received || 0);
@@ -322,15 +322,15 @@ function printCustomerStatement(state, reportA) {
     return acc;
   }, { amount: 0, received: 0, remain: 0 });
   const rows = statement.rows.map((r) => `<tr><td>${escapeHtml(r.date || '-')}</td><td>${escapeHtml(r.orderNumber || '-')}</td><td>${money(r.amount)}</td><td>${money(r.received)}</td><td>${money(r.remain)}</td></tr>`).join('');
-  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>摰Ｘ撠董??/title>
+  const html = `<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" /><title>客戶對帳單</title>
   <style>body{font-family:"Noto Sans TC",sans-serif;padding:18px;color:#111}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #777;padding:7px;text-align:left}.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;font-weight:700}</style></head><body>
-  <h2>${escapeHtml(COMPANY_INFO.name)} 摰Ｘ撠董??/h2>
-  <p>摰Ｘ嚗?{escapeHtml(statement.customer)}??遢嚗?{escapeHtml(statement.month)}</p>
-  <div class="sum"><span>?嚗?{money(totals.amount)}</span><span>撌脫嚗?{money(totals.received)}</span><span>?芣嚗?{money(totals.remain)}</span></div>
-  <table><thead><tr><th>?交?</th><th>撌亙</th><th>?</th><th>撌脫</th><th>?芣</th></tr></thead><tbody>${rows}</tbody></table>
+  <h2>${escapeHtml(COMPANY_INFO.name)} 客戶對帳單</h2>
+  <p>客人：${escapeHtml(statement.customer)}　月份：${escapeHtml(statement.month)}</p>
+  <div class="sum"><span>應收：${money(totals.amount)}</span><span>已收：${money(totals.received)}</span><span>未收：${money(totals.remain)}</span></div>
+  <table><thead><tr><th>日期</th><th>工單</th><th>應收</th><th>已收</th><th>未收</th></tr></thead><tbody>${rows}</tbody></table>
   <script>window.print();</script></body></html>`;
   const win = window.open('', '_blank', 'width=980,height=760');
-  if (!win) return alert('隢?閮勗??箄?蝒?);
+  if (!win) return alert('請允許瀏覽器開啟彈出視窗。');
   win.document.write(html);
   win.document.close();
 }
@@ -378,11 +378,11 @@ function renderFinanceChartAndAnalysis(reportC, reportA) {
   $('financeAvgNet6m').textContent = money(Math.round(avgNet));
 
   const insights = [];
-  if (avgNet < 0) insights.push('餈?6 ?像?楊憿鞎?撱箄降?芸?瑼Ｚ?擃??砍極?株???隞狡蝭憟?);
-  if (collectionRate < 70) insights.push(`?嗆狡??${collectionRate.toFixed(1)}% ??嚗遣霅啣???嗆?蝔);
+  if (avgNet < 0) insights.push('近 6 個月平均淨額為負，建議檢查成本與應付款。');
+  if (collectionRate < 70) insights.push(`收款率 ${collectionRate.toFixed(1)}% 偏低，建議優先追蹤未收款。`);
   const topOverdue = [...reportA].filter((r) => r.remain > 0).sort((a, b) => b.remain - a.remain).slice(0, 3);
-  if (topOverdue.length) insights.push(`?芣憸券??3 ??${topOverdue.map((r) => `${r.customer}/${money(r.remain)}`).join('??)}`);
-  analysis.innerHTML = (insights.length ? insights : ['鞎∪?蝯?蝛拙?嚗???餈質馱撣喲翩???晞?]).map((line) => `<li>${escapeHtml(line)}</li>`).join('');
+  if (topOverdue.length) insights.push(`未收金額最高 3 筆：${topOverdue.map((r) => `${r.customer}/${money(r.remain)}`).join('、')}`);
+  analysis.innerHTML = (insights.length ? insights : ['目前財務狀況正常，請持續追蹤收付款。']).map((line) => `<li>${escapeHtml(line)}</li>`).join('');
 }
 
 
@@ -453,30 +453,30 @@ function buildFinanceLineReminder(state, reportA) {
     .slice(0, 5);
 
   const lines = [];
-  lines.push(`??{COMPANY_INFO.name} 鞎∠??箄???);
-  lines.push(`??嚗?{new Date().toLocaleString()}`);
+  lines.push(`${COMPANY_INFO.name} 財經提醒`);
+  lines.push(`時間：${new Date().toLocaleString()}`);
   lines.push('');
 
   if (dueCritical.length) {
-    lines.push('? ??暹?嚗?=30憭抬?');
-    dueCritical.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / ?芣 ${money(r.remain)} / 撣喲翩 ${r.age} 憭奈));
+    lines.push('逾期應收款：30 天以上');
+    dueCritical.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / 未收 ${money(r.remain)} / ${r.age} 天`));
     lines.push('');
   }
 
   if (dueSoon.length) {
-    lines.push('?? ?霅衣內嚗?~29憭抬?');
-    dueSoon.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / ?芣 ${money(r.remain)} / 撣喲翩 ${r.age} 憭奈));
+    lines.push('近期應收款：7-29 天');
+    dueSoon.forEach((r) => lines.push(`- ${r.customer} / ${r.orderNumber} / 未收 ${money(r.remain)} / ${r.age} 天`));
     lines.push('');
   }
 
   if (unpaid.length) {
-    lines.push('? ??敺?甈?);
-    unpaid.forEach((p) => lines.push(`- ${p.vendor || '-'} / ${p.item || '-'} / ?芯? ${money(p.unpaid)}`));
+    lines.push('未付款項');
+    unpaid.forEach((p) => lines.push(`- ${p.vendor || '-'} / ${p.item || '-'} / 未付 ${money(p.unpaid)}`));
     lines.push('');
   }
 
   if (!dueCritical.length && !dueSoon.length && !unpaid.length) {
-    lines.push('??隞鞎∠???迤撣賂??⊿??孵????);
+    lines.push('目前沒有需要特別提醒的財務項目。');
   }
 
   return lines.join('\n');
@@ -685,9 +685,9 @@ export function bindFinanceEvents(state, saveState, renderAll) {
   $('sendLineReminderBtn')?.addEventListener('click', async () => {
     try {
       const result = await sendFinanceLineReminder(state, getLinkedReceivablesData(state));
-      alert(`LINE 鞎∠???撌脤嚗?{result.sent || 0} ??憭拙恕?);
+      alert(`LINE 財經提醒已送出：${result.sent || 0} 個對象。`);
     } catch (err) {
-      alert(`LINE 鞎∠???憭望?嚗?{err.message}`);
+      alert(`LINE 財經提醒失敗：${err.message}`);
     }
   });
 
@@ -706,8 +706,8 @@ export function bindFinanceEvents(state, saveState, renderAll) {
       }
     }
     if (remove) {
-      if (!item) return alert('???臬?撌亙?芸?撣嗅???塚?隢撌亙隤踵??????);
-      if (!window.confirm('蝣箏?閬?日??鞈???')) return;
+      if (!item) return alert('找不到這筆應收款資料，請重新整理後再試。');
+      if (!window.confirm('確定要刪除這筆應收款資料嗎？')) return;
       state.receivables = state.receivables.filter((r) => r.id !== item.id);
     }
     saveState();
@@ -723,7 +723,7 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     if (!item) return;
     if (done) item.paid = Number(item.amount || 0);
     if (remove) {
-      if (!window.confirm('蝣箏?閬?日???鞈???')) return;
+      if (!window.confirm('確定要刪除這筆應付款資料嗎？')) return;
       state.payables = state.payables.filter((p) => p.id !== id);
     }
     saveState();

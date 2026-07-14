@@ -24,7 +24,7 @@ export function renderNotifications(state) {
   const filtered = getFilteredEvents(state);
   const warningCount = events.filter((event) => event.level === 'warning').length;
   const infoCount = events.filter((event) => event.level === 'info').length;
-  const latest = events[0]?.at ? formatTs(new Date(events[0].at).getTime()) : '撌脣摮?;
+  const latest = events[0]?.at ? formatTs(new Date(events[0].at).getTime()) : '尚無資料';
 
   if ($('noticeTotalCount')) $('noticeTotalCount').textContent = String(events.length);
   if ($('noticeWarningCount')) $('noticeWarningCount').textContent = String(warningCount);
@@ -34,7 +34,7 @@ export function renderNotifications(state) {
   if ($('notificationsList')) {
     $('notificationsList').innerHTML = filtered.length
       ? filtered.slice(0, 40).map((event) => `<li class="${event.readAt ? 'notice-read' : 'notice-unread'}"><strong>[${escapeHtml(event.level || 'info')}]</strong> ${escapeHtml(event.message || '-')}｜${escapeHtml(event.user || '-')}｜${escapeHtml(event.at || '-')}${event.readAt ? `｜已讀 ${escapeHtml(event.readAt)}` : ''}</li>`).join('')
-      : '<li>?桀?瘝??蝝??/li>';
+      : '<li>目前沒有通知事件。</li>';
   }
 
   if ($('lineWebhookUrl')) $('lineWebhookUrl').value = `${location.origin}/api/line/webhook`;
@@ -43,22 +43,22 @@ export function renderNotifications(state) {
 
 async function refreshLineStatus(state) {
   if (!$('lineConfiguredStatus')) return;
-  $('lineConfiguredStatus').textContent = '瑼Ｘ銝?..';
+  $('lineConfiguredStatus').textContent = '檢查中...';
   try {
     const response = await fetch('/api/line/status', {
       headers: { Authorization: `Bearer ${state.authToken || ''}` },
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
-    $('lineConfiguredStatus').textContent = data.configured ? '撌脰身摰? : '?芾身摰?;
+    $('lineConfiguredStatus').textContent = data.configured ? '已設定' : '未設定';
     if ($('lineDestinationCount')) $('lineDestinationCount').textContent = String(data.destinationCount || 0);
     if ($('lineStatusDetail')) {
       if (!data.configured) {
-        $('lineStatusDetail').textContent = '撠閮剖? LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN嚗?? Vercel ?啣?霈閮剖???;
+        $('lineStatusDetail').textContent = '尚未設定 LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN，請到 Vercel 環境變數設定。';
       } else if (!data.destinationCount) {
-        $('lineStatusDetail').textContent = `LINE 撌脰身摰???雿??芰?摰?憭拙恕???銝?摰撣唾? ${LINE_OFFICIAL_ACCOUNT_ID}嚗閰脰?憭拙恕頛詨??摰?閬??LINE 蝟餌絞?撣唾??;
+        $('lineStatusDetail').textContent = `LINE 已設定，但尚未綁定接收者。請在 LINE 傳「綁定」給官方帳號 ${LINE_OFFICIAL_ACCOUNT_ID}。`;
       } else {
-        $('lineStatusDetail').textContent = `Webhook URL嚗?{location.origin}/api/line/webhook?歇蝬? ${data.destinationCount} ??憭拙恕嚗?葫閰阡?;
+        $('lineStatusDetail').textContent = `Webhook URL：${location.origin}/api/line/webhook。已綁定 ${data.destinationCount} 個接收者。`;
       }
     }
   } catch (err) {
@@ -68,7 +68,7 @@ async function refreshLineStatus(state) {
 }
 
 async function sendLineTest(state) {
-  const message = `???頂蝯望葫閰阡?n??嚗?{new Date().toLocaleString()}\n憒?雿??圈?閮嚗誨銵?LINE ?冽撌脤???;
+  const message = `三青系統 LINE 測試通知\n時間：${new Date().toLocaleString()}\n如果你收到這則訊息，代表 LINE 通知已可正常發送。`;
   const response = await fetch('/api/line/push', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
@@ -95,7 +95,7 @@ export function bindNotificationEvents(state, saveState, renderAll) {
   });
 
   $('exportNoticeBtn')?.addEventListener('click', () => {
-    const rows = [['??', '蝑?', '閮', '雿輻??, '撌脰???']];
+    const rows = [['時間', '等級', '訊息', '使用者', '已讀時間']];
     getFilteredEvents(state).forEach((event) => rows.push([event.at || '', event.level || 'info', event.message || '', event.user || '', event.readAt || '']));
     downloadCsv('notifications-log.csv', rows);
   });
@@ -104,10 +104,10 @@ export function bindNotificationEvents(state, saveState, renderAll) {
   $('sendLineTestBtn')?.addEventListener('click', async () => {
     try {
       const result = await sendLineTest(state);
-      alert(`LINE 皜祈岫?撌脤嚗?{result.sent || 0} ??憭拙恕?);
+      alert(`LINE 測試通知已送出：${result.sent || 0} 個對象。`);
       await refreshLineStatus(state);
     } catch (err) {
-      alert(`LINE 皜祈岫?憭望?嚗?{err.message}`);
+      alert(`LINE 測試通知失敗：${err.message}`);
       await refreshLineStatus(state);
     }
   });

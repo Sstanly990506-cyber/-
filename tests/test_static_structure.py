@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -54,6 +56,17 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("import(`./main.js?v=", loader)
         self.assertIn('js/view-loader.js?v=', index)
         self.assertNotIn('innerHTML', loader)
+
+    def test_frontend_modules_parse_before_login(self):
+        if not shutil.which('node'):
+            self.skipTest('node is not available')
+        for path in sorted((ROOT / 'js').rglob('*.js')):
+            result = subprocess.run(
+                ['node', '--input-type=module', '--check'],
+                input=path.read_bytes(),
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, f'{path}\n{result.stderr.decode("utf-8", "replace")}')
 
     def test_scalable_data_routes_exist_in_both_servers(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')

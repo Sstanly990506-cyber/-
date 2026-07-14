@@ -14,14 +14,14 @@ import {
 } from './store.js';
 import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js';
 import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js';
-import { renderFinance, bindFinanceEvents } from './finance.js';
+import { renderFinance, bindFinanceEvents } from './finance.js?v=20260714-finance-fix-1';
 import { renderAudits, bindAuditEvents } from './audit.js';
 import { renderTrips, bindTripEvents } from './trips.js';
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js';
 import { renderInventory, bindInventoryEvents } from './inventory.js';
 import { renderNotifications, bindNotificationEvents } from './notifications.js';
 
-const APP_BUILD = '2026-07-14-fast-login-2';
+const APP_BUILD = '2026-07-14-finance-fix-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';

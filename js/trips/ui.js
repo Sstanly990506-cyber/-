@@ -3,7 +3,7 @@
 export function formatDuration(sec) {
   const h = Math.floor(sec / 3600);
   const m = Math.round((sec % 3600) / 60);
-  return h ? `${h} 撠? ${m} ? : `${m} ?;
+  return h ? `${h} 小時 ${m} 分` : `${m} 分`;
 }
 
 export function renderCustomerOptions(customers) {

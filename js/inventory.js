@@ -60,10 +60,10 @@ export function renderInventory(state) {
       <td>${escapeHtml(item.category || '-')}</td>
       <td>${money(item.stock)} ${escapeHtml(item.unit || '')}</td>
       <td>${money(item.safetyStock)} ${escapeHtml(item.unit || '')}</td>
-      <td><span class="tag ${danger ? 'danger' : low ? 'warn' : ''}">${danger ? '?梢' : low ? '雿澈摮? : '甇?虜'}</span></td>
+      <td><span class="tag ${danger ? 'danger' : low ? 'warn' : ''}">${danger ? '危險' : low ? '偏低' : '正常'}</span></td>
       <td>${escapeHtml(item.note || '-')}</td>
       <td>${escapeHtml(item.updatedAt || '-')}</td>
-      <td><button class="btn" data-edit-inventory="${escapeHtml(item.id)}">蝺刻摩</button></td>
+      <td><button class="btn" data-edit-inventory="${escapeHtml(item.id)}">編輯</button></td>
     </tr>`;
   }).join('');
 }
@@ -72,7 +72,7 @@ export function bindInventoryEvents(state, saveState, renderAll) {
   $('inventoryForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const item = buildItem(state);
-    if (!item.material) return alert('隢撓?亙???蝔?);
+    if (!item.material) return alert('請輸入材料名稱。');
     const idx = state.inventoryItems.findIndex((row) => row.id === item.id);
     if (idx >= 0) state.inventoryItems[idx] = item;
     else state.inventoryItems.unshift(item);
@@ -86,7 +86,7 @@ export function bindInventoryEvents(state, saveState, renderAll) {
   $('inventorySort')?.addEventListener('change', () => renderInventory(state));
 
   $('inventoryExportBtn')?.addEventListener('click', () => {
-    const rows = [['??', '??', '摨怠???, '?桐?', '摰摨怠?', '?酉', '?湔??']];
+    const rows = [['品項', '分類', '庫存', '單位', '安全庫存', '備註', '更新時間']];
     getVisibleInventoryItems(state).forEach((item) => rows.push([item.material, item.category, item.stock, item.unit, item.safetyStock, item.note, item.updatedAt]));
     downloadCsv('inventory-items.csv', rows);
   });

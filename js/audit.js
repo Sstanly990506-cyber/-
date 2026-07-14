@@ -21,7 +21,7 @@ function isAnomalyAudit(audit) {
     const diff = Math.abs(after - before);
     if (before > 0 && diff / before >= 0.3) return true;
   }
-  return /?芷|皜征|??|?啣虜/i.test(String(audit.after || ''));
+  return /(刪除|異常|修改|空白|錯誤)/i.test(String(audit.after || ''));
 }
 
 function renderAuditInsights(state) {
@@ -94,7 +94,7 @@ export function bindAuditEvents(state, saveState, renderAll) {
   });
 
   $('exportAuditBtn')?.addEventListener('click', () => {
-    const rows = [['撌亙', '甈?', '靽格??, '靽格敺?, '??', '????, '鋆蔭/IP']];
+    const rows = [['工單', '欄位', '修改前', '修改後', '時間', '使用者', '裝置/IP']];
     getFilteredAudits(state).forEach((a) => rows.push([a.orderNumber, a.field, a.before, a.after, a.changedAt, a.user, a.device]));
     downloadCsv('audit-log.csv', rows);
   });
