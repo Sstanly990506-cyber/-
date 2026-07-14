@@ -27,6 +27,33 @@ def capture_request(request, timeout=None):
     return CapturingResponse()
 
 
+class BackgroundResponse:
+    def __enter__(self): return self
+    def __exit__(self, *_args): return False
+    def read(self):
+        return json.dumps({
+            'id': 'resp_test12345678',
+            'status': 'queued',
+            'model': 'gpt-5.4-mini',
+        }).encode()
+
+
+class CompletedBackgroundResponse(FakeResponse):
+    def read(self):
+        result = json.loads(super().read().decode('utf-8'))
+        result.update({
+            'id': 'resp_test12345678',
+            'status': 'completed',
+            'model': 'gpt-5.4-mini',
+        })
+        return json.dumps(result).encode()
+
+
+def capture_background_request(request, timeout=None):
+    CapturingResponse.payload = json.loads(request.data.decode('utf-8'))
+    return BackgroundResponse()
+
+
 class AiOrderTests(unittest.TestCase):
     def test_rejects_invalid_image(self):
         with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
@@ -47,6 +74,22 @@ class AiOrderTests(unittest.TestCase):
         self.assertEqual(result['billingCustomer'], 'Brand Client')
         self.assertEqual(result['upstream'], '')
         self.assertEqual(result['model'], 'gpt-5.4-mini')
+
+    def test_starts_background_recognition(self):
+        image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}), patch('api.ai_orders.urlopen', side_effect=capture_background_request):
+            result = ai_orders.recognize_order_image(image, background=True)
+        self.assertEqual(result['recognitionId'], 'resp_test12345678')
+        self.assertEqual(result['status'], 'queued')
+        self.assertTrue(CapturingResponse.payload['background'])
+        self.assertTrue(CapturingResponse.payload['store'])
+
+    def test_reads_completed_background_recognition(self):
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}), patch('api.ai_orders.urlopen', return_value=CompletedBackgroundResponse()):
+            result = ai_orders.get_order_recognition_result('resp_test12345678')
+        self.assertFalse(result['pending'])
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(result['order']['orderNumber'], 'WO-1')
 
     def test_uses_high_image_detail_for_precision_by_default(self):
         image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()

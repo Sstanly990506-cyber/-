@@ -44,7 +44,10 @@ GET_ROUTES = {
         (token, query_value(query, 'since', '0'), query_value(query, 'limit', '1000')),
     ),
     '/api/reports/summary': lambda token, query: (report_payload, (token,)),
-    '/api/orders/recognize/status': lambda token, query: (recognize_order_status_payload, (token,)),
+    '/api/orders/recognize/status': lambda token, query: (
+        recognize_order_status_payload,
+        (token, query_value(query, 'id', '')),
+    ),
     '/api/line/status': lambda token, query: (line_status_payload, (token,)),
 }
 

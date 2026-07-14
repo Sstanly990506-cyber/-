@@ -582,18 +582,25 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(caught.exception.status, 403)
 
     def test_ops_can_recognize_order_without_saving_it(self):
-        recognized = {'orderNumber': 'WO-1'}
-        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', return_value={'items': []}), patch('api.service.recognize_order_image', return_value=recognized):
+        job = {'recognitionId': 'resp_test12345678', 'status': 'queued', 'model': 'gpt-5.4-mini'}
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', return_value={'items': []}), patch('api.service.recognize_order_image', return_value=job) as recognize:
             result = recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ=='})
-        self.assertEqual(result, {'ok': True, 'order': recognized})
+        self.assertEqual(result, {'ok': True, 'pending': True, **job})
+        self.assertTrue(recognize.call_args.args[5])
 
     def test_ai_recognition_passes_known_company_names(self):
-        recognized = {'orderNumber': 'WO-1'}
+        job = {'recognitionId': 'resp_test12345678', 'status': 'queued', 'model': 'gpt-5.4-mini'}
         customers = {'items': [{'name': '富盛', 'role': '上游'}, {'name': '成峰', 'role': '下游'}]}
-        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', side_effect=[{'items': []}, customers]), patch('api.service.recognize_order_image', return_value=recognized) as recognize:
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', side_effect=[{'items': []}, customers]), patch('api.service.recognize_order_image', return_value=job) as recognize:
             result = recognize_order_payload('token', {'image': 'data:image/jpeg;base64,YQ==', 'glossOptions': ['PVA光']})
-        self.assertEqual(result, {'ok': True, 'order': recognized})
+        self.assertEqual(result, {'ok': True, 'pending': True, **job})
         self.assertEqual(recognize.call_args.args[3], ['富盛', '成峰'])
+
+    def test_ai_recognition_status_returns_pending_job(self):
+        pending = {'recognitionId': 'resp_test12345678', 'status': 'in_progress', 'pending': True}
+        with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.get_order_recognition_result', return_value=pending):
+            result = recognize_order_status_payload('token', 'resp_test12345678')
+        self.assertEqual(result, {'ok': True, **pending})
 
     def test_ai_company_names_include_all_active_roles(self):
         customers = {'items': [

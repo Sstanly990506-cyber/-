@@ -3,7 +3,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from api.records import changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
-from api.ai_orders import OrderRecognitionError, add_recognition_review, get_order_recognition_status, normalize_recognized_order, recognize_order_image
+from api.ai_orders import OrderRecognitionError, add_recognition_review, get_order_recognition_result, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.trip_optimizer import optimize_trip
 from api.pricing import calculate_quote, classify_pricing_tier_with_bounds, normalize_coating_type, normalize_pricing_tier
@@ -411,14 +411,21 @@ def recognize_order_payload(token,payload):
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     corrections=list_records('aiCorrections',1,20).get('items') or []
     customers=_customer_names_for_ai()
-    try:recognized=add_recognition_review(_fill_recognized_customer_address(normalize_recognized_order(recognize_order_image(payload.get('image'),payload.get('glossOptions'),corrections,customers,True))),customers)
+    try:job=recognize_order_image(payload.get('image'),payload.get('glossOptions'),corrections,customers,True,True)
     except ValueError as err:raise ApiError(str(err),400) from err
     except OrderRecognitionError as err:raise ApiError(str(err),503) from err
-    return {'ok':True,'order':recognized}
-def recognize_order_status_payload(token):
+    return {'ok':True,'pending':True,**job}
+def recognize_order_status_payload(token,recognition_id=''):
     account=require_account(token)
     if not account_can_view(account,'ordersView'):raise ApiError('permission denied',403)
-    return {'ok':True,**get_order_recognition_status()}
+    if not recognition_id:return {'ok':True,**get_order_recognition_status()}
+    try:result=get_order_recognition_result(recognition_id)
+    except ValueError as err:raise ApiError(str(err),400) from err
+    except OrderRecognitionError as err:raise ApiError(str(err),503) from err
+    if result.get('pending'):return {'ok':True,**result}
+    customers=_customer_names_for_ai()
+    recognized=add_recognition_review(_fill_recognized_customer_address(normalize_recognized_order(result.get('order') or {})),customers)
+    return {'ok':True,**result,'order':recognized}
 def report_order_correction_payload(token,payload):
     account=require_account(token)
     if not account_can_view(account,'ordersView'):raise ApiError('permission denied',403)

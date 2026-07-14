@@ -5,6 +5,7 @@ import { applySizeNotation } from './size-notation.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
 import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
+import { requestOrderRecognition } from './orders-ai-request.js';
 
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
@@ -830,19 +831,13 @@ async function recognizeOrderFromImage(state) {
   clearAiRecognitionReview();
   try {
     const image = await prepareOrderImage(file);
-    const response = await fetch('/api/orders/recognize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
-      body: JSON.stringify({ image, glossOptions: state.glossOptions, precision: true }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
-    const addressFilledLocally = applyRecognizedOrder(state, data.order || {});
-    const addressFilledFromCustomer = data.order?.addressSource === 'customer-system' || addressFilledLocally;
-    const confidence = Math.round(Number(data.order?.confidence || 0) * 100);
+    const order = await requestOrderRecognition(state, image, (message) => { status.textContent = message; });
+    const addressFilledLocally = applyRecognizedOrder(state, order || {});
+    const addressFilledFromCustomer = order?.addressSource === 'customer-system' || addressFilledLocally;
+    const confidence = Math.round(Number(order?.confidence || 0) * 100);
     const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
-    const notes = (data.order?.notes || []).filter(Boolean).join('；');
-    const needsReview = Array.isArray(data.order?.reviewFields) && data.order.reviewFields.length;
+    const notes = (order?.notes || []).filter(Boolean).join('；');
+    const needsReview = Array.isArray(order?.reviewFields) && order.reviewFields.length;
     status.textContent = `識別完成，耗時 ${elapsedSeconds} 秒，信心度 ${confidence}%${addressFilledFromCustomer ? '。送貨地址已使用下游客戶系統地址。' : ''}${needsReview ? ' 已標示需要確認的欄位。' : ' 請確認表單後再儲存。'}${notes ? ` ${notes}` : ''}`;
   } catch (err) {
     status.textContent = `識別失敗：${err.message}`;

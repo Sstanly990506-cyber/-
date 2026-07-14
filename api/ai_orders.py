@@ -38,6 +38,7 @@ BUSINESS_RULES = (
 
 
 CUSTOMER_CODE_PATTERN = re.compile(r'^[A-Z]{1,5}[-_ ]*\d{2,}$', re.IGNORECASE)
+RESPONSE_ID_PATTERN = re.compile(r'^resp_[A-Za-z0-9_-]{8,200}$')
 REVIEWABLE_FIELDS = (
     'orderNumber', 'orderDate', 'billingCustomer', 'upstream', 'downstream', 'address',
     'sheetCountText', 'sheetCount', 'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType',
@@ -234,7 +235,17 @@ def _correction_examples(corrections):
     return json.dumps(examples, ensure_ascii=False, separators=(',', ':'))
 
 
-def recognize_order_image(data_url, gloss_options=None, corrections=None, customer_names=None, precision=True):
+def _recognized_order_from_response(result, model):
+    try:
+        recognized = json.loads(_extract_output_text(result))
+    except json.JSONDecodeError as err:
+        raise OrderRecognitionError('AI 回傳的工單格式無法解析，請重新辨識。') from err
+    recognized = normalize_recognized_order(recognized)
+    recognized['model'] = model
+    return recognized
+
+
+def recognize_order_image(data_url, gloss_options=None, corrections=None, customer_names=None, precision=True, background=False):
     api_key = os.environ.get('OPENAI_API_KEY', '').strip()
     if not api_key:
         raise OrderRecognitionError('AI 尚未啟用：請先在 Vercel 設定 OPENAI_API_KEY，然後重新部署。')
@@ -283,6 +294,9 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
             },
         },
     }
+    if background:
+        payload['background'] = True
+        payload['store'] = True
     request = Request(
         OPENAI_RESPONSES_URL,
         data=json.dumps(payload).encode('utf-8'),
@@ -290,7 +304,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
         method='POST',
     )
     try:
-        with urlopen(request, timeout=50) as response:
+        with urlopen(request, timeout=20 if background else 50) as response:
             result = json.loads(response.read().decode('utf-8'))
     except HTTPError as err:
         try:
@@ -307,10 +321,50 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
         raise OrderRecognitionError(messages.get(err.code) or detail or f'OpenAI 服務錯誤（HTTP {err.code}）') from err
     except (URLError, TimeoutError, json.JSONDecodeError) as err:
         raise OrderRecognitionError('AI 服務連線逾時或暫時無法使用，請稍後再試。') from err
+    if background:
+        response_id = str(result.get('id') or '')
+        if not RESPONSE_ID_PATTERN.fullmatch(response_id):
+            raise OrderRecognitionError('AI 未建立辨識工作，請重新嘗試。')
+        return {'recognitionId': response_id, 'status': result.get('status') or 'queued', 'model': model}
+    return _recognized_order_from_response(result, model)
+
+
+def get_order_recognition_result(response_id):
+    api_key = os.environ.get('OPENAI_API_KEY', '').strip()
+    if not api_key:
+        raise OrderRecognitionError('AI 尚未啟用：請先在 Vercel 設定 OPENAI_API_KEY，然後重新部署。')
+    recognition_id = str(response_id or '').strip()
+    if not RESPONSE_ID_PATTERN.fullmatch(recognition_id):
+        raise ValueError('invalid recognition id')
+    request = Request(
+        f'{OPENAI_RESPONSES_URL}/{recognition_id}',
+        headers={'Authorization': f'Bearer {api_key}'},
+        method='GET',
+    )
     try:
-        recognized = json.loads(_extract_output_text(result))
-    except json.JSONDecodeError as err:
-        raise OrderRecognitionError('AI returned invalid order data') from err
-    recognized = normalize_recognized_order(recognized)
-    recognized['model'] = model
-    return recognized
+        with urlopen(request, timeout=20) as response:
+            result = json.loads(response.read().decode('utf-8'))
+    except HTTPError as err:
+        messages = {
+            401: 'OpenAI API 金鑰無效，請重新設定 OPENAI_API_KEY。',
+            404: '這次 AI 辨識工作已失效，請重新上傳照片。',
+            429: 'OpenAI API 額度不足或請求過多，請稍後再試。',
+        }
+        raise OrderRecognitionError(messages.get(err.code) or f'讀取 AI 辨識結果失敗（HTTP {err.code}）') from err
+    except (URLError, TimeoutError, json.JSONDecodeError) as err:
+        raise OrderRecognitionError('讀取 AI 辨識結果暫時失敗，系統會保留工作編號供再次查詢。') from err
+
+    status = str(result.get('status') or '')
+    if status in {'queued', 'in_progress'}:
+        return {'recognitionId': recognition_id, 'status': status, 'pending': True}
+    if status != 'completed':
+        detail = (result.get('error') or {}).get('message') if isinstance(result.get('error'), dict) else ''
+        reason = (result.get('incomplete_details') or {}).get('reason') if isinstance(result.get('incomplete_details'), dict) else ''
+        raise OrderRecognitionError(detail or reason or f'AI 辨識未完成（{status or "unknown"}）')
+    model = str(result.get('model') or os.environ.get('OPENAI_ORDER_MODEL', '').strip() or 'gpt-5.4-mini')
+    return {
+        'recognitionId': recognition_id,
+        'status': status,
+        'pending': False,
+        'order': _recognized_order_from_response(result, model),
+    }
