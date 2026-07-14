@@ -300,6 +300,9 @@ class StaticStructureTests(unittest.TestCase):
         self.assertLess(route_card.index('id="tripConfirmManualBtn"'), route_card.index('id="tripExecuteBtn"'))
         self.assertIn("fetch('/api/trips/execute'", trips)
         self.assertIn("textContent = '執行中…'", trips)
+        self.assertIn("function canExecuteOrder(order)", trips)
+        self.assertIn("已完成與已送出的工單不能再次送出", trips)
+        self.assertIn("${status}（不可執行）", trips)
         self.assertIn("'/api/trips/execute'", routes)
 
     def test_module_settings_use_two_level_navigation(self):

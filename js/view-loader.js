@@ -1,6 +1,6 @@
 window.__appBootstrapped = false;
 
-const APP_ASSET_VERSION = '20260714-customer-order-km-1';
+const APP_ASSET_VERSION = '20260714-trip-execute-guard-1';
 const mount = document.getElementById('appMount');
 const apiWarmup = fetch('/api/health', { cache: 'no-store' }).catch(() => null);
 

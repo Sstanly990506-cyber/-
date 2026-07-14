@@ -40,6 +40,10 @@ function getTripOrders(state) {
   return state.orders;
 }
 
+function canExecuteOrder(order) {
+  return !['已送出', '已完成'].includes(String(order.status || '未完成').trim());
+}
+
 function getOrderStopType(orderId, state) {
   return orderStopTypes[orderId] || getEnabledTripTypes(state)[0];
 }
@@ -73,25 +77,30 @@ function renderOrdersPool(state) {
   const types = getEnabledTripTypes(state);
   const orders = getTripOrders(state);
   selectedOrderIds.forEach((id) => {
-    if (!orders.some((o) => o.id === id)) selectedOrderIds.delete(id);
+    const order = orders.find((item) => item.id === id);
+    if (!order || !canExecuteOrder(order)) selectedOrderIds.delete(id);
   });
   Object.keys(orderStopTypes).forEach((id) => {
     if (!orders.some((o) => o.id === id)) delete orderStopTypes[id];
   });
   orders.forEach((order) => {
-    const checked = selectedOrderIds.has(order.id) ? 'checked' : '';
+    const executable = canExecuteOrder(order);
+    const checked = executable && selectedOrderIds.has(order.id) ? 'checked' : '';
+    const disabled = executable ? '' : 'disabled';
+    const status = String(order.status || '未完成').trim();
+    const statusLabel = executable ? status : `${status}（不可執行）`;
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input type="checkbox" data-trip-order-check="${escapeHtml(order.id)}" ${checked} /></td>
+      <td><input type="checkbox" data-trip-order-check="${escapeHtml(order.id)}" ${checked} ${disabled} /></td>
       <td>${escapeHtml(order.orderNumber || '-')}</td>
       <td>${escapeHtml(order.downstream || order.upstream || '-')}</td>
       <td>${escapeHtml(order.address || '-')}</td>
       <td>
-        <select data-trip-order-type="${escapeHtml(order.id)}">
+        <select data-trip-order-type="${escapeHtml(order.id)}" ${disabled}>
           ${types.map((type) => `<option value="${escapeHtml(type)}" ${getOrderStopType(order.id, state) === type ? 'selected' : ''}>${escapeHtml(typeLabel(type))}</option>`).join('')}
         </select>
       </td>
-      <td>${escapeHtml(order.status || '未完成')}</td>`;
+      <td>${escapeHtml(statusLabel)}</td>`;
     body.append(tr);
   });
 }
@@ -207,8 +216,9 @@ function confirmManualRoute() {
 }
 
 async function executeSelectedOrders(state, renderAllApp) {
-  const selectedOrders = getTripOrders(state).filter((o) => selectedOrderIds.has(o.id));
-  if (!selectedOrders.length) return alert('請先勾選要執行的工單');
+  const selectedOrders = getTripOrders(state)
+    .filter((order) => selectedOrderIds.has(order.id) && canExecuteOrder(order));
+  if (!selectedOrders.length) return alert('請勾選一筆「未完成」的工單後再執行車趟。已完成與已送出的工單不能再次送出。');
   if (manualRoute.length && !manualRouteConfirmed) return alert('你有手動調整路線，請先按「確認手動路線」');
 
   const button = $('tripExecuteBtn');
@@ -227,6 +237,14 @@ async function executeSelectedOrders(state, renderAllApp) {
     const data = await response.json().catch(() => null);
     if (!response.ok || !data?.ok) throw new Error(data?.error || `HTTP ${response.status}`);
 
+    if (!data.updated) {
+      const details = [];
+      if (data.alreadySent) details.push(`${data.alreadySent} 筆已送出`);
+      if (data.skippedCompleted) details.push(`${data.skippedCompleted} 筆已完成`);
+      if (data.missing?.length) details.push(`${data.missing.length} 筆找不到`);
+      throw new Error(`沒有可標記為已送出的工單${details.length ? `（${details.join('、')}）` : ''}`);
+    }
+
     const updatedById = new Map((data.orders || []).map((order) => [order.id, order]));
     state.orders.forEach((order) => {
       const updated = updatedById.get(order.id);
@@ -240,7 +258,7 @@ async function executeSelectedOrders(state, renderAllApp) {
     manualRoute = [];
     manualRouteConfirmed = false;
     renderAllApp();
-    alert(`車趟已執行，${data.updated || 0} 筆工單已改成「已送出」。`);
+    alert(`車趟已執行，${data.updated} 筆工單已改成「已送出」。`);
   } catch (error) {
     alert(`執行車趟失敗：${error.message}`);
   } finally {
