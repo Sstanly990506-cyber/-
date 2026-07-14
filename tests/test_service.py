@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from api.line_bot import handle_line_webhook
-from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, get_state_payload, health_payload, import_customers_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
+from api.service import ApiError, _billing_customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, execute_trip_payload, get_state_payload, health_payload, import_customers_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -392,6 +392,31 @@ class ServiceTests(unittest.TestCase):
             result = optimize_trip_payload('token', {'stops': []})
         self.assertEqual(result, {'ok': True})
         optimize.assert_called_once_with({'stops': []})
+
+    def test_driver_can_execute_trip_and_only_move_orders_forward(self):
+        driver = {'role': 'driver', 'display': '司機', 'allowedViews': ['tripsView']}
+        orders = [
+            {'id': 'o1', 'orderNumber': 'WO-1', 'status': '未完成', 'totalPrice': 1200, 'billingCustomer': '客戶甲', '_updatedAt': 1},
+            {'id': 'o2', 'orderNumber': 'WO-2', 'status': '已送出'},
+            {'id': 'o3', 'orderNumber': 'WO-3', 'status': '已完成'},
+        ]
+
+        def records(entity):
+            return orders if entity == 'orders' else []
+
+        with patch('api.service.verify_session_token', return_value=driver), patch('api.service._all_records', side_effect=records), patch('api.service.upsert_record', return_value={'ok': True, 'updatedAt': 99}) as upsert:
+            result = execute_trip_payload('token', {'orderIds': ['o1', 'o2', 'o3']})
+
+        self.assertEqual(result['updated'], 1)
+        self.assertEqual(result['alreadySent'], 1)
+        self.assertEqual(result['skippedCompleted'], 1)
+        self.assertEqual(result['orders'][0]['status'], '已送出')
+        order_write = next(call for call in upsert.call_args_list if call.args[0] == 'orders')
+        self.assertEqual(order_write.args[1], 'o1')
+        self.assertEqual(order_write.args[2]['status'], '已送出')
+        self.assertNotIn('_updatedAt', order_write.args[2])
+        self.assertTrue(any(call.args[0] == 'audits' for call in upsert.call_args_list))
+        self.assertTrue(any(call.args[0] == 'receivables' for call in upsert.call_args_list))
 
     def test_ops_can_request_pricing_quote(self):
         payload = {'width': 26, 'height': 18, 'quantity': 1000, 'coatingType': 'PVA', 'machineType': 'BIG'}

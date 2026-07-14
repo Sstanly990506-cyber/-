@@ -280,6 +280,19 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("entity in {'orders','customers'} and account_can_view(account,'tripsView')", service)
         self.assertIn('require_entity_read_access(token,entity)', service)
 
+    def test_trip_execute_is_next_to_manual_confirmation_and_marks_orders_sent(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        trips = (ROOT / 'js' / 'trips.js').read_text(encoding='utf-8')
+        routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
+        order_pool = view[view.index('id="tripOrderPoolCard"'):view.index('id="tripRouteCard"')]
+        route_card = view[view.index('id="tripRouteCard"'):view.index('</section>', view.index('id="tripRouteCard"'))]
+        self.assertNotIn('id="tripExecuteBtn"', order_pool)
+        self.assertIn('id="tripExecuteBtn"', route_card)
+        self.assertLess(route_card.index('id="tripConfirmManualBtn"'), route_card.index('id="tripExecuteBtn"'))
+        self.assertIn("fetch('/api/trips/execute'", trips)
+        self.assertIn("textContent = '執行中…'", trips)
+        self.assertIn("'/api/trips/execute'", routes)
+
     def test_module_settings_use_two_level_navigation(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         settings = (ROOT / 'js' / 'settings.js').read_text(encoding='utf-8')

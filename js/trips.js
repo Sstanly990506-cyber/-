@@ -206,25 +206,57 @@ function confirmManualRoute() {
   alert(`已確認手動路線（預估 ${formatDuration(score.totalDurationSec)}）`);
 }
 
-function executeSelectedOrders(state, saveState, renderAllApp) {
+async function executeSelectedOrders(state, renderAllApp) {
   const selectedOrders = getTripOrders(state).filter((o) => selectedOrderIds.has(o.id));
   if (!selectedOrders.length) return alert('請先勾選要執行的工單');
   if (manualRoute.length && !manualRouteConfirmed) return alert('你有手動調整路線，請先按「確認手動路線」');
 
-  selectedOrderIds = new Set();
-  orderStopTypes = {};
-  lastResult = null;
-  manualRoute = [];
-  manualRouteConfirmed = false;
-  saveState();
-  renderAllApp();
+  const button = $('tripExecuteBtn');
+  const originalText = button?.textContent || '執行車趟並標記已送出';
+  if (button) {
+    button.disabled = true;
+    button.textContent = '執行中…';
+  }
+
+  try {
+    const response = await fetch('/api/trips/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) },
+      body: JSON.stringify({ orderIds: selectedOrders.map((order) => order.id) }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+
+    const updatedById = new Map((data.orders || []).map((order) => [order.id, order]));
+    state.orders.forEach((order) => {
+      const updated = updatedById.get(order.id);
+      if (updated) Object.assign(order, updated);
+    });
+
+    manualStops = [];
+    selectedOrderIds = new Set();
+    orderStopTypes = {};
+    lastResult = null;
+    manualRoute = [];
+    manualRouteConfirmed = false;
+    renderAllApp();
+    alert(`車趟已執行，${data.updated || 0} 筆工單已改成「已送出」。`);
+  } catch (error) {
+    alert(`執行車趟失敗：${error.message}`);
+  } finally {
+    const currentButton = $('tripExecuteBtn');
+    if (currentButton) {
+      currentButton.disabled = false;
+      currentButton.textContent = originalText;
+    }
+  }
 }
 
 export function renderTrips(state) {
   renderAll(state);
 }
 
-export function bindTripEvents(state, saveState, renderAllApp) {
+export function bindTripEvents(state, _saveState, renderAllApp) {
   const fillAddress = () => {
     const c = findCustomer(state, $('tripCustomerName').value);
     $('tripCustomerAddress').value = c?.address || '';
@@ -293,9 +325,8 @@ export function bindTripEvents(state, saveState, renderAllApp) {
     renderAll(state);
   });
 
-  $('tripExecuteBtn')?.addEventListener('click', () => {
-    executeSelectedOrders(state, saveState, renderAllApp);
-    renderAll(state);
+  $('tripExecuteBtn')?.addEventListener('click', async () => {
+    await executeSelectedOrders(state, renderAllApp);
   });
 
   $('tripManualRoute')?.addEventListener('click', (e) => {

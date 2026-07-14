@@ -1,6 +1,7 @@
 """Transport-independent API operations shared by Flask and the built-in server."""
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from api.records import changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
 from api.ai_orders import OrderRecognitionError, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
@@ -303,6 +304,81 @@ def optimize_trip_payload(token,payload):
     if not isinstance(payload,dict):raise ApiError('invalid json',400)
     try:return optimize_trip(payload)
     except ValueError as err:raise ApiError(str(err),400) from err
+def execute_trip_payload(token,payload):
+    account=require_account(token)
+    if not account_can_view(account,'tripsView'):raise ApiError('permission denied',403)
+    if not isinstance(payload,dict) or not isinstance(payload.get('orderIds'),list):
+        raise ApiError('orderIds required',400)
+
+    order_ids=[]
+    for value in payload['orderIds']:
+        order_id=str(value or '').strip()
+        if order_id and order_id not in order_ids:order_ids.append(order_id)
+    if not order_ids:raise ApiError('select at least one order',400)
+    if len(order_ids)>200:raise ApiError('too many orders',400)
+
+    orders_by_id={str(row.get('id') or ''):row for row in _all_records('orders')}
+    receivables_by_order={str(row.get('orderNumber') or '').strip():row for row in _all_records('receivables') if str(row.get('orderNumber') or '').strip()}
+    changed_at=datetime.now(timezone(timedelta(hours=8))).isoformat(timespec='seconds')
+    actor=account.get('display') or account.get('username') or account.get('role') or 'trip-user'
+    updated_orders=[];missing=[];already_sent=0;skipped_completed=0
+
+    for order_id in order_ids:
+        source=orders_by_id.get(order_id)
+        if not source:
+            missing.append(order_id);continue
+        status=str(source.get('status') or '未完成').strip()
+        if status=='已完成':
+            skipped_completed+=1;continue
+        if status=='已送出':
+            already_sent+=1;continue
+
+        order={key:value for key,value in source.items() if key!='_updatedAt'}
+        order['status']='已送出';order['updatedAt']=changed_at
+        saved=upsert_record('orders',order_id,order)
+        updated_orders.append({**order,'_updatedAt':saved.get('updatedAt')})
+
+        audit_id=str(uuid.uuid4())
+        upsert_record('audits',audit_id,{
+            'id':audit_id,
+            'orderNumber':order.get('orderNumber') or '(空白)',
+            'field':'狀態',
+            'before':status,
+            'after':'已送出',
+            'changedAt':changed_at,
+            'user':actor,
+            'device':'車趟系統執行',
+        })
+
+        receivable_key=str(order.get('orderNumber') or '').strip() or f'ORDER-{order_id}'
+        existing=receivables_by_order.get(receivable_key)
+        amount=_number(order.get('totalPrice'))
+        if amount>0:
+            receivable_id=str((existing or {}).get('id') or uuid.uuid4())
+            receivable={
+                'id':receivable_id,
+                'source':'auto-order',
+                'date':order.get('orderDate') or changed_at[:10],
+                'customer':order.get('billingCustomer') or order.get('downstream') or order.get('upstream') or '-',
+                'orderNumber':receivable_key,
+                'amount':amount,
+                'received':_number((existing or {}).get('received')),
+            }
+            upsert_record('receivables',receivable_id,receivable)
+            receivables_by_order[receivable_key]=receivable
+        elif existing and existing.get('source')=='auto-order':
+            delete_record('receivables',existing.get('id'))
+            receivables_by_order.pop(receivable_key,None)
+
+    return {
+        'ok':True,
+        'processed':len(order_ids)-len(missing),
+        'updated':len(updated_orders),
+        'alreadySent':already_sent,
+        'skippedCompleted':skipped_completed,
+        'missing':missing,
+        'orders':updated_orders,
+    }
 def pricing_quote_payload(token,payload):
     account=require_account(token)
     if not account_can_view(account,'ordersView'):raise ApiError('permission denied',403)
