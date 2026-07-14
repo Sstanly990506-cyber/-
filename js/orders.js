@@ -3,7 +3,6 @@ import { syncOrderToReceivables } from './store.js';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
-import { bindOrderDrag } from './orders-drag.js?v=20260714-ai-rules-3';
 import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
 
 let lastRecognizedOrder = null;
@@ -103,15 +102,13 @@ function normalizeOrderPositions(state) {
   });
 }
 
-function reorderOrder(state, orderId, targetId, after = false) {
-  if (!orderId || !targetId || orderId === targetId) return false;
+function moveOrderByStep(state, orderId, direction) {
+  if (!orderId || !Number.isInteger(direction) || !direction) return false;
   const ordered = sortedOrders(state);
-  const sourceIndex = ordered.findIndex((order) => order.id === orderId);
-  if (sourceIndex < 0) return false;
-  const [current] = ordered.splice(sourceIndex, 1);
-  const targetIndex = ordered.findIndex((order) => order.id === targetId);
-  if (targetIndex < 0) return false;
-  ordered.splice(targetIndex + (after ? 1 : 0), 0, current);
+  const currentIndex = ordered.findIndex((order) => order.id === orderId);
+  const targetIndex = currentIndex + direction;
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.length) return false;
+  [ordered[currentIndex], ordered[targetIndex]] = [ordered[targetIndex], ordered[currentIndex]];
   ordered.forEach((order, index) => { order.sortOrder = index; });
   return true;
 }
@@ -651,6 +648,12 @@ export function renderOrders(state, renderCustomerOptions) {
     const completed = status === '已完成';
     const showSentAction = settings.quickActions?.['已送出'] !== false;
     const showDoneAction = settings.quickActions?.['已完成'] !== false;
+    const orderPosition = sortedOrders(state).findIndex((item) => item.id === order.id);
+    const positionActions = `
+      <span class="order-position-actions" aria-label="調整工單順序">
+        <button class="btn small ghost" type="button" data-order-move="${escapeHtml(order.id)}" data-order-direction="-1" ${orderPosition <= 0 ? 'disabled' : ''}>上移</button>
+        <button class="btn small ghost" type="button" data-order-move="${escapeHtml(order.id)}" data-order-direction="1" ${orderPosition >= state.orders.length - 1 ? 'disabled' : ''}>下移</button>
+      </span>`;
     const quickActions = [
       showSentAction
         ? `<button class="btn small order-sent-action" type="button" data-quick-status="已送出" data-id="${escapeHtml(order.id)}" ${sent ? 'disabled' : ''}>已送出</button>`
@@ -663,12 +666,12 @@ export function renderOrders(state, renderCustomerOptions) {
     tr.dataset.edit = order.id;
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
-      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><button class="order-drag-handle" type="button" data-order-drag-handle="${escapeHtml(order.id)}" title="長按後拖拉調整順序">拖拉</button><span><strong>${escapeHtml(order.orderNumber || '-')}</strong><small>雙擊複製</small></span></td>
+      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><span><strong>${escapeHtml(order.orderNumber || '-')}</strong><small>雙擊複製</small></span></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="客人" class="order-preview-customer"><strong>${escapeHtml(customer)}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        ${quickActions || '<span class="sub">無快速操作</span>'}
+        ${positionActions}${quickActions || '<span class="sub">無快速操作</span>'}
       </td>`;
     body.append(tr);
   });
@@ -938,6 +941,16 @@ export function bindOrderEvents(state, saveState, renderAll) {
       return;
     }
 
+    const moveBtn = e.target.closest('button[data-order-move]');
+    if (moveBtn) {
+      const moved = moveOrderByStep(state, moveBtn.dataset.orderMove, Number(moveBtn.dataset.orderDirection));
+      if (moved) {
+        saveState();
+        renderAll();
+      }
+      return;
+    }
+
     const quickBtn = e.target.closest('button[data-quick-status]');
     if (quickBtn) {
       const order = state.orders.find((o) => o.id === quickBtn.dataset.id);
@@ -967,7 +980,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       openOrderForEdit(state, btn.dataset.edit);
       return;
     }
-    const row = e.target.closest('[data-copy-order], [data-order-drag-handle]') ? null : e.target.closest('tr[data-edit]');
+    const row = e.target.closest('[data-copy-order], [data-order-move], button') ? null : e.target.closest('tr[data-edit]');
     if (row) openOrderForEdit(state, row.dataset.edit);
   });
   $('ordersTbody')?.addEventListener('dblclick', (e) => {
@@ -975,7 +988,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (!cell) return;
     copyOrderAsNew(state, cell.dataset.copyOrder);
   });
-  bindOrderDrag($('ordersTbody'), (orderId, targetId, after) => reorderOrder(state, orderId, targetId, after), saveState, renderAll);
 
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });
   bindOrderEnterNavigation();

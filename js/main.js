@@ -21,7 +21,7 @@ import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714
 import { renderInventory, bindInventoryEvents } from './inventory.js?v=20260714-trip-route-text-1';
 import { renderNotifications, bindNotificationEvents } from './notifications.js?v=20260714-trip-route-text-1';
 
-const APP_BUILD = '2026-07-14-order-drag-1';
+const APP_BUILD = '2026-07-14-order-buttons-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
