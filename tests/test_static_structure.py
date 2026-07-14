@@ -68,6 +68,13 @@ class StaticStructureTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, f'{path}\n{result.stderr.decode("utf-8", "replace")}')
 
+    def test_trip_route_ui_has_readable_labels(self):
+        trips_ui = (ROOT / 'js' / 'trips' / 'ui.js').read_text(encoding='utf-8')
+        for text in ('候選路線數', '建議順序', '預估時間', '預估距離', '用 Google Maps 開啟', '固定點', '上移', '下移'):
+            self.assertIn(text, trips_ui)
+        for broken in ('嚗', '撠', '蝮', '銝', '', '?strong', '??'):
+            self.assertNotIn(broken, trips_ui)
+
     def test_scalable_data_routes_exist_in_both_servers(self):
         flask_server = (ROOT / 'api_server.py').read_text(encoding='utf-8')
         builtin_server = (ROOT / 'api' / 'http_server.py').read_text(encoding='utf-8')

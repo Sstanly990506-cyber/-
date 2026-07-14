@@ -1,7 +1,7 @@
 import { $, money, escapeHtml } from './shared.js';
-import { DEFAULT_FACTORY } from './trips/constants.js?v=20260714-module-fix-2';
-import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20260714-module-fix-2';
-import { formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20260714-module-fix-2';
+import { DEFAULT_FACTORY } from './trips/constants.js?v=20260714-trip-route-text-1';
+import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20260714-trip-route-text-1';
+import { formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20260714-trip-route-text-1';
 
 let manualStops = [];
 let selectedOrderIds = new Set();

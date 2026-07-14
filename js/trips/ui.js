@@ -6,6 +6,12 @@ export function formatDuration(sec) {
   return h ? `${h} 小時 ${m} 分` : `${m} 分`;
 }
 
+function stopTypeLabel(type) {
+  if (type === 'pickup') return '載貨';
+  if (type === 'delivery') return '送貨';
+  return '工廠';
+}
+
 export function renderCustomerOptions(customers) {
   const dl = $('tripCustomerOptions');
   if (!dl) return;
@@ -21,27 +27,28 @@ export function renderStops(stops) {
   body.innerHTML = '';
   stops.forEach((s, idx) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${idx + 1}</td><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.type)}</td><td>${escapeHtml(s.relatedOrderId || '-')}</td><td>${escapeHtml(s.address || '-')}</td><td><button class="btn" data-del-stop="${escapeHtml(s.id)}">?芷</button></td>`;
+    tr.innerHTML = `<td>${idx + 1}</td><td>${escapeHtml(s.name)}</td><td>${escapeHtml(stopTypeLabel(s.type))}</td><td>${escapeHtml(s.relatedOrderId || '-')}</td><td>${escapeHtml(s.address || '-')}</td><td><button class="btn" data-del-stop="${escapeHtml(s.id)}">刪除</button></td>`;
     body.append(tr);
   });
   $('tripStopsCount').textContent = String(stops.length);
-  $('tripStopsTypeSummary').textContent = `delivery ${stops.filter((s) => s.type === 'delivery').length} / pickup ${stops.filter((s) => s.type === 'pickup').length}`;
+  $('tripStopsTypeSummary').textContent = `送貨 ${stops.filter((s) => s.type === 'delivery').length} / 載貨 ${stops.filter((s) => s.type === 'pickup').length}`;
 }
 
 export function renderResult(result) {
   const box = $('tripResult');
   if (!box) return;
   if (!result) {
-    box.innerHTML = '<p class="sub">撠閮?</p>';
+    box.innerHTML = '<p class="sub">尚未產生建議路線。</p>';
     return;
   }
 
+  const routeNames = result.bestRoute.orderedStops.map((s) => s.name).join(' → ');
   box.innerHTML = `
-    <p>?頝舐?嚗?strong>${result.candidateCount}</strong></p>
-    <p>?雿喲?摨?<strong>${escapeHtml(result.bestRoute.orderedStops.map((s) => s.name).join(' ??'))}</strong></p>
-    <p>蝮賡?隡唳???<strong>${formatDuration(result.bestRoute.totalDurationSec)}</strong></p>
-    <p>蝮賡?隡啗??ｇ?<strong>${money(result.bestRoute.totalDistanceM)} m</strong></p>
-    <p><a class="btn" href="${escapeHtml(result.googleMapsUrl)}" target="_blank" rel="noopener">?? Google Maps 撠</a></p>
+    <p>候選路線數：<strong>${result.candidateCount}</strong></p>
+    <p>建議順序：<strong>${escapeHtml(routeNames)}</strong></p>
+    <p>預估時間：<strong>${formatDuration(result.bestRoute.totalDurationSec)}</strong></p>
+    <p>預估距離：<strong>${money(result.bestRoute.totalDistanceM)} m</strong></p>
+    <p><a class="btn" href="${escapeHtml(result.googleMapsUrl)}" target="_blank" rel="noopener">用 Google Maps 開啟</a></p>
   `;
 }
 
@@ -50,7 +57,7 @@ export function renderManualRoute(route, confirmed = false) {
   if (!wrap) return;
   wrap.innerHTML = '';
   if (!route.length) {
-    wrap.innerHTML = '<p class="sub">撠?遣霅啗楝蝺?/p>';
+    wrap.innerHTML = '<p class="sub">尚未產生手動路線。</p>';
     return;
   }
 
@@ -58,7 +65,7 @@ export function renderManualRoute(route, confirmed = false) {
     const fixed = idx === 0 || idx === route.length - 1;
     const div = document.createElement('div');
     div.className = `trip-route-item ${confirmed ? 'confirmed' : ''}`.trim();
-    div.innerHTML = `<strong>${idx + 1}. ${escapeHtml(s.name)}</strong><span>${escapeHtml(s.type || 'factory')}</span><div>${fixed ? '<span class="sub">?箏?</span>' : `<button class="btn" data-route-up="${idx}">銝宏</button> <button class="btn" data-route-down="${idx}">銝宏</button>`}</div>`;
+    div.innerHTML = `<strong>${idx + 1}. ${escapeHtml(s.name)}</strong><span>${escapeHtml(stopTypeLabel(s.type || 'factory'))}</span><div>${fixed ? '<span class="sub">固定點</span>' : `<button class="btn" data-route-up="${idx}">上移</button> <button class="btn" data-route-down="${idx}">下移</button>`}</div>`;
     wrap.append(div);
   });
 }
