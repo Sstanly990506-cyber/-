@@ -5,6 +5,7 @@ import {
   configureStore,
   initializeStore,
   startStoreSync,
+  stopStoreSync,
   saveState,
   pullServerState,
   hydrateBootstrap,
@@ -32,6 +33,8 @@ let internalViewsMounted = true;
 let storeSyncStarted = false;
 let financeUnlockedUntil = 0;
 let activeViewId = 'loginView';
+let loginInFlight = false;
+let loginAttemptId = 0;
 
 const ROLE_PERMS = {
   admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView'],
@@ -168,6 +171,25 @@ function mountInternalViews() {
   if (!main) return;
   main.appendChild(internalViewsFragment);
   internalViewsMounted = true;
+}
+
+function setLoginBusy(isBusy) {
+  const form = $('loginForm');
+  if (!form) return;
+  form.setAttribute('aria-busy', isBusy ? 'true' : 'false');
+  form.querySelectorAll('input, button').forEach((el) => {
+    el.disabled = isBusy;
+  });
+  const submit = form.querySelector('button[type="submit"]');
+  if (submit) {
+    if (!submit.dataset.idleText) submit.dataset.idleText = submit.textContent || '登入';
+    submit.textContent = isBusy ? '登入中...' : submit.dataset.idleText;
+  }
+}
+
+function resetAuthenticatedSync() {
+  stopStoreSync();
+  storeSyncStarted = false;
 }
 
 async function startAuthenticatedSync() {
@@ -491,6 +513,7 @@ async function openFinanceGate() {
 function bindCoreEvents() {
   $('loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (loginInFlight) return;
     const username = $('username').value.trim();
     const password = $('password').value;
     if (!username || !password) return alert('請輸入帳號與密碼');
@@ -498,16 +521,25 @@ function bindCoreEvents() {
     let account = null;
     let token = '';
     let bootstrap = null;
+    loginInFlight = true;
+    const attemptId = ++loginAttemptId;
+    setLoginBusy(true);
     try {
       const session = await callUserApi({ action: 'login', username, password });
       account = session.account;
       token = session.token;
       bootstrap = session.bootstrap;
     } catch (err) {
+      if (attemptId === loginAttemptId) {
+        loginInFlight = false;
+        setLoginBusy(false);
+      }
       if (err?.status === 401 || err?.status === 403) return alert('伺服器拒絕登入或權限不足，請確認帳號權限設定。');
       return alert(err?.message || '登入失敗，請確認帳號密碼');
     }
 
+    if (attemptId !== loginAttemptId) return;
+    resetAuthenticatedSync();
     setAuthToken(token);
     state.user = account.display || account.username;
     state.userRole = account.role || 'viewer';
@@ -518,10 +550,16 @@ function bindCoreEvents() {
     $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
     const landing = state.settings?.defaultLandingView || 'dashboardView';
     showView(hasViewPermission(landing) ? landing : 'dashboardView');
+    loginInFlight = false;
+    setLoginBusy(false);
     startAuthenticatedSync().then(() => {
+      if (attemptId !== loginAttemptId) return;
       appendSystemEvent(`使用者登入：${state.user}`, 'info', { role: state.userRole });
       saveState();
-    }).catch((err) => applySyncUi({ badgeText: '同步失敗', detailText: err?.message || '背景載入失敗', ok: false }));
+    }).catch((err) => {
+      if (attemptId !== loginAttemptId) return;
+      applySyncUi({ badgeText: '同步失敗', detailText: err?.message || '背景載入失敗', ok: false });
+    });
   });
 
   document.addEventListener('click', (e) => {
@@ -539,6 +577,10 @@ function bindCoreEvents() {
   $('logoutBtn')?.addEventListener('click', () => {
     appendSystemEvent(`使用者登出：${state.user || 'unknown'}`, 'info', { role: state.userRole || 'viewer' });
     saveState();
+    loginAttemptId += 1;
+    loginInFlight = false;
+    setLoginBusy(false);
+    resetAuthenticatedSync();
     state.user = null;
     state.userRole = 'viewer';
     state.allowedViews = null;

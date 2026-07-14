@@ -459,6 +459,15 @@ export function startStoreSync() {
   syncTimer = setInterval(pullServerState, 10000);
 }
 
+export function stopStoreSync() {
+  if (syncTimer) {
+    clearInterval(syncTimer);
+    syncTimer = null;
+  }
+  initializedRemote = false;
+  changeCursor = 0;
+}
+
 export function saveState() {
   normalizeStateData();
   localStorage.setItem('uiSettings', JSON.stringify(state.settings));
