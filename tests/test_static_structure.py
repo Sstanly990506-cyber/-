@@ -474,11 +474,16 @@ class StaticStructureTests(unittest.TestCase):
         store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
         self.assertIn('id="ordersListSummary"', view)
         self.assertIn('class="orders-table"', view)
-        self.assertIn('<th>工單單號</th><th>交貨日期</th><th>客人</th><th>狀態</th><th>操作</th>', view)
+        self.assertIn('<th>工單單號</th><th>交貨日期</th><th>狀態</th><th>操作</th>', view)
+        order_list_view = view[view.index('id="ordersListScreen"'):view.index('id="ordersFormScreen"')]
+        self.assertNotIn('<th>客人</th>', order_list_view)
         self.assertIn('order-preview-row', orders)
         self.assertIn("tr.style.setProperty('--row-index'", orders)
         self.assertIn('data-label="工單單號"', orders)
-        self.assertIn('data-label="客人"', orders)
+        render_block = orders[orders.index('export function renderOrders'):orders.index('export function clearOrderForm')]
+        self.assertNotIn('data-label="客人"', render_block)
+        self.assertNotIn('order-preview-customer', render_block)
+        self.assertIn('colspan="4"', render_block)
         self.assertIn('data-copy-order', orders)
         self.assertIn('雙擊複製', orders)
         self.assertIn('data-quick-status="已送出"', orders)
@@ -490,7 +495,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('.order-row-actions .order-sent-action', styles)
         self.assertIn('@keyframes orderRowEnter', styles)
         self.assertIn('@keyframes orderRowComplete', styles)
-        self.assertIn('.orders-table { min-width: 680px; table-layout: fixed; }', styles)
+        self.assertIn('.orders-table { min-width: 560px; table-layout: fixed; }', styles)
         self.assertIn('.orders-table thead { display: table-header-group; }', styles)
         self.assertIn('const displayTotal=', store)
 

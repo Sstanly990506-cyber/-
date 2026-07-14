@@ -636,14 +636,13 @@ export function renderOrders(state, renderCustomerOptions) {
   if (summary) summary.textContent = `顯示 ${filtered.length} 筆，共 ${state.orders.length} 筆工單`;
 
   if (!filtered.length) {
-    body.innerHTML = '<tr class="orders-empty-row"><td colspan="5">目前沒有符合條件的工單。</td></tr>';
+    body.innerHTML = '<tr class="orders-empty-row"><td colspan="4">目前沒有符合條件的工單。</td></tr>';
     return;
   }
 
   filtered.forEach((order, index) => {
     const tr = document.createElement('tr');
     const status = order.status || '未完成';
-    const customer = order.billingCustomer || order.upstream || order.downstream || '-';
     const sent = status === '已送出';
     const completed = status === '已完成';
     const showSentAction = settings.quickActions?.['已送出'] !== false;
@@ -668,7 +667,6 @@ export function renderOrders(state, renderCustomerOptions) {
     tr.innerHTML = `
       <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><strong>${escapeHtml(order.orderNumber || '-')}</strong></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
-      <td data-label="客人" class="order-preview-customer"><strong>${escapeHtml(customer)}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
         ${positionActions}${quickActions || '<span class="sub">無快速操作</span>'}
