@@ -56,10 +56,12 @@ class AiOrderTests(unittest.TestCase):
         self.assertEqual(content[1]['detail'], 'high')
         self.assertEqual(CapturingResponse.payload['max_output_tokens'], 900)
 
-    def test_precision_schema_requires_field_level_review(self):
-        self.assertIn('fieldConfidence', ai_orders.ORDER_SCHEMA['properties'])
-        self.assertIn('reviewFields', ai_orders.ORDER_SCHEMA['properties'])
-        self.assertEqual(set(ai_orders.ORDER_SCHEMA['properties']['fieldConfidence']['required']), set(ai_orders.REVIEWABLE_FIELDS))
+    def test_precision_review_is_added_after_the_compact_model_response(self):
+        self.assertNotIn('fieldConfidence', ai_orders.ORDER_SCHEMA['properties'])
+        self.assertNotIn('reviewFields', ai_orders.ORDER_SCHEMA['properties'])
+        result = ai_orders.normalize_recognized_order({'orderNumber': 'WO-1', 'confidence': 0.8})
+        self.assertEqual(set(result['fieldConfidence']), set(ai_orders.REVIEWABLE_FIELDS))
+        self.assertEqual(result['reviewFields'], [])
 
     def test_customer_candidate_requires_review_and_never_replaces_visible_text(self):
         recognized = {'billingCustomer': '禹利電子分色有限公司', 'confidence': 0.9}

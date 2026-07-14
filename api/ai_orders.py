@@ -168,20 +168,10 @@ ORDER_SCHEMA = {
         'totalPrice': {'type': 'number'},
         'confidence': {'type': 'number'},
         'notes': {'type': 'array', 'items': {'type': 'string'}},
-        'fieldConfidence': {
-            'type': 'object',
-            'properties': {field: {'type': 'number'} for field in REVIEWABLE_FIELDS},
-            'required': list(REVIEWABLE_FIELDS),
-            'additionalProperties': False,
-        },
-        'reviewFields': {
-            'type': 'array',
-            'items': {'type': 'string', 'enum': list(REVIEWABLE_FIELDS)},
-        },
     },
     'required': [
         'orderNumber', 'orderDate', 'billingCustomer', 'upstream', 'downstream', 'address', 'sheetCountText', 'sheetCount',
-        'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType', 'totalPrice', 'confidence', 'notes', 'fieldConfidence', 'reviewFields',
+        'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType', 'totalPrice', 'confidence', 'notes',
     ],
     'additionalProperties': False,
 }
@@ -216,11 +206,13 @@ def _validate_image_data_url(data_url):
 
 
 def _extract_output_text(response):
+    if isinstance(response.get('output_text'), str) and response['output_text'].strip():
+        return response['output_text']
     for item in response.get('output') or []:
         if item.get('type') != 'message':
             continue
         for content in item.get('content') or []:
-            if content.get('type') == 'output_text' and content.get('text'):
+            if content.get('type') in {'output_text', 'text'} and content.get('text'):
                 return content['text']
     raise OrderRecognitionError('AI did not return recognizable order data')
 
@@ -262,8 +254,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
         'Put a numeric quantity in sheetCount only when the document separately shows one explicit calculation quantity. '
         f'{BUSINESS_RULES}'
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
-        'For every fieldConfidence value, assess that individual field rather than the whole document. '
-        'Put every ambiguous, missing, or weakly visible field in reviewFields. Do not include your reasoning in the output. '
+        'Assess each field independently. Leave every ambiguous, missing, or weakly visible value empty or zero. '
         f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '
         f'Known company names from our customer system, when visible in the image: {customer_text or "none supplied"}. '
         'These names are spelling hints only. Use one only when the full visible text matches; never use fuzzy or partial-name autocomplete. '
