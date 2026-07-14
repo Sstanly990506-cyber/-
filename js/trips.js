@@ -41,7 +41,7 @@ function getTripOrders(state) {
 }
 
 function canExecuteOrder(order) {
-  return !['已送出', '已完成'].includes(String(order.status || '未完成').trim());
+  return String(order.status || '未完成').trim() !== '已送出';
 }
 
 function getOrderStopType(orderId, state) {
@@ -218,7 +218,7 @@ function confirmManualRoute() {
 async function executeSelectedOrders(state, renderAllApp) {
   const selectedOrders = getTripOrders(state)
     .filter((order) => selectedOrderIds.has(order.id) && canExecuteOrder(order));
-  if (!selectedOrders.length) return alert('請勾選一筆「未完成」的工單後再執行車趟。已完成與已送出的工單不能再次送出。');
+  if (!selectedOrders.length) return alert('請勾選一筆「未完成」或「已完成」的工單後再執行車趟。已送出的工單不能重複送出。');
   if (manualRoute.length && !manualRouteConfirmed) return alert('你有手動調整路線，請先按「確認手動路線」');
 
   const button = $('tripExecuteBtn');
@@ -240,7 +240,6 @@ async function executeSelectedOrders(state, renderAllApp) {
     if (!data.updated) {
       const details = [];
       if (data.alreadySent) details.push(`${data.alreadySent} 筆已送出`);
-      if (data.skippedCompleted) details.push(`${data.skippedCompleted} 筆已完成`);
       if (data.missing?.length) details.push(`${data.missing.length} 筆找不到`);
       throw new Error(`沒有可標記為已送出的工單${details.length ? `（${details.join('、')}）` : ''}`);
     }

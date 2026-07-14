@@ -393,7 +393,7 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result, {'ok': True})
         optimize.assert_called_once_with({'stops': []})
 
-    def test_driver_can_execute_trip_and_only_move_orders_forward(self):
+    def test_driver_can_execute_trip_for_unfinished_or_completed_orders(self):
         driver = {'role': 'driver', 'display': '司機', 'allowedViews': ['tripsView']}
         orders = [
             {'id': 'o1', 'orderNumber': 'WO-1', 'status': '未完成', 'totalPrice': 1200, 'billingCustomer': '客戶甲', '_updatedAt': 1},
@@ -407,14 +407,14 @@ class ServiceTests(unittest.TestCase):
         with patch('api.service.verify_session_token', return_value=driver), patch('api.service._all_records', side_effect=records), patch('api.service.upsert_record', return_value={'ok': True, 'updatedAt': 99}) as upsert:
             result = execute_trip_payload('token', {'orderIds': ['o1', 'o2', 'o3']})
 
-        self.assertEqual(result['updated'], 1)
+        self.assertEqual(result['updated'], 2)
         self.assertEqual(result['alreadySent'], 1)
-        self.assertEqual(result['skippedCompleted'], 1)
+        self.assertEqual(result['skippedCompleted'], 0)
         self.assertEqual(result['orders'][0]['status'], '已送出')
-        order_write = next(call for call in upsert.call_args_list if call.args[0] == 'orders')
-        self.assertEqual(order_write.args[1], 'o1')
-        self.assertEqual(order_write.args[2]['status'], '已送出')
-        self.assertNotIn('_updatedAt', order_write.args[2])
+        order_writes = [call for call in upsert.call_args_list if call.args[0] == 'orders']
+        self.assertEqual([call.args[1] for call in order_writes], ['o1', 'o3'])
+        self.assertTrue(all(call.args[2]['status'] == '已送出' for call in order_writes))
+        self.assertTrue(all('_updatedAt' not in call.args[2] for call in order_writes))
         self.assertTrue(any(call.args[0] == 'audits' for call in upsert.call_args_list))
         self.assertTrue(any(call.args[0] == 'receivables' for call in upsert.call_args_list))
 

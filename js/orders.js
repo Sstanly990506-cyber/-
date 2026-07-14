@@ -650,7 +650,7 @@ export function renderOrders(state, renderCustomerOptions) {
     const showDoneAction = settings.quickActions?.['已完成'] !== false;
     const quickActions = [
       showSentAction
-        ? `<button class="btn small order-sent-action" type="button" data-quick-status="已送出" data-id="${escapeHtml(order.id)}" ${sent || completed ? 'disabled' : ''}>已送出</button>`
+        ? `<button class="btn small order-sent-action" type="button" data-quick-status="已送出" data-id="${escapeHtml(order.id)}" ${sent ? 'disabled' : ''}>已送出</button>`
         : '',
       showDoneAction
         ? `<button class="btn primary small" type="button" data-quick-status="已完成" data-id="${escapeHtml(order.id)}" ${completed ? 'disabled' : ''}>${completed ? '已完成' : '完成'}</button>`
@@ -958,7 +958,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (quickBtn) {
       const order = state.orders.find((o) => o.id === quickBtn.dataset.id);
       if (!order) return;
-      if (order.status === '已完成' && quickBtn.dataset.quickStatus !== '已完成') return;
+      if (order.status === '已送出') return;
       const before = order.status;
       order.status = quickBtn.dataset.quickStatus;
       order.updatedAt = new Date().toLocaleString();

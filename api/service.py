@@ -321,15 +321,13 @@ def execute_trip_payload(token,payload):
     receivables_by_order={str(row.get('orderNumber') or '').strip():row for row in _all_records('receivables') if str(row.get('orderNumber') or '').strip()}
     changed_at=datetime.now(timezone(timedelta(hours=8))).isoformat(timespec='seconds')
     actor=account.get('display') or account.get('username') or account.get('role') or 'trip-user'
-    updated_orders=[];missing=[];already_sent=0;skipped_completed=0
+    updated_orders=[];missing=[];already_sent=0
 
     for order_id in order_ids:
         source=orders_by_id.get(order_id)
         if not source:
             missing.append(order_id);continue
         status=str(source.get('status') or '未完成').strip()
-        if status=='已完成':
-            skipped_completed+=1;continue
         if status=='已送出':
             already_sent+=1;continue
 
@@ -375,7 +373,7 @@ def execute_trip_payload(token,payload):
         'processed':len(order_ids)-len(missing),
         'updated':len(updated_orders),
         'alreadySent':already_sent,
-        'skippedCompleted':skipped_completed,
+        'skippedCompleted':0,
         'missing':missing,
         'orders':updated_orders,
     }

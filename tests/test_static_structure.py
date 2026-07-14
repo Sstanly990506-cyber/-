@@ -301,7 +301,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("fetch('/api/trips/execute'", trips)
         self.assertIn("textContent = '執行中…'", trips)
         self.assertIn("function canExecuteOrder(order)", trips)
-        self.assertIn("已完成與已送出的工單不能再次送出", trips)
+        self.assertIn("已完成」的工單後再執行車趟。已送出的工單不能重複送出", trips)
         self.assertIn("${status}（不可執行）", trips)
         self.assertIn("'/api/trips/execute'", routes)
 
@@ -481,7 +481,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('data-quick-status="已送出"', orders)
         self.assertIn('data-quick-status="已完成"', orders)
         self.assertIn("settings.quickActions?.['已送出'] !== false", orders)
-        self.assertIn("order.status === '已完成' && quickBtn.dataset.quickStatus !== '已完成'", orders)
+        self.assertIn("order.status === '已送出'", orders)
         self.assertNotIn('class="order-price-cell">NT$', orders)
         self.assertIn('order-status-badge', orders)
         self.assertIn('.order-row-actions .order-sent-action', styles)
