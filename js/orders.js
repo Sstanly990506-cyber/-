@@ -651,12 +651,12 @@ export function renderOrders(state, renderCustomerOptions) {
     const orderPosition = sortedOrders(state).findIndex((item) => item.id === order.id);
     const positionActions = `
       <span class="order-position-actions" aria-label="調整工單順序">
-        <button class="btn small ghost" type="button" data-order-move="${escapeHtml(order.id)}" data-order-direction="-1" ${orderPosition <= 0 ? 'disabled' : ''}>上移</button>
-        <button class="btn small ghost" type="button" data-order-move="${escapeHtml(order.id)}" data-order-direction="1" ${orderPosition >= state.orders.length - 1 ? 'disabled' : ''}>下移</button>
+        <button class="btn small ghost" type="button" data-order-move="${escapeHtml(order.id)}" data-order-direction="-1" title="上移" aria-label="上移" ${orderPosition <= 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn small ghost" type="button" data-order-move="${escapeHtml(order.id)}" data-order-direction="1" title="下移" aria-label="下移" ${orderPosition >= state.orders.length - 1 ? 'disabled' : ''}>↓</button>
       </span>`;
     const quickActions = [
       showSentAction
-        ? `<button class="btn small order-sent-action" type="button" data-quick-status="已送出" data-id="${escapeHtml(order.id)}" ${sent ? 'disabled' : ''}>已送出</button>`
+        ? `<button class="btn small order-sent-action" type="button" data-quick-status="已送出" data-id="${escapeHtml(order.id)}" ${sent ? 'disabled' : ''}>送出</button>`
         : '',
       showDoneAction
         ? `<button class="btn primary small" type="button" data-quick-status="已完成" data-id="${escapeHtml(order.id)}" ${completed ? 'disabled' : ''}>${completed ? '已完成' : '完成'}</button>`
@@ -666,7 +666,7 @@ export function renderOrders(state, renderCustomerOptions) {
     tr.dataset.edit = order.id;
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
-      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><span><strong>${escapeHtml(order.orderNumber || '-')}</strong><small>雙擊複製</small></span></td>
+      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><strong>${escapeHtml(order.orderNumber || '-')}</strong></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="客人" class="order-preview-customer"><strong>${escapeHtml(customer)}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>

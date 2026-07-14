@@ -488,7 +488,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('.order-row-actions .order-sent-action', styles)
         self.assertIn('@keyframes orderRowEnter', styles)
         self.assertIn('@keyframes orderRowComplete', styles)
-        self.assertIn('.orders-table { min-width: 780px; table-layout: fixed; }', styles)
+        self.assertIn('.orders-table { min-width: 680px; table-layout: fixed; }', styles)
         self.assertIn('.orders-table thead { display: table-header-group; }', styles)
         self.assertIn('const displayTotal=', store)
 

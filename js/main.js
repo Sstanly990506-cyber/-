@@ -13,7 +13,7 @@ import {
   appendSystemEvent,
 } from './store.js';
 import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20260714-ai-rules-3';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20260714-orders-horizontal-1';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20260714-orders-compact-1';
 import { renderFinance, bindFinanceEvents } from './finance.js?v=20260714-trip-route-text-1';
 import { renderAudits, bindAuditEvents } from './audit.js?v=20260714-trip-route-text-1';
 import { renderTrips, bindTripEvents } from './trips.js?v=20260714-ai-rules-3';

@@ -540,17 +540,21 @@ tbody tr:hover {
 .orders-list-head h3,
 .orders-list-head p { margin: 0; }
 .orders-list-head input { width: 100%; }
-.orders-table-wrap { max-height: 620px; overflow: auto; }
+.orders-table-wrap { max-height: 720px; overflow: auto; }
 .orders-table th {
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--card-strong);
   white-space: nowrap;
+  padding: 7px 8px;
+  font-size: 12px;
 }
 .orders-table {
   table-layout: fixed;
+  font-size: 13px;
 }
+.orders-table td { padding: 7px 8px; line-height: 1.15; }
 .orders-table th:nth-child(1),
 .orders-table td:nth-child(1) { width: 19%; }
 .orders-table th:nth-child(2),
@@ -615,45 +619,45 @@ tbody tr:hover {
   cursor: copy;
 }
 .order-number-copy strong,
-.order-number-copy small,
 .order-route-cell strong,
 .order-route-cell small {
   display: block;
 }
-.order-number-copy small,
 .order-route-cell small {
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
 }
-.order-number-copy { display: flex; align-items: center; gap: 2px; }
-.order-number-copy > span { min-width: 0; }
+.order-number-copy { white-space: nowrap; }
 .order-price-cell {
   font-weight: 700;
   white-space: nowrap;
 }
 .order-status-badge {
   display: inline-flex;
-  padding: 5px 9px;
+  padding: 3px 7px;
   border: 1px solid rgba(148, 163, 184, 0.26);
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.1);
   white-space: nowrap;
+  font-size: 12px;
 }
 .order-status-badge[data-status="未完成"] { color: #fcd34d; border-color: rgba(245, 158, 11, 0.42); }
 .order-status-badge[data-status="已送出"] { color: #93c5fd; border-color: rgba(59, 130, 246, 0.42); }
 .order-status-badge[data-status="已完成"] { color: #86efac; border-color: rgba(34, 197, 94, 0.42); }
 .order-row-actions {
   display: flex;
-  gap: 6px;
-  min-width: 180px;
+  gap: 4px;
+  min-width: 144px;
   flex-wrap: nowrap;
   justify-content: flex-end;
   align-items: center;
 }
-.order-position-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.order-position-actions { display: flex; gap: 3px; flex: 0 0 auto; }
 .order-row-actions .btn {
-  padding: 7px 10px;
+  min-height: 28px;
+  padding: 4px 7px;
+  font-size: 12px;
   transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
 }
 .order-row-actions .order-sent-action {
@@ -1145,14 +1149,14 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
     grid-column: 2;
     width: fit-content;
   }
-  .orders-table-wrap { overflow: auto; max-height: 66vh; border-radius: 12px; }
-  .orders-table { min-width: 780px; table-layout: fixed; }
+  .orders-table-wrap { overflow: auto; max-height: 72vh; border-radius: 12px; }
+  .orders-table { min-width: 680px; table-layout: fixed; }
   .orders-table thead { display: table-header-group; }
   .orders-table tbody { display: table-row-group; }
   .orders-table tr { display: table-row; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
-  .orders-table td { display: table-cell; padding: 9px 8px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+  .orders-table td { display: table-cell; padding: 6px 7px; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
   .orders-table td::before { content: none; }
-  .orders-table .order-row-actions { min-width: 180px; }
+  .orders-table .order-row-actions { min-width: 144px; }
   .orders-table .order-position-actions .btn { width: auto; }
   .orders-table .order-row-actions .btn { flex: 0 0 auto; }
   .orders-table .orders-empty-row td { display: table-cell; padding: 28px 12px; }
