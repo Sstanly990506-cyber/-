@@ -5,7 +5,6 @@ import {
   configureStore,
   initializeStore,
   startStoreSync,
-  stopStoreSync,
   saveState,
   pullServerState,
   hydrateBootstrap,
@@ -22,7 +21,7 @@ import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js';
 import { renderInventory, bindInventoryEvents } from './inventory.js';
 import { renderNotifications, bindNotificationEvents } from './notifications.js';
 
-const APP_BUILD = '2026-06-04-secure-sync-finance-1';
+const APP_BUILD = '2026-07-14-login-guard-2';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
@@ -188,7 +187,6 @@ function setLoginBusy(isBusy) {
 }
 
 function resetAuthenticatedSync() {
-  stopStoreSync();
   storeSyncStarted = false;
 }
 

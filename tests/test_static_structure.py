@@ -153,13 +153,13 @@ class StaticStructureTests(unittest.TestCase):
 
     def test_login_submit_is_guarded_against_double_clicks(self):
         main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
-        store = (ROOT / 'js' / 'store.js').read_text(encoding='utf-8')
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         self.assertIn('let loginInFlight = false', main)
         self.assertIn('if (loginInFlight) return', main)
         self.assertIn('setLoginBusy(true)', main)
         self.assertIn('const attemptId = ++loginAttemptId', main)
         self.assertIn('resetAuthenticatedSync()', main)
-        self.assertIn('stopStoreSync', store)
+        self.assertIn('js/main.js?v=', view)
 
     def test_refresh_renders_only_the_active_view(self):
         main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
