@@ -305,8 +305,11 @@ class StaticStructureTests(unittest.TestCase):
         routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
         order_pool = view[view.index('id="tripOrderPoolCard"'):view.index('id="tripRouteCard"')]
         route_card = view[view.index('id="tripRouteCard"'):view.index('</section>', view.index('id="tripRouteCard"'))]
+        self.assertNotIn('id="tripOptimizeBtn"', order_pool)
         self.assertNotIn('id="tripExecuteBtn"', order_pool)
+        self.assertIn('id="tripOptimizeBtn"', route_card)
         self.assertIn('id="tripExecuteBtn"', route_card)
+        self.assertLess(route_card.index('id="tripOptimizeBtn"'), route_card.index('id="tripConfirmManualBtn"'))
         self.assertLess(route_card.index('id="tripConfirmManualBtn"'), route_card.index('id="tripExecuteBtn"'))
         self.assertIn("fetch('/api/trips/execute'", trips)
         self.assertIn("textContent = '執行中…'", trips)

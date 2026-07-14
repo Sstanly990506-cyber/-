@@ -310,7 +310,6 @@
         <article class="card" id="tripOrderPoolCard">
           <h3>工單（顯示全部，可勾選）</h3>
           <div class="filter-row">
-            <button class="btn primary" type="button" id="tripOptimizeBtn">最佳化車輛</button>
             <button class="btn" type="button" id="tripClearBtn">清空已選</button>
           </div>
           <p>已選工單：<strong id="tripStopsCount">0</strong>（<span id="tripStopsTypeSummary">送貨 0 / 載貨 0</span>）</p>
@@ -338,6 +337,7 @@
           <h3>手動調整建議路線</h3>
           <p id="tripManualHint" class="sub">手動調整後會顯示預估時間</p>
           <div class="filter-row">
+            <button class="btn primary" type="button" id="tripOptimizeBtn">最佳化車輛</button>
             <button class="btn primary" type="button" id="tripConfirmManualBtn">確認手動路線</button>
             <button class="btn" type="button" id="tripExecuteBtn">執行車趟並標記已送出</button>
           </div>
@@ -956,6 +956,6 @@
         });
       })();
     </script>
-    <script type="module" src="js/main.js?v=20260714-factory-address-1"></script>
+    <script type="module" src="js/main.js?v=20260714-trip-optimize-action-1"></script>
   </body>
 </html>
