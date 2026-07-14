@@ -13,7 +13,7 @@ import {
   appendSystemEvent,
 } from './store.js';
 import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20260714-trip-route-text-1';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20260714-trip-route-text-1';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20260714-order-sent-action-1';
 import { renderFinance, bindFinanceEvents } from './finance.js?v=20260714-trip-route-text-1';
 import { renderAudits, bindAuditEvents } from './audit.js?v=20260714-trip-route-text-1';
 import { renderTrips, bindTripEvents } from './trips.js?v=20260714-trip-route-text-1';
@@ -21,7 +21,7 @@ import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714
 import { renderInventory, bindInventoryEvents } from './inventory.js?v=20260714-trip-route-text-1';
 import { renderNotifications, bindNotificationEvents } from './notifications.js?v=20260714-trip-route-text-1';
 
-const APP_BUILD = '2026-07-14-trip-route-text-1';
+const APP_BUILD = '2026-07-14-order-sent-action-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
 const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';

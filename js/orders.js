@@ -644,7 +644,18 @@ export function renderOrders(state, renderCustomerOptions) {
     const tr = document.createElement('tr');
     const status = order.status || '未完成';
     const customer = order.billingCustomer || order.upstream || order.downstream || '-';
+    const sent = status === '已送出';
     const completed = status === '已完成';
+    const showSentAction = settings.quickActions?.['已送出'] !== false;
+    const showDoneAction = settings.quickActions?.['已完成'] !== false;
+    const quickActions = [
+      showSentAction
+        ? `<button class="btn small order-sent-action" type="button" data-quick-status="已送出" data-id="${escapeHtml(order.id)}" ${sent || completed ? 'disabled' : ''}>已送出</button>`
+        : '',
+      showDoneAction
+        ? `<button class="btn primary small" type="button" data-quick-status="已完成" data-id="${escapeHtml(order.id)}" ${completed ? 'disabled' : ''}>${completed ? '已完成' : '完成'}</button>`
+        : '',
+    ].filter(Boolean).join('');
     tr.className = `order-preview-row${highlightedOrderId === order.id ? ' is-just-completed' : ''}`;
     tr.dataset.edit = order.id;
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
@@ -653,7 +664,7 @@ export function renderOrders(state, renderCustomerOptions) {
       <td data-label="客人" class="order-preview-customer"><strong>${escapeHtml(customer)}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        <button class="btn primary small" type="button" data-quick-status="已完成" data-id="${order.id}" ${completed ? 'disabled' : ''}>${completed ? '已完成' : '完成'}</button>
+        ${quickActions || '<span class="sub">無快速操作</span>'}
       </td>`;
     body.append(tr);
   });
@@ -946,6 +957,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (quickBtn) {
       const order = state.orders.find((o) => o.id === quickBtn.dataset.id);
       if (!order) return;
+      if (order.status === '已完成' && quickBtn.dataset.quickStatus !== '已完成') return;
       const before = order.status;
       order.status = quickBtn.dataset.quickStatus;
       order.updatedAt = new Date().toLocaleString();
