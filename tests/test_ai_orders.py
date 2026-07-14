@@ -54,7 +54,7 @@ class AiOrderTests(unittest.TestCase):
             ai_orders.recognize_order_image(image, ['PVA光'])
         content = CapturingResponse.payload['input'][0]['content']
         self.assertEqual(content[1]['detail'], 'auto')
-        self.assertEqual(CapturingResponse.payload['max_output_tokens'], 1200)
+        self.assertEqual(CapturingResponse.payload['max_output_tokens'], 900)
 
     def test_prompt_includes_known_billing_vendors(self):
         image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()

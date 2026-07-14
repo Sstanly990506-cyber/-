@@ -547,8 +547,8 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('id="billingCustomerOptions"', view)
         self.assertIn("fetch('/api/orders/recognize'", orders)
         self.assertNotIn("fetch('/api/orders/recognize/status'", orders)
-        self.assertIn("encoded.length <= 1_600_000", orders)
-        self.assertIn("maxDimension = 1280", orders)
+        self.assertIn("encoded.length <= 900_000", orders)
+        self.assertIn("maxDimension = 1024", orders)
         self.assertIn('applyRecognizedOrder', orders)
         self.assertIn('id="upstreamInput"', view)
         self.assertIn('id="upstreamOptions"', view)
@@ -614,7 +614,7 @@ class StaticStructureTests(unittest.TestCase):
         vercel = (ROOT / 'vercel.json').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
         self.assertIn('"maxDuration": 60', vercel)
-        self.assertIn('encoded.length <= 1_600_000', orders)
+        self.assertIn('encoded.length <= 900_000', orders)
 
 
 if __name__ == '__main__':

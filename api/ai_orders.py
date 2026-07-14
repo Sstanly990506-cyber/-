@@ -136,7 +136,8 @@ def _extract_output_text(response):
 
 def _correction_examples(corrections):
     examples = []
-    for item in (corrections or [])[:20]:
+    # Keep useful recurring corrections without making every request too large.
+    for item in (corrections or [])[:8]:
         changes = item.get('changes') if isinstance(item, dict) else None
         if not isinstance(changes, dict):
             continue
@@ -160,7 +161,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
     if image_detail not in {'auto', 'low', 'high'}:
         image_detail = 'auto'
     gloss_text = ', '.join(str(item) for item in (gloss_options or [])[:30])
-    customer_text = ', '.join(str(item) for item in (customer_names or [])[:80] if str(item or '').strip())
+    customer_text = ', '.join(str(item) for item in (customer_names or [])[:50] if str(item or '').strip())
     prompt = (
         'Extract a single factory work order from this image. Do not invent unreadable values. '
         'Use an empty string or zero when uncertain. orderDate must be YYYY-MM-DD when visible. '
@@ -184,7 +185,8 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
                 {'type': 'input_image', 'image_url': image, 'detail': image_detail},
             ],
         }],
-        'max_output_tokens': 1200,
+        # The strict schema is compact, so a smaller response budget finishes sooner.
+        'max_output_tokens': 900,
         'text': {
             'format': {
                 'type': 'json_schema',

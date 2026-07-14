@@ -764,8 +764,9 @@ async function prepareOrderImage(file) {
     value.onerror = () => reject(new Error('圖片格式無法解析。'));
     value.src = source;
   });
-  let maxDimension = 1280;
-  let quality = 0.74;
+  // Full camera photos are larger than the recognition request needs.
+  let maxDimension = 1024;
+  let quality = 0.68;
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
     const canvas = document.createElement('canvas');
@@ -773,7 +774,7 @@ async function prepareOrderImage(file) {
     canvas.height = Math.max(1, Math.round(image.height * scale));
     canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
     const encoded = canvas.toDataURL('image/jpeg', quality);
-    if (encoded.length <= 1_600_000) return encoded;
+    if (encoded.length <= 900_000) return encoded;
     maxDimension = Math.round(maxDimension * 0.82);
     quality = Math.max(0.55, quality - 0.06);
   }
@@ -843,6 +844,7 @@ async function recognizeOrderFromImage(state) {
   if (!file) return alert('請先拍照或選擇工單圖片。');
   const button = $('recognizeOrderBtn');
   const status = $('aiOrderStatus');
+  const startedAt = performance.now();
   button.disabled = true;
   status.textContent = '正在壓縮圖片並識別，通常需要 5 至 30 秒…';
   try {
@@ -857,8 +859,9 @@ async function recognizeOrderFromImage(state) {
     const addressFilledLocally = applyRecognizedOrder(state, data.order || {});
     const addressFilledFromCustomer = data.order?.addressSource === 'customer-system' || addressFilledLocally;
     const confidence = Math.round(Number(data.order?.confidence || 0) * 100);
+    const elapsedSeconds = ((performance.now() - startedAt) / 1000).toFixed(1);
     const notes = (data.order?.notes || []).filter(Boolean).join('；');
-    status.textContent = `識別完成，信心度 ${confidence}%${addressFilledFromCustomer ? '。送貨地址已使用下游客戶系統地址' : ''}${notes ? `。請確認：${notes}` : '。請確認欄位後再儲存。'}`;
+    status.textContent = `識別完成，耗時 ${elapsedSeconds} 秒，信心度 ${confidence}%${addressFilledFromCustomer ? '。送貨地址已使用下游客戶系統地址' : ''}${notes ? `。請確認：${notes}` : '。請確認欄位後再儲存。'}`;
   } catch (err) {
     status.textContent = `識別失敗：${err.message}`;
     alert(`AI 識別工單失敗：${err.message}`);
