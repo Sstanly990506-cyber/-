@@ -124,6 +124,13 @@
                 <input id="downstreamInput" list="downstreamOptions" placeholder="請找軋盒／軋工等下一站" />
                 <datalist id="downstreamOptions"></datalist>
               </label>
+              <div id="orderMissingCustomerPrompt" class="order-missing-customer span-2 hidden" aria-live="polite">
+                <p id="orderMissingCustomerText"></p>
+                <div class="order-missing-customer-actions">
+                  <button id="addMissingCustomerBtn" class="btn primary" type="button">新增公司</button>
+                  <button id="dismissMissingCustomerBtn" class="btn" type="button">暫不新增</button>
+                </div>
+              </div>
               <label>送貨地址（下游）<input id="orderAddress" placeholder="完成上光後，要送往下一站的地址" /></label>
 
               <label>數量說明<input id="sheetCountText" type="text" maxlength="120" placeholder="例如：3箱×20張＋散裝5張" /></label>
@@ -956,6 +963,6 @@
         });
       })();
     </script>
-    <script type="module" src="js/main.js?v=20260714-trip-optimize-action-1"></script>
+    <script type="module" src="js/main.js?v=20260715-missing-customer-1"></script>
   </body>
 </html>

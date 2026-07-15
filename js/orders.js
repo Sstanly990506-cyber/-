@@ -6,7 +6,7 @@ import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomer
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
 import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
 import { requestOrderRecognition } from './orders-ai-request.js';
-
+import { bindMissingCustomerEvents, hideMissingCustomerPrompt } from './orders-customers.js?v=20260715-missing-customer-1';
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
 let lastAutoPrice = 0;
@@ -64,7 +64,6 @@ function findCustomerByName(state, keyword) {
   return state.customers.find((c) => (c.name || '').trim().toLowerCase() === key)
     || state.customers.find((c) => (c.name || '').toLowerCase().includes(key));
 }
-
 function syncAddressFromDownstream(state, onlyWhenEmpty = false) {
   const downstream = $('downstreamInput')?.value || '';
   const customer = findCustomerByName(state, downstream);
@@ -702,6 +701,7 @@ export function clearOrderForm() {
   $('reportAiCorrectionBtn')?.classList.add('hidden');
   document.querySelectorAll('.ai-review-required').forEach((input) => input.classList.remove('ai-review-required'));
   clearAiRecognitionReview();
+  hideMissingCustomerPrompt();
 }
 
 export function openOrderForEdit(state, orderId) {
@@ -1006,6 +1006,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   $('billingCustomerInput')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('billingCustomerInput')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('upstreamInput')?.addEventListener('input', () => updateOrderSmartHint(state));
+  bindMissingCustomerEvents(state, saveState, renderAll);
   $('sheetCount')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('glossType')?.addEventListener('change', () => updateOrderSmartHint(state));
   $('exportOrderBtn')?.addEventListener('click', () => {

@@ -624,6 +624,25 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('送貨地址（下游）', view)
         self.assertIn('/api/orders/recognize/status', (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8'))
 
+    def test_order_form_offers_to_add_unknown_companies(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
+        order_customers = (ROOT / 'js' / 'orders-customers.js').read_text(encoding='utf-8')
+        styles = (ROOT / 'styles.css').read_text(encoding='utf-8')
+        self.assertIn('id="orderMissingCustomerPrompt"', view)
+        self.assertIn('id="addMissingCustomerBtn"', view)
+        self.assertIn('id="dismissMissingCustomerBtn"', view)
+        self.assertIn("billingCustomerInput: { label: '客人', role: '兩者' }", order_customers)
+        self.assertIn("upstreamInput: { label: '上游客戶', role: '上游' }", order_customers)
+        self.assertIn("downstreamInput: { label: '下游客戶', role: '下游' }", order_customers)
+        self.assertIn('findExactCustomerByName', order_customers)
+        self.assertIn('找不到${config.label}', order_customers)
+        self.assertIn('目前已停用，要重新啟用嗎', order_customers)
+        self.assertIn("state.customers.push({", order_customers)
+        self.assertIn("addEventListener('blur', () => updateMissingCustomerPrompt", order_customers)
+        self.assertIn('bindMissingCustomerEvents(state, saveState, renderAll)', orders)
+        self.assertIn('.order-missing-customer', styles)
+
     def test_order_quantity_supports_text_and_calculation_value(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
         orders = (ROOT / 'js' / 'orders.js').read_text(encoding='utf-8')
