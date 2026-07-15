@@ -366,6 +366,29 @@ class ServiceTests(unittest.TestCase):
         self.assertNotIn('WO-SENT', reply_text)
         self.assertNotIn('WO-DONE', reply_text)
 
+    def test_line_ai_fallback_turns_vague_language_into_database_query(self):
+        from api import line_bot
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'orders':
+                return {'items': [
+                    {'id': 'o1', 'orderNumber': 'WO-FS', 'billingCustomer': '富盛印刷', 'downstream': '成峰', 'status': '未完成'},
+                    {'id': 'o2', 'orderNumber': 'WO-OTHER', 'billingCustomer': '佳德印刷', 'status': '未完成'},
+                ]}
+            return {'items': []}
+
+        plan = {'intent': 'delivery', 'keyword': '富盛', 'dateScope': '', 'status': ''}
+        with patch('api.line_bot._interpret_query_with_ai', return_value=plan), patch('api.line_bot.list_records', side_effect=fake_list_records):
+            reply_text = line_bot._build_query_reply('富盛那批東西現在怎麼樣了')
+        self.assertIn('【待送工單】', reply_text)
+        self.assertIn('WO-FS', reply_text)
+        self.assertNotIn('WO-OTHER', reply_text)
+
+    def test_line_ai_fallback_is_disabled_without_server_key(self):
+        from api import line_bot
+        with patch.dict('os.environ', {'OPENAI_API_KEY': ''}):
+            self.assertIsNone(line_bot._interpret_query_with_ai('幫我看看那批東西'))
+
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):
             with self.assertRaises(ApiError) as caught:

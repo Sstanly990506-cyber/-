@@ -18,6 +18,7 @@ from api.records import list_records, upsert_record
 
 LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply'
 LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push'
+OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
 LINE_DESTINATION_ENTITY = 'lineDestinations'
 DONE_STATUS = '已完成'
 BOT_MENTION_ALIASES = ('三青實業有限公司', '三青系統', '三青', 'sanqing')
@@ -288,8 +289,93 @@ def _build_query_reply(text):
         return _reply_inventory(keyword)
     if order_keyword:
         return _reply_orders(order_keyword)
+    ai_plan = _interpret_query_with_ai(text)
+    ai_answer = _execute_ai_query_plan(ai_plan)
+    if ai_answer:
+        return ai_answer
     if keyword:
         return _reply_smart_summary(keyword)
+    return ''
+
+
+def _execute_ai_query_plan(plan):
+    if not isinstance(plan, dict):
+        return ''
+    intent = str(plan.get('intent') or '')
+    keyword = str(plan.get('keyword') or '').strip()
+    date_scope = str(plan.get('dateScope') or '')
+    if intent == 'delivery':
+        return _reply_delivery_orders(keyword, date_scope)
+    if intent == 'pending':
+        return _reply_pending_orders(keyword, date_scope)
+    if intent == 'order':
+        status = str(plan.get('status') or '')
+        if status in {'已送出', '已完成'}:
+            return _reply_orders_by_status(status, keyword, date_scope)
+        return _reply_orders(keyword)
+    if intent == 'customer':
+        return _reply_customers(keyword)
+    if intent == 'receivable':
+        return _reply_receivables(keyword)
+    if intent == 'payable':
+        return _reply_payables(keyword)
+    if intent == 'inventory':
+        return _reply_inventory(keyword)
+    if intent == 'status':
+        return _build_status_summary()
+    if intent == 'help':
+        return _build_help_text()
+    return ''
+
+
+def _interpret_query_with_ai(text):
+    api_key = os.environ.get('OPENAI_API_KEY', '').strip()
+    if not api_key or not str(text or '').strip():
+        return None
+    schema = {
+        'type': 'object',
+        'properties': {
+            'intent': {'type': 'string', 'enum': ['order', 'pending', 'delivery', 'customer', 'receivable', 'payable', 'inventory', 'status', 'help', 'unknown']},
+            'keyword': {'type': 'string'},
+            'dateScope': {'type': 'string', 'enum': ['', 'today', 'tomorrow', 'overdue']},
+            'status': {'type': 'string', 'enum': ['', '未完成', '已送出', '已完成']},
+        },
+        'required': ['intent', 'keyword', 'dateScope', 'status'],
+        'additionalProperties': False,
+    }
+    prompt = (
+        '你是三青工廠系統的查詢意圖分類器。只判斷使用者想查什麼，不可回答或猜測資料。'
+        'order=特定工單，pending=尚未完成，delivery=待送貨，customer=客戶或廠商資料，'
+        'receivable=應收未收，payable=應付未付，inventory=庫存，status=系統筆數。'
+        'keyword 只保留公司、工單編號、材料等真正搜尋詞；口語助詞必須移除。'
+        f'使用者訊息：{str(text).strip()[:300]}'
+    )
+    payload = {
+        'model': os.environ.get('OPENAI_LINE_MODEL', '').strip() or 'gpt-5.4-mini',
+        'reasoning': {'effort': 'low'},
+        'input': [{'role': 'user', 'content': [{'type': 'input_text', 'text': prompt}]}],
+        'max_output_tokens': 250,
+        'text': {'format': {'type': 'json_schema', 'name': 'line_query_plan', 'schema': schema, 'strict': True}},
+    }
+    request = urllib.request.Request(
+        OPENAI_RESPONSES_URL,
+        data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+        headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            result = json.loads(response.read().decode('utf-8'))
+        return json.loads(_response_output_text(result))
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+        return None
+
+
+def _response_output_text(result):
+    for item in (result or {}).get('output') or []:
+        for content in item.get('content') or []:
+            if content.get('type') == 'output_text' and content.get('text'):
+                return content['text']
     return ''
 
 
