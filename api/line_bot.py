@@ -12,6 +12,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from api.records import list_records, upsert_record
 
@@ -20,6 +21,7 @@ LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push'
 LINE_DESTINATION_ENTITY = 'lineDestinations'
 DONE_STATUS = '已完成'
 BOT_MENTION_ALIASES = ('三青實業有限公司', '三青系統', '三青', 'sanqing')
+TAIPEI_TIMEZONE = timezone(timedelta(hours=8))
 
 
 class LineBotError(Exception):
@@ -216,6 +218,7 @@ def _line_text_message(text, quick_reply=True):
 
 def _quick_reply_items():
     labels = [
+        ('待送工單', '有哪些要送'),
         ('未完成工單', '未完成工單'),
         ('查工單', '工單'),
         ('查客戶', '客戶'),
@@ -261,10 +264,18 @@ def _build_query_reply(text):
     normalized = _normalize_command(text)
     keyword = _extract_keyword(text)
     order_keyword = _extract_order_keyword(text)
+    date_scope = _extract_date_scope(normalized)
+    status_scope = _extract_order_status(normalized)
+    if status_scope == '已送出':
+        return _reply_orders_by_status('已送出', order_keyword or keyword, date_scope)
+    if status_scope == '已完成':
+        return _reply_orders_by_status('已完成', order_keyword or keyword, date_scope)
     if _is_delivery_question(normalized):
-        return _reply_delivery_orders(_extract_delivery_keyword(text))
+        return _reply_delivery_orders(_extract_delivery_keyword(text), date_scope)
     if _is_pending_order_question(normalized):
-        return _reply_pending_orders(keyword)
+        return _reply_pending_orders(keyword, date_scope)
+    if date_scope and _is_schedule_question(normalized):
+        return _reply_pending_orders(keyword, date_scope)
     if _is_order_question(normalized, order_keyword):
         return _reply_orders(order_keyword or keyword)
     if _is_customer_question(normalized):
@@ -292,28 +303,46 @@ def _reply_orders(keyword=''):
     return '\n'.join(lines)
 
 
-def _reply_pending_orders(keyword=''):
+def _reply_pending_orders(keyword='', date_scope=''):
     rows = _search_records('orders', keyword, 100)
-    pending = [row for row in rows if str(row.get('status') or '').strip() != DONE_STATUS]
+    pending = [row for row in rows if _is_pending_order(row)]
+    pending = _filter_orders_by_date(pending, date_scope)
     if not pending:
-        return '目前查不到未完成工單。'
-    lines = [f'【未完成工單】共 {len(pending)} 筆，先列前 8 筆']
+        return f'目前查不到{_date_scope_label(date_scope)}未完成工單。'
+    lines = [f'【{_date_scope_label(date_scope)}未完成工單】共 {len(pending)} 筆，先列前 8 筆']
     for row in pending[:8]:
         lines.append(_format_order(row))
     return '\n'.join(lines)
 
 
-def _reply_delivery_orders(keyword=''):
+def _reply_delivery_orders(keyword='', date_scope=''):
     rows = _search_records('orders', keyword, 100)
     delivery_rows = [row for row in rows if _is_delivery_order(row)]
+    delivery_rows = _filter_orders_by_date(delivery_rows, date_scope)
     delivery_rows.sort(key=lambda row: (str(row.get('orderDate') or row.get('deliveryDate') or '9999-99-99'), str(row.get('orderNumber') or '')))
     if not delivery_rows:
-        return f'【待送工單】目前沒有需要送出的工單{f"：{keyword}" if keyword else "。"}'
-    lines = [f'【待送工單】共 {len(delivery_rows)} 筆，先列前 10 筆']
+        return f'【{_date_scope_label(date_scope)}待送工單】目前沒有需要送出的工單{f"：{keyword}" if keyword else "。"}'
+    lines = [f'【{_date_scope_label(date_scope)}待送工單】共 {len(delivery_rows)} 筆，先列前 10 筆']
     for row in delivery_rows[:10]:
         lines.append(_format_delivery_order(row))
     if len(delivery_rows) > 10:
         lines.append(f'還有 {len(delivery_rows) - 10} 筆，可再縮小客人或工單關鍵字。')
+    return '\n'.join(lines)
+
+
+def _reply_orders_by_status(status, keyword='', date_scope=''):
+    rows = _search_records('orders', keyword, 100)
+    aliases = {
+        '已送出': {'已送出', '已出貨', '送出'},
+        '已完成': {DONE_STATUS, '完成'},
+    }
+    matched = [row for row in rows if str(row.get('status') or '').strip() in aliases.get(status, {status})]
+    matched = _filter_orders_by_date(matched, date_scope)
+    if not matched:
+        return f'目前查不到{_date_scope_label(date_scope)}{status}工單{f"：{keyword}" if keyword else "。"}'
+    matched.sort(key=lambda row: (str(row.get('orderDate') or row.get('deliveryDate') or '9999-99-99'), str(row.get('orderNumber') or '')))
+    lines = [f'【{_date_scope_label(date_scope)}{status}工單】共 {len(matched)} 筆，先列前 8 筆']
+    lines.extend(_format_order(row) for row in matched[:8])
     return '\n'.join(lines)
 
 
@@ -469,10 +498,23 @@ def _matches_record(row, keyword):
 
 def _extract_keyword(text):
     value = _strip_bot_prefix(text)
-    value = re.sub(r'^(請問|麻煩|幫我|幫忙|可以|可不可以|能不能|查詢|查|找|搜尋|幫我查)\s*', '', value)
-    value = re.sub(r'^(工單|客戶|客人|廠商|應收|未收|收款|應付|未付|付款|庫存|材料)\s*', '', value)
-    value = re.sub(r'\s*(資料|狀態|多少|有哪些|幾筆|電話|地址|統編|欠多少|好了嗎|完成了嗎|做完了嗎|收了嗎|付了嗎|嗎|呢|啊|呀|喔|一下|\\?|？)\s*$', '', value)
-    return value.strip()
+    noise = (
+        '有哪些未完成工單', '有哪些已完成工單', '有哪些已送出工單',
+        '可以幫我查', '可不可以幫我查', '幫我查一下', '幫我查',
+        '未完成工單', '已完成工單', '已送出工單', '待處理工單',
+        '今天', '今日', '明天', '明日', '逾期', '過期',
+        '工單', '訂單', '客戶', '客人', '廠商', '應收', '未收', '收款',
+        '應付', '未付', '付款', '庫存', '材料', '查詢', '搜尋',
+        '請問', '麻煩', '幫忙', '幫我', '查一下', '查', '找',
+        '有哪些', '有幾筆', '幾筆', '資料', '狀態', '電話', '地址', '統編',
+        '欠多少', '多少', '好了嗎', '完成了嗎', '做完了嗎', '收了嗎',
+        '付了嗎', '要送哪些', '哪些要送', '有哪些要送', '要送',
+    )
+    for phrase in sorted(noise, key=len, reverse=True):
+        value = value.replace(phrase, ' ')
+    value = re.sub(r'^(可以|可不可以|能不能)\s*', '', value)
+    value = re.sub(r'(嗎|呢|啊|呀|喔|一下|\\?|？)+$', '', value.strip())
+    return re.sub(r'\s+', ' ', value).strip(' ，,。?？')
 
 
 def _normalize_command(text):
@@ -482,7 +524,7 @@ def _normalize_command(text):
 def _extract_delivery_keyword(text):
     value = _strip_bot_prefix(text)
     value = re.sub(
-        r'(有哪些要送|哪些要送|要送哪些|今天要送|明天要送|要送的|要送|待送|送貨|配送|出貨|送出|送出的|待配送|請問|幫我|查一下|查)',
+        r'(有哪些要送|哪些要送|要送哪些|今天要送|明天要送|今天|今日|明天|明日|要送的|要送|待送|送貨|配送|出貨|送出的|待配送|請問|幫我|查一下|查)',
         ' ',
         value,
         flags=re.IGNORECASE,
@@ -509,6 +551,13 @@ def _is_pending_order_question(normalized):
     ))
 
 
+def _is_schedule_question(normalized):
+    return _has_any(normalized, (
+        '今天', '今日', '明天', '明日', '逾期', '過期',
+        '交貨', '交期', '到期', '要做什麼', '有哪些工作',
+    ))
+
+
 def _is_delivery_question(normalized):
     return _has_any(normalized, (
         '有哪些要送', '哪些要送', '要送哪些', '今天要送', '明天要送', '要送的',
@@ -516,11 +565,63 @@ def _is_delivery_question(normalized):
     ))
 
 
+def _extract_order_status(normalized):
+    if _has_any(normalized, ('已送出', '已出貨', '送出了', '送過去')):
+        return '已送出'
+    if _has_any(normalized, ('已完成', '完成的', '做完的')):
+        return '已完成'
+    if _is_pending_order_question(normalized):
+        return '未完成'
+    return ''
+
+
+def _extract_date_scope(normalized):
+    if _has_any(normalized, ('明天', '明日')):
+        return 'tomorrow'
+    if _has_any(normalized, ('今天', '今日')):
+        return 'today'
+    if _has_any(normalized, ('逾期', '過期', '超過交期')):
+        return 'overdue'
+    return ''
+
+
+def _filter_orders_by_date(rows, date_scope):
+    if not date_scope:
+        return list(rows)
+    today = _today_taipei()
+    target = today + timedelta(days=1) if date_scope == 'tomorrow' else today
+    matched = []
+    for row in rows:
+        raw = str((row or {}).get('orderDate') or (row or {}).get('deliveryDate') or '').strip()
+        try:
+            order_date = datetime.strptime(raw[:10], '%Y-%m-%d').date()
+        except (TypeError, ValueError):
+            continue
+        if date_scope == 'overdue' and order_date < today:
+            matched.append(row)
+        elif date_scope != 'overdue' and order_date == target:
+            matched.append(row)
+    return matched
+
+
+def _today_taipei():
+    return datetime.now(TAIPEI_TIMEZONE).date()
+
+
+def _date_scope_label(date_scope):
+    return {'today': '今天', 'tomorrow': '明天', 'overdue': '逾期'}.get(date_scope, '')
+
+
 def _is_delivery_order(row):
     status = str((row or {}).get('status') or '').strip()
     if status in {DONE_STATUS, '已送出', '已出貨', '完成', '送出'}:
         return False
     return bool((row or {}).get('orderNumber') or (row or {}).get('downstream') or (row or {}).get('address'))
+
+
+def _is_pending_order(row):
+    status = str((row or {}).get('status') or '').strip()
+    return status not in {DONE_STATUS, '完成', '已送出', '已出貨', '送出'}
 
 
 def _is_order_question(normalized, order_keyword=''):

@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import unittest
+from datetime import date
 from unittest.mock import patch
 
 from api.line_bot import handle_line_webhook
@@ -294,6 +295,74 @@ class ServiceTests(unittest.TestCase):
         self.assertIn('【待送工單】', reply_text)
         self.assertIn('WO-SEND', reply_text)
         self.assertIn('送往：成峰', reply_text)
+        self.assertNotIn('WO-SENT', reply_text)
+        self.assertNotIn('WO-DONE', reply_text)
+
+    def test_line_query_filters_tomorrow_delivery_orders(self):
+        from api import line_bot
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'orders':
+                return {'items': [
+                    {'id': 'o1', 'orderNumber': 'TODAY', 'orderDate': '2026-07-15', 'billingCustomer': '富盛', 'status': '未完成'},
+                    {'id': 'o2', 'orderNumber': 'TOMORROW', 'orderDate': '2026-07-16', 'billingCustomer': '富盛', 'status': '未完成'},
+                ]}
+            return {'items': []}
+
+        with patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._today_taipei', return_value=date(2026, 7, 15)):
+            reply_text = line_bot._build_query_reply('明天有哪些要送')
+        self.assertIn('【明天待送工單】', reply_text)
+        self.assertIn('TOMORROW', reply_text)
+        self.assertNotIn('TODAY /', reply_text)
+
+    def test_line_query_treats_sent_as_status_instead_of_pending_delivery(self):
+        from api import line_bot
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'orders':
+                return {'items': [
+                    {'id': 'o1', 'orderNumber': 'WO-PENDING', 'billingCustomer': '富盛', 'status': '未完成'},
+                    {'id': 'o2', 'orderNumber': 'WO-SENT', 'billingCustomer': '富盛', 'status': '已送出'},
+                ]}
+            return {'items': []}
+
+        with patch('api.line_bot.list_records', side_effect=fake_list_records):
+            reply_text = line_bot._build_query_reply('富盛有哪些已送出工單')
+        self.assertIn('【已送出工單】', reply_text)
+        self.assertIn('WO-SENT', reply_text)
+        self.assertNotIn('WO-PENDING', reply_text)
+
+    def test_line_query_extracts_customer_from_natural_pending_question(self):
+        from api import line_bot
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'orders':
+                return {'items': [
+                    {'id': 'o1', 'orderNumber': 'WO-FS', 'billingCustomer': '富盛印刷', 'status': '未完成'},
+                    {'id': 'o2', 'orderNumber': 'WO-OTHER', 'billingCustomer': '佳德印刷', 'status': '未完成'},
+                ]}
+            return {'items': []}
+
+        with patch('api.line_bot.list_records', side_effect=fake_list_records):
+            reply_text = line_bot._build_query_reply('幫我查富盛有哪些未完成工單')
+        self.assertIn('WO-FS', reply_text)
+        self.assertNotIn('WO-OTHER', reply_text)
+
+    def test_line_pending_query_excludes_sent_orders(self):
+        from api import line_bot
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'orders':
+                return {'items': [
+                    {'id': 'o1', 'orderNumber': 'WO-PENDING', 'status': '未完成'},
+                    {'id': 'o2', 'orderNumber': 'WO-SENT', 'status': '已送出'},
+                    {'id': 'o3', 'orderNumber': 'WO-DONE', 'status': '已完成'},
+                ]}
+            return {'items': []}
+
+        with patch('api.line_bot.list_records', side_effect=fake_list_records):
+            reply_text = line_bot._build_query_reply('未完成工單')
+        self.assertIn('WO-PENDING', reply_text)
         self.assertNotIn('WO-SENT', reply_text)
         self.assertNotIn('WO-DONE', reply_text)
 
