@@ -6,7 +6,7 @@ import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomer
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
 import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
 import { requestOrderRecognition } from './orders-ai-request.js';
-import { bindMissingCustomerEvents, hideMissingCustomerPrompt } from './orders-customers.js?v=20260715-missing-customer-1';
+import { bindMissingCustomerEvents, hideMissingCustomerPrompt } from './orders-customers.js?v=20260715-mobile-company-suggestions-1';
 let lastRecognizedOrder = null;
 let aiCorrectionsCache = [];
 let lastAutoPrice = 0;

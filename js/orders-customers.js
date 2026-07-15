@@ -18,6 +18,126 @@ function findExactCustomerByName(state, name) {
   return state.customers.find((customer) => normalizeCompanyName(customer.name) === key) || null;
 }
 
+function normalizeCustomerRole(role) {
+  return role === '客人' ? '兩者' : String(role || '兩者');
+}
+
+function customerMatchesField(customer, fieldId) {
+  const role = normalizeCustomerRole(customer.role);
+  if (fieldId === 'downstreamInput') return ['下游', '兩者'].includes(role);
+  return ['上游', '兩者'].includes(role);
+}
+
+function ensureCompanySuggestionList(input, fieldId) {
+  const listId = `${fieldId}Suggestions`;
+  let list = document.getElementById(listId);
+  if (!list) {
+    list = document.createElement('div');
+    list.id = listId;
+    list.className = 'order-company-suggestions hidden';
+    list.setAttribute('role', 'listbox');
+    input.parentElement?.classList.add('order-company-input-wrap');
+    input.insertAdjacentElement('afterend', list);
+  }
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-controls', listId);
+  input.setAttribute('aria-expanded', String(!list.classList.contains('hidden')));
+  return list;
+}
+
+function hideCompanySuggestions(input, list) {
+  list.classList.add('hidden');
+  list.dataset.activeIndex = '-1';
+  input.setAttribute('aria-expanded', 'false');
+  input.removeAttribute('aria-activedescendant');
+}
+
+function renderCompanySuggestions(state, input, fieldId, list) {
+  const query = normalizeCompanyName(input.value);
+  const customers = state.customers
+    .filter((customer) => customer.active !== false && customerMatchesField(customer, fieldId))
+    .filter((customer) => !query || normalizeCompanyName(customer.name).includes(query))
+    .sort((a, b) => {
+      const aStarts = normalizeCompanyName(a.name).startsWith(query) ? 0 : 1;
+      const bStarts = normalizeCompanyName(b.name).startsWith(query) ? 0 : 1;
+      return aStarts - bStarts || String(a.name).localeCompare(String(b.name), 'zh-Hant');
+    })
+    .slice(0, 8);
+
+  list.replaceChildren(...customers.map((customer, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = `${list.id}Option${index}`;
+    button.className = 'order-company-suggestion';
+    button.dataset.customerName = customer.name || '';
+    button.setAttribute('role', 'option');
+    const name = document.createElement('strong');
+    name.textContent = customer.name || '-';
+    const detail = document.createElement('span');
+    detail.textContent = [customer.phone, customer.address].filter(Boolean).join(' / ') || normalizeCustomerRole(customer.role);
+    button.append(name, detail);
+    return button;
+  }));
+  list.dataset.activeIndex = '-1';
+  if (!customers.length) return hideCompanySuggestions(input, list);
+  list.classList.remove('hidden');
+  input.setAttribute('aria-expanded', 'true');
+}
+
+function selectCompanySuggestion(input, list, button) {
+  if (!button?.dataset.customerName) return;
+  input.value = button.dataset.customerName;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  hideCompanySuggestions(input, list);
+  input.focus({ preventScroll: true });
+}
+
+function moveCompanySuggestion(input, list, direction) {
+  const options = [...list.querySelectorAll('.order-company-suggestion')];
+  if (!options.length) return;
+  const current = Number(list.dataset.activeIndex ?? -1);
+  const next = Math.max(0, Math.min(options.length - 1, current + direction));
+  options.forEach((option, index) => {
+    const active = index === next;
+    option.classList.toggle('is-active', active);
+    option.setAttribute('aria-selected', String(active));
+  });
+  list.dataset.activeIndex = String(next);
+  input.setAttribute('aria-activedescendant', options[next].id);
+  options[next].scrollIntoView({ block: 'nearest' });
+}
+
+function bindCompanyAutocomplete(state, input, fieldId) {
+  const list = ensureCompanySuggestionList(input, fieldId);
+  input.addEventListener('focus', () => renderCompanySuggestions(state, input, fieldId, list));
+  input.addEventListener('input', () => renderCompanySuggestions(state, input, fieldId, list));
+  input.addEventListener('blur', () => window.setTimeout(() => hideCompanySuggestions(input, list), 120));
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (list.classList.contains('hidden')) renderCompanySuggestions(state, input, fieldId, list);
+      moveCompanySuggestion(input, list, event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if (event.key === 'Enter' && Number(list.dataset.activeIndex) >= 0) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      selectCompanySuggestion(input, list, list.querySelectorAll('.order-company-suggestion')[Number(list.dataset.activeIndex)]);
+      return;
+    }
+    if (event.key === 'Escape') hideCompanySuggestions(input, list);
+  }, { capture: true });
+  list.addEventListener('pointerdown', (event) => {
+    const button = event.target.closest('.order-company-suggestion');
+    if (!button) return;
+    event.preventDefault();
+    selectCompanySuggestion(input, list, button);
+  });
+}
+
 export function hideMissingCustomerPrompt() {
   const prompt = $('orderMissingCustomerPrompt');
   if (!prompt) return;
@@ -99,10 +219,13 @@ function addMissingCustomerFromOrder(state, saveState, renderAll) {
 
 export function bindMissingCustomerEvents(state, saveState, renderAll) {
   Object.keys(ORDER_COMPANY_FIELDS).forEach((fieldId) => {
-    $(fieldId)?.addEventListener('blur', () => updateMissingCustomerPrompt(state, fieldId));
-    $(fieldId)?.addEventListener('input', () => {
+    const input = $(fieldId);
+    if (!input) return;
+    bindCompanyAutocomplete(state, input, fieldId);
+    input.addEventListener('blur', () => updateMissingCustomerPrompt(state, fieldId));
+    input.addEventListener('input', () => {
       const prompt = $('orderMissingCustomerPrompt');
-      if (prompt?.dataset.fieldId === fieldId && prompt.dataset.customerName !== $(fieldId).value.trim()) hideMissingCustomerPrompt();
+      if (prompt?.dataset.fieldId === fieldId && prompt.dataset.customerName !== input.value.trim()) hideMissingCustomerPrompt();
     });
   });
   $('addMissingCustomerBtn')?.addEventListener('click', () => addMissingCustomerFromOrder(state, saveState, renderAll));

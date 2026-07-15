@@ -109,19 +109,19 @@
               <label>交貨日期<input id="orderDate" type="date" /></label>
               <div class="customer-price-row span-2">
                 <label>客人
-                  <input id="billingCustomerInput" list="billingCustomerOptions" placeholder="通常是工單最上方最大字的公司" />
+                  <input id="billingCustomerInput" autocomplete="off" placeholder="通常是工單最上方最大字的公司" />
                   <datalist id="billingCustomerOptions"></datalist>
                 </label>
                 <button id="openPriceRulesFromOrderBtn" class="btn" type="button" data-order-screen="pricing">設定客人價格</button>
               </div>
 
               <label>上游客戶（可搜尋）
-                <input id="upstreamInput" list="upstreamOptions" placeholder="請找廠商／印刷廠欄位" />
+                <input id="upstreamInput" autocomplete="off" placeholder="請找廠商／印刷廠欄位" />
                 <datalist id="upstreamOptions"></datalist>
               </label>
 
               <label>下游客戶（可搜尋）
-                <input id="downstreamInput" list="downstreamOptions" placeholder="請找軋盒／軋工等下一站" />
+                <input id="downstreamInput" autocomplete="off" placeholder="請找軋盒／軋工等下一站" />
                 <datalist id="downstreamOptions"></datalist>
               </label>
               <div id="orderMissingCustomerPrompt" class="order-missing-customer span-2 hidden" aria-live="polite">
@@ -963,6 +963,6 @@
         });
       })();
     </script>
-    <script type="module" src="js/main.js?v=20260715-missing-customer-1"></script>
+    <script type="module" src="js/main.js?v=20260715-mobile-company-suggestions-1"></script>
   </body>
 </html>

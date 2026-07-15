@@ -642,6 +642,16 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn("addEventListener('blur', () => updateMissingCustomerPrompt", order_customers)
         self.assertIn('bindMissingCustomerEvents(state, saveState, renderAll)', orders)
         self.assertIn('.order-missing-customer', styles)
+        self.assertIn('autocomplete="off" placeholder="通常是工單最上方最大字的公司"', view)
+        self.assertNotIn('id="billingCustomerInput" list=', view)
+        self.assertNotIn('id="upstreamInput" list=', view)
+        self.assertNotIn('id="downstreamInput" list=', view)
+        self.assertIn('order-company-suggestions', order_customers)
+        self.assertIn("addEventListener('pointerdown'", order_customers)
+        self.assertIn("addEventListener('focus'", order_customers)
+        self.assertIn("slice(0, 8)", order_customers)
+        self.assertIn("event.key === 'ArrowDown'", order_customers)
+        self.assertIn('.order-company-suggestions', styles)
 
     def test_order_quantity_supports_text_and_calculation_value(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
