@@ -389,6 +389,52 @@ class ServiceTests(unittest.TestCase):
         with patch.dict('os.environ', {'OPENAI_API_KEY': ''}):
             self.assertIsNone(line_bot._interpret_query_with_ai('幫我看看那批東西'))
 
+    def test_line_complex_question_routes_to_grounded_multi_module_answer(self):
+        from api import line_bot
+        plan = {
+            'intent': 'general', 'keyword': '', 'dateScope': '', 'status': '未完成',
+            'entities': ['orders', 'receivables'],
+        }
+        with patch('api.line_bot._interpret_query_with_ai', return_value=plan), patch('api.line_bot._reply_grounded_website_question', return_value='富盛同時有未完成工單與未收款。') as grounded:
+            reply_text = line_bot._build_query_reply('哪個客戶欠最多而且還有未完成工單？')
+        self.assertEqual(reply_text, '富盛同時有未完成工單與未收款。')
+        grounded.assert_called_once_with('哪個客戶欠最多而且還有未完成工單？', plan)
+
+    def test_line_context_reads_multiple_modules_and_filters_sensitive_settings(self):
+        from api import line_bot
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'orders':
+                return {'total': 1, 'items': [{'orderNumber': 'WO-1', 'billingCustomer': '富盛', 'status': '未完成', 'password': 'hidden'}]}
+            if entity == 'receivables':
+                return {'total': 1, 'items': [{'customer': '富盛', 'orderNumber': 'WO-1', 'amount': 3000, 'received': 1000}]}
+            return {'total': 0, 'items': []}
+
+        state = {
+            'settings': {'pricing': {'divisor': 4680}, 'financePassword': 'hidden', 'nested': {'apiKey': 'hidden'}},
+            'glossOptions': ['PVA光'],
+        }
+        with patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot.read_state', return_value=state):
+            context = line_bot._collect_website_context(['orders', 'receivables', 'settings'])
+        serialized = json.dumps(context, ensure_ascii=False)
+        self.assertIn('WO-1', serialized)
+        self.assertIn('4680', serialized)
+        self.assertNotIn('financePassword', serialized)
+        self.assertNotIn('apiKey', serialized)
+        self.assertNotIn('hidden', serialized)
+
+    def test_line_response_text_accepts_top_level_openai_output(self):
+        from api import line_bot
+        self.assertEqual(line_bot._response_output_text({'output_text': '網站回答'}), '網站回答')
+
+    def test_line_status_exposes_assistant_version_without_secrets(self):
+        from api import line_bot
+        with patch('api.line_bot._active_destinations', return_value=[]):
+            payload = line_bot.line_status_payload()
+        self.assertEqual(payload['assistantVersion'], '20260715-grounded-multi-module-1')
+        self.assertNotIn('accessToken', payload)
+        self.assertNotIn('channelSecret', payload)
+
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):
             with self.assertRaises(ApiError) as caught:
