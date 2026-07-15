@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
 MAX_IMAGE_BYTES = 2_500_000
+AI_ORDER_RULES_VERSION = '20260715-process-anchor-1'
 BUSINESS_RULES = (
     'This system is used by a coating/varnishing factory. '
     'billingCustomer means our customer. Normally use the largest or most prominent full company name at the top of the work order, '
@@ -16,19 +17,24 @@ BUSINESS_RULES = (
     'Preserve the exact visible legal company name. Never lengthen, autocomplete, or replace it with a similar customer-system name. '
     'For example, 禹利電子分色有限公司 must remain exactly 禹利電子分色有限公司 and must not be shortened to 禹利有限公司 '
     'or changed to the similar name 瑪利電子分色有限公司. '
-    'upstream means the company upstream of 三青 and is separate from billingCustomer. Read the company labeled 廠商, 供應商, 印刷, '
-    'or another printing-vendor label that identifies who supplied the printed sheets to 三青. It is usually a printing company. '
+    'First locate the process-table row where the process is 上光 or 上光加工 and the vendor is 三青. This is the 三青 anchor row. '
+    'upstream means the company upstream of 三青 and is separate from billingCustomer. Starting at the anchor row, search upward for '
+    'the nearest preceding row whose process is 印刷, then copy that row\'s 廠商 as upstream. It is usually a printing company. '
+    'Do not use a 製版, 紙張, customer-code, item-code, or 客戶名稱 cell as upstream. '
     'Never copy billingCustomer into upstream merely because one field is missing; set them equal only when the image clearly supports it. '
     'The orderDate field means delivery date / handover date, not issue date. Prefer labels such as 交貨日期, 到貨, 完成寄出, or delivery date. '
+    'Ignore 工單日期 and page printing timestamps. Convert a Taiwan ROC year by adding 1911; for example 115/07/31 becomes 2026-07-31. '
     'If only 發單日期/issue date is visible and no delivery date is visible, leave orderDate empty. '
     'Read orderNumber only from a work-order label such as 工單編號, 工單號碼, 工單NO, or work order number; do not use a customer code. '
     'Do not use alphanumeric customer codes or item codes such as HC003, H C003, CLNT001, or similar 客戶代號 as any company name. '
-    'The downstream customer is the next process after 三青/上光. Prefer a company shown beside 軋盒, 軋工, 軋合, 裁切, 軋型, '
-    'or another clearly labeled next-process row. Do not treat 三青 or the company on the 上光 row as upstream or downstream. '
+    'For downstream, start at the 三青 anchor row and search downward for the first row explicitly labeled 軋盒, 軋工, 軋合, 軋型, or 裁切, '
+    'then copy that row\'s 廠商. Skip 裱紙, 糊工, 刀模, 運送, and 其他 while looking for that next cutting/die-cut process. '
+    'Do not treat 三青 or the company on the 上光 row as upstream or downstream. '
     'The address field means the delivery destination after coating, so it belongs to the downstream company. '
     'Never use the document issuer, header, advertising-design company, upstream printing company, or coating-factory address as the delivery address. '
     'Only return an address from the image when it is explicitly identified as the downstream/next-process delivery destination; otherwise leave it empty. '
-    'Read quantity primarily from the row or column labeled 三青. sheetCountText is a quantity note/remark field: copy the complete visible wording, '
+    'Read quantity only from the 三青 anchor row when that row is available. sheetCountText is a quantity note/remark field: combine the anchor row\'s '
+    'item/edition, production specification, quantity, and remark in reading order, copying the complete visible wording. '
     'including Chinese text and symbols, and preserve expressions such as 1362車+238張 exactly. '
     'sheetCount is the explicit true numeric quantity used for calculation. Use the single explicit quantity from the 三青 field when visible. '
     'Do not calculate or simplify quantity expressions; if only an expression is visible and no separate total is printed, set sheetCount to zero. '
@@ -36,9 +42,18 @@ BUSINESS_RULES = (
     'Preserve the printed size unit: 台吋 maps to tai-inch, mm to mm, cm to cm, and 英吋/吋 to inch. If no unit is visible, leave sizeUnit empty. '
 )
 
+REFERENCE_CASES = (
+    'Reference case for this exact work-order layout: the largest company name at the top is 鍇樂設計股份有限公司, so billingCustomer is '
+    '鍇樂設計股份有限公司. The 上光 row with vendor 三青 is the anchor. The nearest 印刷 row above it has vendor 柏豐, so upstream is 柏豐. '
+    'Below the anchor, skip 裱紙 and use the 軋工 row with vendor 泰興, so downstream is 泰興. 工單單號 115070051 means orderNumber '
+    '115070051. 交貨日期 115/07/31 means orderDate 2026-07-31. The anchor row reads A版, 單面-A光(油性) 2.37*3.37台尺, '
+    '750車, so sheetCountText preserves those words and sheetCount is 750. Never use the header field 客戶名稱 曼秀雷敦(A076) as billingCustomer. '
+)
+
 
 CUSTOMER_CODE_PATTERN = re.compile(r'^[A-Z]{1,5}[-_ ]*\d{2,}$', re.IGNORECASE)
 RESPONSE_ID_PATTERN = re.compile(r'^resp_[A-Za-z0-9_-]{8,200}$')
+ROC_DATE_PATTERN = re.compile(r'(?<!\d)(\d{2,3})[./-](\d{1,2})[./-](\d{1,2})(?!\d)')
 REVIEWABLE_FIELDS = (
     'orderNumber', 'orderDate', 'billingCustomer', 'upstream', 'downstream', 'address',
     'sheetCountText', 'sheetCount', 'sizeLength', 'sizeWidth', 'sizeUnit', 'glossType',
@@ -124,6 +139,22 @@ def _looks_like_customer_code(value):
     return has_letter and has_digit and not has_chinese and len(compact) <= 12
 
 
+def _normalize_delivery_date(value):
+    text = str(value or '').strip()
+    match = ROC_DATE_PATTERN.search(text)
+    if not match:
+        return text
+    year, month, day = (int(part) for part in match.groups())
+    if year < 100:
+        return text
+    if year < 1000:
+        year += 1911
+    try:
+        return f'{year:04d}-{month:02d}-{day:02d}' if 1 <= month <= 12 and 1 <= day <= 31 else text
+    except ValueError:
+        return text
+
+
 def normalize_recognized_order(recognized):
     if not isinstance(recognized, dict):
         return recognized
@@ -140,6 +171,7 @@ def normalize_recognized_order(recognized):
             cleared.append(label)
         else:
             recognized[key] = value
+    recognized['orderDate'] = _normalize_delivery_date(recognized.get('orderDate'))
     if cleared:
         notes = recognized.get('notes')
         if not isinstance(notes, list):
@@ -186,6 +218,7 @@ def get_order_recognition_status():
     return {
         'configured': bool(os.environ.get('OPENAI_API_KEY', '').strip()),
         'model': os.environ.get('OPENAI_ORDER_MODEL', '').strip() or 'gpt-5.4-mini',
+        'rulesVersion': AI_ORDER_RULES_VERSION,
     }
 
 
@@ -264,6 +297,7 @@ def recognize_order_image(data_url, gloss_options=None, corrections=None, custom
         'Preserve the visible quantity wording and math symbols in sheetCountText. '
         'Put a numeric quantity in sheetCount only when the document separately shows one explicit calculation quantity. '
         f'{BUSINESS_RULES}'
+        f'{REFERENCE_CASES}'
         'Sizes must keep their visible unit. confidence must be between 0 and 1. '
         'Assess each field independently. Leave every ambiguous, missing, or weakly visible value empty or zero. '
         f'Known gloss types, when relevant: {gloss_text or "none supplied"}. '

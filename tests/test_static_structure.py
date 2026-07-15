@@ -613,7 +613,7 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('禹利電子分色有限公司 must remain exactly 禹利電子分色有限公司', ai_orders)
         self.assertIn('upstream means the company upstream of 三青', ai_orders)
         self.assertIn('separate from billingCustomer', ai_orders)
-        self.assertIn('row or column labeled 三青', ai_orders)
+        self.assertIn('Read quantity only from the 三青 anchor row', ai_orders)
         self.assertIn('sizeLength maps exactly to 天', ai_orders)
         self.assertIn('normalize_recognized_order', ai_orders)
         self.assertIn('normalize_recognized_order', (ROOT / 'api' / 'service.py').read_text(encoding='utf-8'))

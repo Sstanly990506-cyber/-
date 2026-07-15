@@ -164,12 +164,35 @@ class AiOrderTests(unittest.TestCase):
         self.assertIn('客戶代號', ai_orders.BUSINESS_RULES)
         self.assertIn('軋盒', ai_orders.BUSINESS_RULES)
         self.assertIn('軋工', ai_orders.BUSINESS_RULES)
-        self.assertIn('row or column labeled 三青', ai_orders.BUSINESS_RULES)
+        self.assertIn('Read quantity only from the 三青 anchor row', ai_orders.BUSINESS_RULES)
         self.assertIn('sheetCountText is a quantity note/remark field', ai_orders.BUSINESS_RULES)
         self.assertIn('sizeLength maps exactly to 天', ai_orders.BUSINESS_RULES)
         self.assertIn('sizeWidth maps exactly to 地', ai_orders.BUSINESS_RULES)
         self.assertIn('台吋 maps to tai-inch', ai_orders.BUSINESS_RULES)
         self.assertIn('1362車+238張', ai_orders.BUSINESS_RULES)
+        self.assertIn('三青 anchor row', ai_orders.BUSINESS_RULES)
+        self.assertIn('nearest preceding row whose process is 印刷', ai_orders.BUSINESS_RULES)
+        self.assertIn('Skip 裱紙, 糊工, 刀模, 運送, and 其他', ai_orders.BUSINESS_RULES)
+
+    def test_prompt_contains_process_anchor_reference_case(self):
+        image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}, clear=True), patch('api.ai_orders.urlopen', side_effect=capture_request):
+            ai_orders.recognize_order_image(image)
+        prompt = CapturingResponse.payload['input'][0]['content'][0]['text']
+        self.assertIn('鍇樂設計股份有限公司', prompt)
+        self.assertIn('upstream is 柏豐', prompt)
+        self.assertIn('downstream is 泰興', prompt)
+        self.assertIn('orderNumber 115070051', prompt)
+        self.assertIn('orderDate 2026-07-31', prompt)
+        self.assertIn('sheetCount is 750', prompt)
+
+    def test_normalizes_roc_delivery_date_for_html_date_field(self):
+        result = ai_orders.normalize_recognized_order({'orderDate': '115-07-31（五）'})
+        self.assertEqual(result['orderDate'], '2026-07-31')
+
+    def test_recognition_status_exposes_rules_version(self):
+        status = ai_orders.get_order_recognition_status()
+        self.assertEqual(status['rulesVersion'], '20260715-process-anchor-1')
 
     def test_customer_list_is_only_an_exact_spelling_hint(self):
         image = 'data:image/jpeg;base64,' + base64.b64encode(b'image').decode()
