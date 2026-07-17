@@ -55,7 +55,7 @@ function renderLineDestinationSettings(state, destinations) {
     root.innerHTML = '<p class="sub">目前沒有已綁定聊天室。</p>';
     return;
   }
-  const canEdit = state.user?.role === 'admin';
+  const canEdit = state.userRole === 'admin';
   root.innerHTML = destinations.map((destination) => {
     const mode = destination.accessMode === 'internal' ? 'internal' : 'customer';
     const customer = String(destination.customerName || '');
