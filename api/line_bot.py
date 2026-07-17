@@ -21,8 +21,10 @@ LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply'
 LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push'
 OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
 LINE_DESTINATION_ENTITY = 'lineDestinations'
-LINE_ASSISTANT_VERSION = '20260715-grounded-multi-module-1'
+LINE_ASSISTANT_VERSION = '20260717-customer-portal-1'
 DONE_STATUS = '已完成'
+INTERNAL_ACCESS_MODE = 'internal'
+CUSTOMER_ACCESS_MODE = 'customer'
 BOT_MENTION_ALIASES = ('三青實業有限公司', '三青系統', '三青', 'sanqing')
 TAIPEI_TIMEZONE = timezone(timedelta(hours=8))
 LINE_QUERY_ENTITIES = ('orders', 'customers', 'receivables', 'payables', 'inventory', 'events', 'audits', 'priceRules', 'settings')
@@ -60,6 +62,8 @@ def line_status_payload():
                 'id': row.get('id'),
                 'type': row.get('type') or 'user',
                 'label': row.get('label') or _mask_destination(row.get('destinationId') or row.get('id')),
+                'accessMode': _destination_access_mode(row),
+                'customerName': str(row.get('customerName') or '').strip(),
                 'lastSeenAt': row.get('lastSeenAt') or '',
             }
             for row in destinations[:20]
@@ -71,9 +75,9 @@ def send_line_message(text=None):
     if not line_is_configured():
         raise LineBotError('LINE 尚未設定 LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN', 503)
     message = _trim_text(text or _build_system_reminder())
-    destinations = _active_destinations()
+    destinations = [row for row in _active_destinations() if _destination_access_mode(row) == INTERNAL_ACCESS_MODE]
     if not destinations:
-        raise LineBotError('尚未綁定任何 LINE 聊天室，請先在 LINE 對官方帳號輸入「綁定」。', 400)
+        raise LineBotError('尚未綁定任何內部 LINE 聊天室；客戶群組不會接收內部主動提醒。', 400)
     sent = []
     failed = []
     for row in destinations:
@@ -177,9 +181,16 @@ def _handle_event(event):
         if not _should_reply_in_shared_chat(text, message):
             return
         text = _strip_shared_chat_mention(text, message)
-    response = _build_reply_text(text, destination_id, destination_type)
+    destination = _destination_config(destination_id, destination_type)
+    response = _build_reply_text(text, destination_id, destination_type, destination)
     if reply_token and response:
-        _reply(reply_token, response, quick_reply=destination_type == 'user')
+        _reply(
+            reply_token,
+            response,
+            quick_reply=True,
+            access_mode=_destination_access_mode(destination, destination_type),
+            shared=destination_type in {'group', 'room'},
+        )
 
 
 def _source_destination(source):
@@ -194,12 +205,16 @@ def _source_destination(source):
 
 def _save_destination(destination_id, destination_type, event=None):
     now = int(time.time() * 1000)
+    existing = _destination_config(destination_id, destination_type)
+    access_mode = _destination_access_mode(existing, destination_type)
     upsert_record(LINE_DESTINATION_ENTITY, destination_id, {
         'id': destination_id,
         'destinationId': destination_id,
         'type': destination_type or 'user',
         'label': _mask_destination(destination_id),
         'active': True,
+        'accessMode': access_mode,
+        'customerName': str(existing.get('customerName') or '').strip(),
         'lastEventType': (event or {}).get('type') or '',
         'lastSeenAt': now,
         'createdAt': now,
@@ -211,38 +226,64 @@ def _active_destinations():
     return [row for row in rows if row.get('active') is not False and (row.get('destinationId') or row.get('id'))]
 
 
+def _destination_config(destination_id, destination_type=''):
+    if destination_id:
+        for row in _active_destinations():
+            if (row.get('destinationId') or row.get('id')) == destination_id:
+                return row
+    return {'destinationId': destination_id, 'type': destination_type}
+
+
+def _destination_access_mode(destination, destination_type=''):
+    mode = str((destination or {}).get('accessMode') or '').strip().lower()
+    if mode in {INTERNAL_ACCESS_MODE, CUSTOMER_ACCESS_MODE}:
+        return mode
+    return CUSTOMER_ACCESS_MODE
+
+
 def _is_active_destination(destination_id):
     if not destination_id:
         return False
     return any((row.get('destinationId') or row.get('id')) == destination_id for row in _active_destinations())
 
 
-def _reply(reply_token, text, quick_reply=True):
+def _reply(reply_token, text, quick_reply=True, access_mode=INTERNAL_ACCESS_MODE, shared=False):
     _line_api_post(LINE_REPLY_URL, {
         'replyToken': reply_token,
-        'messages': [_line_text_message(text, quick_reply)],
+        'messages': [_line_text_message(text, quick_reply, access_mode, shared)],
     })
 
 
-def _line_text_message(text, quick_reply=True):
+def _line_text_message(text, quick_reply=True, access_mode=INTERNAL_ACCESS_MODE, shared=False):
     message = {'type': 'text', 'text': _trim_text(text)}
     if quick_reply:
-        message['quickReply'] = {'items': _quick_reply_items()}
+        message['quickReply'] = {'items': _quick_reply_items(access_mode, shared)}
     return message
 
 
-def _quick_reply_items():
-    labels = [
-        ('待送工單', '有哪些要送'),
-        ('未完成工單', '未完成工單'),
-        ('查工單', '工單'),
-        ('查客戶', '客戶'),
-        ('查應收', '應收'),
-        ('查庫存', '庫存'),
-        ('狀態', '狀態'),
-        ('提醒', '提醒'),
-        ('說明', '說明'),
-    ]
+def _quick_reply_items(access_mode=INTERNAL_ACCESS_MODE, shared=False):
+    if access_mode == CUSTOMER_ACCESS_MODE:
+        labels = [
+            ('工單排程', '工單排程'),
+            ('查工單', '查工單'),
+            ('今天交貨', '今天交貨'),
+            ('明天交貨', '明天交貨'),
+            ('使用說明', '說明'),
+        ]
+    else:
+        labels = [
+            ('待送工單', '有哪些要送'),
+            ('未完成工單', '未完成工單'),
+            ('查工單', '工單'),
+            ('查客戶', '客戶'),
+            ('查應收', '應收'),
+            ('查庫存', '庫存'),
+            ('狀態', '狀態'),
+            ('提醒', '提醒'),
+            ('說明', '說明'),
+        ]
+    if shared:
+        labels = [(label, f'@三青 {message}') for label, message in labels]
     return [
         {
             'type': 'action',
@@ -252,16 +293,22 @@ def _quick_reply_items():
     ]
 
 
-def _build_reply_text(text, destination_id='', destination_type='user'):
+def _build_reply_text(text, destination_id='', destination_type='user', destination=None):
     text = _strip_bot_prefix(text)
     normalized = _normalize_command(text)
     if normalized in {'綁定', 'bind', '加入通知'}:
         _save_destination(destination_id, destination_type, {'type': 'message'})
         label = _mask_destination(destination_id)
+        if _destination_access_mode(destination, destination_type) == CUSTOMER_ACCESS_MODE:
+            return f'已綁定此 LINE {destination_type or "user"}：{label}\n為了保護資料，聊天室預設鎖定為客戶查詢；請由管理員到網站通知中心指定客戶或改成內部模式。'
         return f'已綁定此 LINE {destination_type or "user"}：{label}\n之後系統可主動推送提醒到這裡，也可以直接問我資料。'
 
     if not _is_active_destination(destination_id):
         return '請先輸入「綁定」，確認這個 LINE 聊天室可以查詢三青系統資料。'
+
+    destination = destination or _destination_config(destination_id, destination_type)
+    if _destination_access_mode(destination, destination_type) == CUSTOMER_ACCESS_MODE:
+        return _build_customer_portal_reply(text, str(destination.get('customerName') or '').strip())
 
     if normalized in {'狀態', 'status', '系統狀態'}:
         return _build_status_summary()
@@ -272,6 +319,68 @@ def _build_reply_text(text, destination_id='', destination_type='user'):
 
     answer = _build_query_reply(text)
     return answer or _build_help_text()
+
+
+def _build_customer_portal_reply(text, customer_name):
+    if not customer_name:
+        return '此群組尚未指定客戶，為了保護資料目前無法查詢。請聯絡三青管理員到網站「通知中心」完成設定。'
+    normalized = _normalize_command(_strip_bot_prefix(text))
+    if normalized in {'說明', 'help', '幫助', '?', '選單', '功能', '查工單'}:
+        return _build_customer_help_text(customer_name)
+    if _has_any(normalized, ('應收', '應付', '欠款', '金額', '價格', '報價', '庫存', '其他客戶', '廠商', '系統狀態', '提醒')):
+        return '這是客戶查詢窗口，只能查看貴公司的工單編號、交貨日期與狀態。財務、價格、庫存、廠商及其他客戶資料不會顯示。'
+    order_keyword = _extract_order_keyword(text)
+    if order_keyword:
+        return _reply_customer_orders(customer_name, order_keyword=order_keyword)
+    date_scope = _extract_date_scope(normalized)
+    if normalized in {'工單排程', '排程', '我的工單', '工單進度'} or date_scope:
+        return _reply_customer_orders(customer_name, date_scope=date_scope)
+    return _build_customer_help_text(customer_name)
+
+
+def _build_customer_help_text(customer_name):
+    return (
+        f'【{customer_name}查詢窗口】\n'
+        '請按下方按鈕，或 @三青 後輸入：\n'
+        '- 工單排程\n'
+        '- 工單 115070051\n'
+        '- 今天交貨\n'
+        '- 明天交貨\n'
+        '此窗口只顯示貴公司的工單編號、交貨日期與狀態。'
+    )
+
+
+def _reply_customer_orders(customer_name, order_keyword='', date_scope=''):
+    try:
+        rows = list_records('orders', 1, 100, order_keyword or customer_name).get('items') or []
+    except Exception:
+        rows = []
+    customer_key = _company_key(customer_name)
+    rows = [row for row in rows if _company_key(row.get('billingCustomer')) == customer_key]
+    if order_keyword:
+        order_key = re.sub(r'\s+', '', order_keyword).lower()
+        rows = [row for row in rows if re.sub(r'\s+', '', str(row.get('orderNumber') or '')).lower() == order_key]
+    rows = _filter_orders_by_date(rows, date_scope)
+    rows.sort(key=lambda row: (str(row.get('orderDate') or row.get('deliveryDate') or '9999-99-99'), str(row.get('orderNumber') or '')))
+    if not rows:
+        scope = _date_scope_label(date_scope)
+        target = f'工單 {order_keyword}' if order_keyword else f'{scope}工單排程'
+        return f'目前查不到貴公司的{target}。'
+    title = '工單查詢' if order_keyword else f'{_date_scope_label(date_scope)}工單排程'
+    lines = [f'【{customer_name}｜{title}】共 {len(rows)} 筆']
+    lines.extend(_format_customer_order(row) for row in rows[:10])
+    return '\n'.join(lines)
+
+
+def _format_customer_order(row):
+    number = row.get('orderNumber') or '-'
+    date = row.get('orderDate') or row.get('deliveryDate') or '-'
+    status = row.get('status') or '未完成'
+    return f'- {number} / 交貨：{date} / {status}'
+
+
+def _company_key(value):
+    return re.sub(r'[\s()（）,，.．_-]+', '', str(value or '')).lower()
 
 
 def _build_query_reply(text):
@@ -967,7 +1076,7 @@ def _should_reply_in_shared_chat(text, message=None):
     value = str(text or '').strip()
     mentioned_text = _strip_shared_chat_mention(value, message)
     if mentioned_text != _remove_invisible_chars(value).strip():
-        return bool(mentioned_text)
+        return True
     return False
 
 

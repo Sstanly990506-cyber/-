@@ -41,6 +41,68 @@ export function renderNotifications(state) {
   if ($('lineOfficialAccountLink')) $('lineOfficialAccountLink').href = LINE_OFFICIAL_ACCOUNT_LINK;
 }
 
+function customerOptions(state, selected) {
+  const names = [...new Set((state.customers || []).map((row) => String(row.name || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+  if (selected && !names.includes(selected)) names.unshift(selected);
+  return ['<option value="">請選擇客戶</option>', ...names.map((name) => `<option value="${escapeHtml(name)}"${name === selected ? ' selected' : ''}>${escapeHtml(name)}</option>`)].join('');
+}
+
+function renderLineDestinationSettings(state, destinations) {
+  const root = $('lineDestinationSettings');
+  if (!root) return;
+  if (!destinations.length) {
+    root.innerHTML = '<p class="sub">目前沒有已綁定聊天室。</p>';
+    return;
+  }
+  const canEdit = state.user?.role === 'admin';
+  root.innerHTML = destinations.map((destination) => {
+    const mode = destination.accessMode === 'internal' ? 'internal' : 'customer';
+    const customer = String(destination.customerName || '');
+    const disabled = canEdit ? '' : ' disabled';
+    return `<div class="card line-destination-row" data-line-destination="${escapeHtml(destination.id || '')}">
+      <div><strong>${escapeHtml(destination.label || 'LINE 聊天室')}</strong><span class="sub">${escapeHtml(destination.type || 'user')}</span></div>
+      <label>權限模式<select data-line-mode${disabled}>
+        <option value="customer"${mode === 'customer' ? ' selected' : ''}>客戶查詢</option>
+        <option value="internal"${mode === 'internal' ? ' selected' : ''}>內部完整查詢</option>
+      </select></label>
+      <label>指定客戶<select data-line-customer${mode === 'internal' ? ' disabled' : ''}${disabled}>${customerOptions(state, customer)}</select></label>
+      ${canEdit ? '<button class="btn primary" type="button" data-save-line-destination>儲存權限</button>' : '<span class="sub">僅管理員可修改</span>'}
+    </div>`;
+  }).join('');
+
+  root.querySelectorAll('[data-line-mode]').forEach((select) => {
+    select.addEventListener('change', () => {
+      const row = select.closest('[data-line-destination]');
+      const customer = row?.querySelector('[data-line-customer]');
+      if (customer) customer.disabled = select.value === 'internal';
+    });
+  });
+  root.querySelectorAll('[data-save-line-destination]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const row = button.closest('[data-line-destination]');
+      const accessMode = row?.querySelector('[data-line-mode]')?.value || 'customer';
+      const customerName = row?.querySelector('[data-line-customer]')?.value || '';
+      if (accessMode === 'customer' && !customerName) return alert('客戶查詢模式必須指定一家公司。');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/line/destinations/configure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+          body: JSON.stringify({ id: row?.dataset.lineDestination || '', accessMode, customerName }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        await refreshLineStatus(state);
+      } catch (err) {
+        alert(`LINE 權限儲存失敗：${err.message}`);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+}
+
 async function refreshLineStatus(state) {
   if (!$('lineConfiguredStatus')) return;
   $('lineConfiguredStatus').textContent = '檢查中...';
@@ -52,6 +114,7 @@ async function refreshLineStatus(state) {
     if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
     $('lineConfiguredStatus').textContent = data.configured ? '已設定' : '未設定';
     if ($('lineDestinationCount')) $('lineDestinationCount').textContent = String(data.destinationCount || 0);
+    renderLineDestinationSettings(state, data.destinations || []);
     if ($('lineStatusDetail')) {
       if (!data.configured) {
         $('lineStatusDetail').textContent = '尚未設定 LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN，請到 Vercel 環境變數設定。';

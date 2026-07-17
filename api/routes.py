@@ -6,6 +6,7 @@ from api.service import (
     capacity_payload,
     changes_payload,
     clear_test_data_payload,
+    configure_line_destination_payload,
     execute_trip_payload,
     get_state_payload,
     health_payload,
@@ -66,6 +67,7 @@ POST_ROUTES = {
     '/trips/execute': lambda token, payload: (execute_trip_payload, (token, payload)),
     '/api/pricing/quote': lambda token, payload: (pricing_quote_payload, (token, payload)),
     '/api/line/push': lambda token, payload: (send_line_payload, (token, payload)),
+    '/api/line/destinations/configure': lambda token, payload: (configure_line_destination_payload, (token, payload)),
     '/api/orders/recognize': lambda token, payload: (recognize_order_payload, (token, payload)),
     '/api/orders/recognize/corrections': lambda token, payload: (
         report_order_correction_payload,

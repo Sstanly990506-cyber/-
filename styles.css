@@ -502,6 +502,15 @@ input[type="checkbox"] { width: auto; }
   border-radius: 12px;
   background: rgba(245, 158, 11, 0.08);
 }
+.stack-list { display: grid; gap: 10px; }
+.line-destination-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(150px, 0.8fr) minmax(220px, 1.3fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 14px;
+}
+.line-destination-row > div:first-child { align-self: center; display: grid; gap: 4px; }
 .ai-recognition-review strong { color: #fbbf24; }
 .ai-recognition-review p { margin: 0; }
 .ai-review-item { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -1176,6 +1185,7 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
     text-align: center;
   }
   .orders-list-head { grid-template-columns: 1fr; align-items: stretch; }
+  .line-destination-row { grid-template-columns: 1fr 1fr; }
 }
 
 
@@ -1183,6 +1193,7 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .app-shell { padding: 18px 14px 28px; }
   .topbar { align-items: flex-start; }
   .topbar > div:last-child { justify-content: flex-start; }
+  .line-destination-row { grid-template-columns: 1fr; }
   .dashboard-accountbar { align-items: flex-start; }
   .dashboard-account-actions { width: 100%; }
   .dashboard-account-actions .btn { width: auto; flex: 1; }

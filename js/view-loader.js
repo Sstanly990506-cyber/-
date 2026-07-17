@@ -1,6 +1,6 @@
 window.__appBootstrapped = false;
 
-const APP_ASSET_VERSION = '20260715-mobile-company-suggestions-1';
+const APP_ASSET_VERSION = '20260717-line-customer-portal-1';
 const mount = document.getElementById('appMount');
 const apiWarmup = fetch('/api/health', { cache: 'no-store' }).catch(() => null);
 

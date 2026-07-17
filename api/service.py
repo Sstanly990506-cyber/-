@@ -192,6 +192,22 @@ def line_status_payload(token):
     if not account_can_view(account,'notificationsView'):raise ApiError('permission denied',403)
     from api.line_bot import line_status_payload as build_line_status
     return build_line_status()
+def configure_line_destination_payload(token,payload):
+    account=require_account(token)
+    if account.get('role')!='admin':raise ApiError('admin role required',403)
+    if not isinstance(payload,dict):raise ApiError('invalid json',400)
+    destination_id=str(payload.get('id') or '').strip()
+    access_mode=str(payload.get('accessMode') or '').strip().lower()
+    customer_name=str(payload.get('customerName') or '').strip()
+    if not destination_id:raise ApiError('missing destination id',400)
+    if access_mode not in {'internal','customer'}:raise ApiError('invalid LINE access mode',400)
+    if access_mode=='customer' and not customer_name:raise ApiError('customer group requires customer name',400)
+    rows=list_records('lineDestinations',1,100).get('items') or []
+    current=next((row for row in rows if str(row.get('destinationId') or row.get('id') or '')==destination_id),None)
+    if not current:raise ApiError('LINE destination not found',404)
+    updated={**current,'accessMode':access_mode,'customerName':customer_name if access_mode=='customer' else ''}
+    result=upsert_record('lineDestinations',str(current.get('id') or destination_id),updated)
+    return {'ok':True,'destination':{'id':result.get('id'),'accessMode':access_mode,'customerName':updated.get('customerName') or ''}}
 def send_line_payload(token,payload):
     account=require_account(token)
     if not account_can_view(account,'notificationsView'):raise ApiError('permission denied',403)

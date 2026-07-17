@@ -699,6 +699,19 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('"maxDuration": 60', vercel)
         self.assertIn('encoded.length <= 1_800_000', ai_ui)
 
+    def test_line_customer_portal_has_admin_scope_controls_and_buttons(self):
+        view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
+        notifications = (ROOT / 'js' / 'notifications.js').read_text(encoding='utf-8')
+        routes = (ROOT / 'api' / 'routes.py').read_text(encoding='utf-8')
+        line_bot = (ROOT / 'api' / 'line_bot.py').read_text(encoding='utf-8')
+        self.assertIn('id="lineDestinationSettings"', view)
+        self.assertIn("state.user?.role === 'admin'", notifications)
+        self.assertIn('/api/line/destinations/configure', notifications)
+        self.assertIn('/api/line/destinations/configure', routes)
+        self.assertIn("('工單排程', '工單排程')", line_bot)
+        self.assertIn('CUSTOMER_ACCESS_MODE', line_bot)
+        self.assertIn('客戶群組不會接收內部主動提醒', line_bot)
+
 
 if __name__ == '__main__':
     unittest.main()

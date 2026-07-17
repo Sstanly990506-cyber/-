@@ -7,7 +7,7 @@ from datetime import date
 from unittest.mock import patch
 
 from api.line_bot import handle_line_webhook
-from api.service import ApiError, _customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, delete_entity_payload, execute_trip_payload, get_state_payload, health_payload, import_customers_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
+from api.service import ApiError, _customer_names_for_ai, _fill_recognized_customer_address, backup_payload, capacity_payload, changes_payload, clear_test_data_payload, configure_line_destination_payload, delete_entity_payload, execute_trip_payload, get_state_payload, health_payload, import_customers_payload, list_entity_payload, optimize_trip_payload, pricing_quote_payload, recognize_order_payload, recognize_order_status_payload, report_order_correction_payload, restore_backup_payload, update_state_payload, upsert_entity_payload, user_action_payload
 from api.storage import create_session_token, verify_session_token
 
 
@@ -32,10 +32,12 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result['handled'], 1)
         self.assertEqual(upsert.call_args.args[0], 'lineDestinations')
         self.assertEqual(upsert.call_args.args[1], 'U1234567890')
+        self.assertEqual(upsert.call_args.args[2]['accessMode'], 'customer')
         self.assertEqual(line_post.call_args.args[0], 'https://api.line.me/v2/bot/message/reply')
         message = line_post.call_args.args[1]['messages'][0]
         self.assertIn('quickReply', message)
-        self.assertIn('未完成工單', [item['action']['label'] for item in message['quickReply']['items']])
+        self.assertIn('工單排程', [item['action']['label'] for item in message['quickReply']['items']])
+        self.assertIn('預設鎖定為客戶查詢', message['text'])
 
     def test_line_query_requires_bound_destination(self):
         payload = {
@@ -67,7 +69,7 @@ class ServiceTests(unittest.TestCase):
 
         def fake_list_records(entity, page=1, page_size=100, query=''):
             if entity == 'lineDestinations':
-                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'active': True}]}
+                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'type': 'user', 'active': True, 'accessMode': 'internal'}]}
             if entity == 'orders':
                 return {'items': [{'id': 'o1', 'orderNumber': 'WO-1', 'orderDate': '2026-07-07', 'billingCustomer': '三青', 'status': '未完成', 'totalPrice': 1200}]}
             return {'items': []}
@@ -125,7 +127,7 @@ class ServiceTests(unittest.TestCase):
 
         def fake_list_records(entity, page=1, page_size=100, query=''):
             if entity == 'lineDestinations':
-                return {'items': [{'id': 'G1234567890', 'destinationId': 'G1234567890', 'active': True}]}
+                return {'items': [{'id': 'G1234567890', 'destinationId': 'G1234567890', 'type': 'group', 'active': True, 'accessMode': 'internal'}]}
             if entity == 'customers':
                 return {'items': [{'id': 'c1', 'name': '媽媽公司', 'role': '上游', 'taxId': '12345678', 'phone': '2222-3333', 'address': '台北市'}]}
             return {'items': []}
@@ -135,7 +137,10 @@ class ServiceTests(unittest.TestCase):
         reply_text = line_post.call_args.args[1]['messages'][0]['text']
         self.assertIn('【客戶/廠商查詢】', reply_text)
         self.assertIn('媽媽公司', reply_text)
-        self.assertNotIn('quickReply', line_post.call_args.args[1]['messages'][0])
+        message = line_post.call_args.args[1]['messages'][0]
+        self.assertIn('quickReply', message)
+        self.assertIn('未完成工單', [item['action']['label'] for item in message['quickReply']['items']])
+        self.assertTrue(all(item['action']['text'].startswith('@三青 ') for item in message['quickReply']['items']))
 
     def test_line_group_chat_replies_for_other_members_when_addressed(self):
         payload = {
@@ -151,7 +156,7 @@ class ServiceTests(unittest.TestCase):
 
         def fake_list_records(entity, page=1, page_size=100, query=''):
             if entity == 'lineDestinations':
-                return {'items': [{'id': 'G1234567890', 'destinationId': 'G1234567890', 'active': True}]}
+                return {'items': [{'id': 'G1234567890', 'destinationId': 'G1234567890', 'type': 'group', 'active': True, 'accessMode': 'internal'}]}
             if entity == 'customers':
                 return {'items': [{'id': 'c1', 'name': '媽媽公司', 'role': '上游'}]}
             return {'items': []}
@@ -205,7 +210,7 @@ class ServiceTests(unittest.TestCase):
 
         def fake_list_records(entity, page=1, page_size=100, query=''):
             if entity == 'lineDestinations':
-                return {'items': [{'id': 'G1234567890', 'destinationId': 'G1234567890', 'active': True}]}
+                return {'items': [{'id': 'G1234567890', 'destinationId': 'G1234567890', 'type': 'group', 'active': True, 'accessMode': 'internal'}]}
             if entity == 'customers':
                 return {'items': [{'id': 'c1', 'name': '媽媽公司', 'role': '上游'}]}
             return {'items': []}
@@ -215,6 +220,87 @@ class ServiceTests(unittest.TestCase):
         reply_text = line_post.call_args.args[1]['messages'][0]['text']
         self.assertIn('【客戶/廠商查詢】', reply_text)
         self.assertIn('媽媽公司', reply_text)
+
+    def test_line_customer_group_buttons_only_show_own_safe_order_fields(self):
+        payload = {
+            'events': [{
+                'type': 'message', 'replyToken': 'reply-token',
+                'source': {'type': 'group', 'groupId': 'GCUSTOMER', 'userId': 'UCUSTOMER'},
+                'message': {'type': 'text', 'text': '@三青 工單排程'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'lineDestinations':
+                return {'items': [{'id': 'GCUSTOMER', 'destinationId': 'GCUSTOMER', 'type': 'group', 'active': True, 'accessMode': 'customer', 'customerName': '富盛印刷'}]}
+            if entity == 'orders':
+                return {'items': [
+                    {'orderNumber': 'WO-FS', 'orderDate': '2026-07-20', 'billingCustomer': '富盛印刷', 'upstream': '秘密廠商', 'address': '秘密地址', 'totalPrice': 9999, 'status': '未完成'},
+                    {'orderNumber': 'WO-OTHER', 'orderDate': '2026-07-21', 'billingCustomer': '其他客戶', 'totalPrice': 8888, 'status': '未完成'},
+                ]}
+            return {'items': []}
+
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        message = line_post.call_args.args[1]['messages'][0]
+        self.assertIn('WO-FS', message['text'])
+        self.assertNotIn('WO-OTHER', message['text'])
+        self.assertNotIn('9999', message['text'])
+        self.assertNotIn('秘密廠商', message['text'])
+        self.assertNotIn('秘密地址', message['text'])
+        labels = [item['action']['label'] for item in message['quickReply']['items']]
+        self.assertEqual(labels, ['工單排程', '查工單', '今天交貨', '明天交貨', '使用說明'])
+
+    def test_line_customer_group_shows_buttons_when_message_is_only_mention(self):
+        payload = {
+            'events': [{
+                'type': 'message', 'replyToken': 'reply-token',
+                'source': {'type': 'group', 'groupId': 'GCUSTOMER', 'userId': 'UCUSTOMER'},
+                'message': {'type': 'text', 'text': '@三青'},
+            }]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        signature = base64.b64encode(hmac.new(b'secret', body, hashlib.sha256).digest()).decode('ascii')
+
+        def fake_list_records(entity, page=1, page_size=100, query=''):
+            if entity == 'lineDestinations':
+                return {'items': [{'id': 'GCUSTOMER', 'destinationId': 'GCUSTOMER', 'type': 'group', 'active': True, 'accessMode': 'customer', 'customerName': '富盛印刷'}]}
+            return {'items': []}
+
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot.list_records', side_effect=fake_list_records), patch('api.line_bot._line_api_post') as line_post:
+            handle_line_webhook(body, signature)
+        message = line_post.call_args.args[1]['messages'][0]
+        self.assertIn('【富盛印刷查詢窗口】', message['text'])
+        self.assertIn('quickReply', message)
+        self.assertTrue(all(item['action']['text'].startswith('@三青 ') for item in message['quickReply']['items']))
+
+    def test_line_customer_group_blocks_finance_and_cross_module_queries(self):
+        from api import line_bot
+        destination = {'type': 'group', 'accessMode': 'customer', 'customerName': '富盛印刷'}
+        with patch('api.line_bot._is_active_destination', return_value=True), patch('api.line_bot._interpret_query_with_ai') as ai_query:
+            reply = line_bot._build_reply_text('應收欠款多少', 'GCUSTOMER', 'group', destination)
+        self.assertIn('只能查看貴公司的工單編號、交貨日期與狀態', reply)
+        ai_query.assert_not_called()
+
+    def test_internal_push_notifications_are_never_sent_to_customer_groups(self):
+        from api import line_bot
+        destinations = [
+            {'id': 'GINTERNAL', 'destinationId': 'GINTERNAL', 'type': 'group', 'active': True, 'accessMode': 'internal'},
+            {'id': 'GCUSTOMER', 'destinationId': 'GCUSTOMER', 'type': 'group', 'active': True, 'accessMode': 'customer', 'customerName': '富盛印刷'},
+        ]
+        with patch.dict('os.environ', {'LINE_CHANNEL_SECRET': 'secret', 'LINE_CHANNEL_ACCESS_TOKEN': 'token'}), patch('api.line_bot._active_destinations', return_value=destinations), patch('api.line_bot._line_api_post') as line_post:
+            result = line_bot.send_line_message('內部財務提醒')
+        self.assertEqual(result['sent'], 1)
+        self.assertEqual(line_post.call_args.args[1]['to'], 'GINTERNAL')
+
+    def test_line_unassigned_customer_group_is_locked(self):
+        from api import line_bot
+        destination = {'type': 'group', 'accessMode': 'customer', 'customerName': ''}
+        with patch('api.line_bot._is_active_destination', return_value=True):
+            reply = line_bot._build_reply_text('工單排程', 'GCUSTOMER', 'group', destination)
+        self.assertIn('尚未指定客戶', reply)
 
     def test_line_smart_query_understands_receivable_question(self):
         payload = {
@@ -230,7 +316,7 @@ class ServiceTests(unittest.TestCase):
 
         def fake_list_records(entity, page=1, page_size=100, query=''):
             if entity == 'lineDestinations':
-                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'active': True}]}
+                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'type': 'user', 'active': True, 'accessMode': 'internal'}]}
             if entity == 'receivables':
                 return {'items': [{'id': 'r1', 'customer': '佳德印刷有限公司', 'orderNumber': 'WO-2', 'amount': 3000, 'received': 1000}]}
             return {'items': []}
@@ -255,7 +341,7 @@ class ServiceTests(unittest.TestCase):
 
         def fake_list_records(entity, page=1, page_size=100, query=''):
             if entity == 'lineDestinations':
-                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'active': True}]}
+                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'type': 'user', 'active': True, 'accessMode': 'internal'}]}
             if entity == 'orders':
                 return {'items': [{'id': 'o1', 'orderNumber': '115060162', 'billingCustomer': '三青', 'status': '未完成'}]}
             return {'items': []}
@@ -280,7 +366,7 @@ class ServiceTests(unittest.TestCase):
 
         def fake_list_records(entity, page=1, page_size=100, query=''):
             if entity == 'lineDestinations':
-                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'active': True}]}
+                return {'items': [{'id': 'U1234567890', 'destinationId': 'U1234567890', 'type': 'user', 'active': True, 'accessMode': 'internal'}]}
             if entity == 'orders':
                 return {'items': [
                     {'id': 'o1', 'orderNumber': 'WO-SEND', 'orderDate': '2026-07-14', 'billingCustomer': '富盛', 'downstream': '成峰', 'address': '新北市測試路1號', 'status': '未完成'},
@@ -431,9 +517,23 @@ class ServiceTests(unittest.TestCase):
         from api import line_bot
         with patch('api.line_bot._active_destinations', return_value=[]):
             payload = line_bot.line_status_payload()
-        self.assertEqual(payload['assistantVersion'], '20260715-grounded-multi-module-1')
+        self.assertEqual(payload['assistantVersion'], '20260717-customer-portal-1')
         self.assertNotIn('accessToken', payload)
         self.assertNotIn('channelSecret', payload)
+
+    def test_admin_can_configure_customer_line_destination(self):
+        destination = {'id': 'G1', 'destinationId': 'G1', 'type': 'group', 'active': True}
+        with patch('api.service.verify_session_token', return_value={'username': 'admin', 'role': 'admin'}), patch('api.service.list_records', return_value={'items': [destination]}), patch('api.service.upsert_record', return_value={'ok': True, 'id': 'G1'}) as upsert:
+            result = configure_line_destination_payload('token', {'id': 'G1', 'accessMode': 'customer', 'customerName': '富盛印刷'})
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['destination']['customerName'], '富盛印刷')
+        self.assertEqual(upsert.call_args.args[2]['accessMode'], 'customer')
+
+    def test_non_admin_cannot_configure_line_destination(self):
+        with patch('api.service.verify_session_token', return_value={'username': 'ops', 'role': 'ops'}):
+            with self.assertRaises(ApiError) as caught:
+                configure_line_destination_payload('token', {'id': 'G1', 'accessMode': 'internal'})
+        self.assertEqual(caught.exception.status, 403)
 
     def test_state_requires_login(self):
         with patch('api.service.verify_session_token', return_value=None):
