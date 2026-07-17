@@ -103,7 +103,7 @@ function renderLineDestinationSettings(state, destinations) {
   });
 }
 
-async function refreshLineStatus(state) {
+export async function refreshLineStatus(state) {
   if (!$('lineConfiguredStatus')) return;
   $('lineConfiguredStatus').textContent = '檢查中...';
   try {
@@ -175,5 +175,4 @@ export function bindNotificationEvents(state, saveState, renderAll) {
       await refreshLineStatus(state);
     }
   });
-  refreshLineStatus(state);
 }

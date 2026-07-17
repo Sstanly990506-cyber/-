@@ -19,7 +19,7 @@ import { renderAudits, bindAuditEvents } from './audit.js?v=20260714-trip-route-
 import { renderTrips, bindTripEvents } from './trips.js?v=20260714-factory-address-1';
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714-trip-route-text-1';
 import { renderInventory, bindInventoryEvents } from './inventory.js?v=20260714-trip-route-text-1';
-import { renderNotifications, bindNotificationEvents } from './notifications.js?v=20260717-line-permissions-2';
+import { renderNotifications, bindNotificationEvents, refreshLineStatus } from './notifications.js?v=20260717-line-permissions-3';
 
 const APP_BUILD = '2026-07-14-order-buttons-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
@@ -478,6 +478,9 @@ function showView(id) {
     state.financeScreen = 'main';
   }
   renderAll();
+  if (id === 'notificationsView' && isModuleEnabled('notificationsView')) {
+    refreshLineStatus(state);
+  }
 }
 
 async function verifyFinancePassword(password) {
