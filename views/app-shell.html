@@ -454,23 +454,6 @@
           <div class="kpi"><span>最近更新</span><strong id="noticeLatestAt">已儲存</strong></div>
         </div>
         <article class="card">
-          <h3>最新通知與系統事件</h3>
-          <div class="filter-row">
-            <select id="noticeTypeFilter">
-              <option value="all">全部類型</option>
-              <option value="critical">關鍵</option>
-              <option value="warning">警告</option>
-              <option value="info">資訊</option>
-            </select>
-            <input id="noticeDateFrom" type="date" />
-            <input id="noticeDateTo" type="date" />
-            <input id="noticeKeyword" placeholder="搜尋關鍵字" />
-            <button class="btn" type="button" id="markNoticeReadBtn">標記已讀</button>
-            <button class="btn" type="button" id="exportNoticeBtn">匯出日誌 CSV</button>
-          </div>
-          <ul id="notificationsList" class="list"></ul>
-        </article>
-        <article class="card">
           <div class="section-head">
             <div>
               <h3>LINE 通知與回覆</h3>
@@ -495,6 +478,23 @@
             </div>
           </div>
           <div id="lineDestinationSettings" class="stack-list"><p class="sub">重新檢查後顯示已綁定聊天室。</p></div>
+        </article>
+        <article class="card">
+          <h3>最新通知與系統事件</h3>
+          <div class="filter-row">
+            <select id="noticeTypeFilter">
+              <option value="all">全部類型</option>
+              <option value="critical">關鍵</option>
+              <option value="warning">警告</option>
+              <option value="info">資訊</option>
+            </select>
+            <input id="noticeDateFrom" type="date" />
+            <input id="noticeDateTo" type="date" />
+            <input id="noticeKeyword" placeholder="搜尋關鍵字" />
+            <button class="btn" type="button" id="markNoticeReadBtn">標記已讀</button>
+            <button class="btn" type="button" id="exportNoticeBtn">匯出日誌 CSV</button>
+          </div>
+          <ul id="notificationsList" class="list"></ul>
         </article>
       </section>
 

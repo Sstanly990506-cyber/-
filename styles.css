@@ -505,12 +505,16 @@ input[type="checkbox"] { width: auto; }
 .stack-list { display: grid; gap: 10px; }
 .line-destination-row {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(150px, 0.8fr) minmax(220px, 1.3fr) auto;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(220px, 1.4fr);
   align-items: end;
   gap: 12px;
   padding: 14px;
 }
 .line-destination-row > div:first-child { align-self: center; display: grid; gap: 4px; }
+.line-destination-row label,
+.line-destination-row select { min-width: 0; width: 100%; }
+.line-destination-row > .btn,
+.line-destination-row > .sub:last-child { grid-column: 1 / -1; justify-self: end; }
 .ai-recognition-review strong { color: #fbbf24; }
 .ai-recognition-review p { margin: 0; }
 .ai-review-item { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
