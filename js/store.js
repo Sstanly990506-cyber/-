@@ -196,6 +196,7 @@ function refresh() {
 
 export function setAuthToken(token) {
   state.authToken = token || null;
+  window.dispatchEvent(new Event('app:auth-changed'));
 }
 
 export function configureStore({ refreshFn, syncUiFn }) {
