@@ -20,6 +20,7 @@ import { renderTrips, bindTripEvents } from './trips.js?v=20260714-factory-addre
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714-trip-route-text-1';
 import { renderInventory, bindInventoryEvents } from './inventory.js?v=20260714-trip-route-text-1';
 import { renderNotifications, bindNotificationEvents, refreshLineStatus } from './notifications.js?v=20260717-line-permissions-3';
+import { initializeLocalAi } from './local-ai.js?v=20260904-prod-1';
 
 const APP_BUILD = '2026-07-14-order-buttons-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
@@ -628,6 +629,21 @@ function bootstrapFailed(err) {
 }
 
 try {
+  initializeLocalAi({
+    onDemoLogin: async ({ account, token, bootstrap }) => {
+      resetAuthenticatedSync();
+      setAuthToken(token);
+      state.user = account.display;
+      state.userRole = account.role;
+      state.allowedViews = account.allowedViews;
+      hydrateBootstrap(bootstrap, '本機假資料');
+      mountInternalViews();
+      $('welcomeText').textContent = '本機假資料示範（不是正式資料）';
+      showView('dashboardView');
+      await startAuthenticatedSync();
+    },
+    onDataChanged: async () => { await pullServerState(); renderAll(); },
+  });
   configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
   setBuildVersion();
   initializeStore();

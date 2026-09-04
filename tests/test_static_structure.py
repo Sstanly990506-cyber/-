@@ -1,4 +1,5 @@
 import shutil
+import re
 import subprocess
 import unittest
 from pathlib import Path
@@ -709,9 +710,11 @@ class StaticStructureTests(unittest.TestCase):
         self.assertNotIn("state.user?.role === 'admin'", notifications)
         self.assertLess(view.index('LINE 通知與回覆'), view.index('最新通知與系統事件'))
         main = (ROOT / 'js' / 'main.js').read_text(encoding='utf-8')
-        self.assertIn("20260717-line-permissions-3", (ROOT / 'js' / 'view-loader.js').read_text(encoding='utf-8'))
+        loader = (ROOT / 'js' / 'view-loader.js').read_text(encoding='utf-8')
+        version = re.search(r"const APP_ASSET_VERSION = '([^']+)'", loader)
+        self.assertIsNotNone(version)
         self.assertIn("notifications.js?v=20260717-line-permissions-3", main)
-        self.assertIn("view-loader.js?v=20260717-line-permissions-3", (ROOT / 'index.html').read_text(encoding='utf-8'))
+        self.assertIn(f"view-loader.js?v={version.group(1)}", (ROOT / 'index.html').read_text(encoding='utf-8'))
         self.assertIn("refreshLineStatus(state)", main)
         self.assertIn('/api/line/destinations/configure', notifications)
         self.assertIn('/api/line/destinations/configure', routes)

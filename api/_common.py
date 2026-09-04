@@ -31,3 +31,24 @@ def get_bearer_token(handler):
     if scheme.lower() != "bearer" or not token.strip():
         return ""
     return token.strip()
+
+
+def discard_small_rejected_body(handler):
+    """Avoid Windows TCP resets hiding 4xx responses when a small body is pending.
+
+    Never parse, store or log rejected content. Do not drain unbounded/chunked input.
+    """
+    if getattr(handler, '_body_read', False) or handler.headers.get('Transfer-Encoding'):
+        return
+    lengths = handler.headers.get_all('Content-Length') or ['0']
+    previous = handler.connection.gettimeout()
+    try:
+        size = int(lengths[0])
+        if len(lengths) == 1 and 0 < size <= 16384:
+            handler.connection.settimeout(1)
+            handler.rfile.read(size)
+            handler._body_read = True
+    except (ValueError, OSError):
+        pass
+    finally:
+        handler.connection.settimeout(previous)

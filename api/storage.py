@@ -581,7 +581,7 @@ def get_bootstrap_password(account: dict) -> str:
         return cached
     generated = secrets.token_urlsafe(12)
     RUNTIME_BOOTSTRAP_PASSWORDS[username] = generated
-    print(f"[WARN] 未設定 {env_key or '初始化密碼環境變數'}，已為內建帳號 '{username}' 產生一次性啟動密碼：{generated}")
+    print('[WARN] 初始化帳號尚未配置登入方式；臨時密碼不會輸出至紀錄。')
     return generated
 
 def ensure_builtin_users():
