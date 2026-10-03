@@ -2,6 +2,7 @@
 import re
 
 SITE_ORIGIN = 'https://omega-ten-20.vercel.app'
+SITE_ORIGINS = frozenset({SITE_ORIGIN, 'https://www.sanqingco.com', 'https://sanqingco.com'})
 COMPANION_ORIGIN = 'http://127.0.0.1:4175'
 PATTERNS = tuple(re.compile(pattern, re.I | re.M) for pattern in (
     r'-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----',

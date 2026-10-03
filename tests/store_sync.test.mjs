@@ -8,6 +8,8 @@ async function harness(fetch) {
     fetch, console, setTimeout, clearTimeout, setInterval,
     queueMicrotask: () => {},
     document: { getElementById: () => null },
+    window: { dispatchEvent: () => {} },
+    Event: class { constructor(type) { this.type = type; } },
     localStorage: { getItem: () => '{invalid', setItem: () => {} },
   });
   const shared = new vm.SyntheticModule(['formatTs', 'getTodayText', 'getDefaultSettings', 'mergeSettings'], function () {
@@ -28,6 +30,30 @@ async function harness(fetch) {
 }
 
 const response = (data = {}) => ({ ok: true, json: async () => data });
+
+test('audit CSV preserves quoted commas, newlines and escaped quotes', async () => {
+  const context = vm.createContext({});
+  const shared = new vm.SyntheticModule(['$', 'downloadCsv', 'escapeHtml'], function () {
+    for (const name of ['$', 'downloadCsv', 'escapeHtml']) this.setExport(name, () => {});
+  }, { context });
+  const module = new vm.SourceTextModule(await readFile(new URL('../js/audit.js', import.meta.url), 'utf8'), { context });
+  await module.link(() => shared);
+  await module.evaluate();
+  const rows = module.namespace.parseAuditCsv('\uFEFF"a","b"\r\n"WO1","note, line\nnext ""quote"""\r\n');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[1][1], 'note, line\nnext "quote"');
+  assert.throws(() => module.namespace.parseAuditCsv('"unfinished'), /CSV/);
+});
+
+test('read-only trip data is not written back by client normalization', async () => {
+  let count = 0;
+  const store = await harness(async () => { count += 1; return response(); });
+  store.state.userRole = 'driver';
+  store.state.allowedViews = ['tripsView'];
+  store.state.orders = [{ id: 'o1', status: '已完成' }];
+  await store.saveState();
+  assert.equal(count, 0);
+});
 
 test('consecutive edits during a write are sent in order', async () => {
   let release;

@@ -6,6 +6,14 @@ from api.service import ApiError, changes_payload, list_entity_payload, merge_st
 
 
 class AuditRegressionTests(unittest.TestCase):
+    def test_ai_origin_guard_accepts_owned_domains_but_not_other_sites(self):
+        from api import local_ai
+        with patch.object(local_ai, 'PRODUCTION', True):
+            for host in ('www.sanqingco.com', 'sanqingco.com', 'omega-ten-20.vercel.app'):
+                local_ai.validate_request('127.0.0.1', host, 'https://' + host, 443, 'GET')
+            with self.assertRaises(ApiError):
+                local_ai.validate_request('127.0.0.1', 'www.sanqingco.com', 'https://evil.example', 443, 'GET')
+
     def test_trip_only_account_does_not_receive_prices_or_customer_notes(self):
         account = {'role': 'driver', 'allowedViews': ['tripsView']}
         order = {'id': 'o1', 'orderNumber': 'WO1', 'address': 'delivery', 'totalPrice': 999}

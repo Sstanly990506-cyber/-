@@ -1,5 +1,26 @@
 ﻿import { $, downloadCsv, escapeHtml } from './shared.js';
 
+export function parseAuditCsv(text) {
+  const rows = [];
+  let row = [], cell = '', quoted = false;
+  const source = String(text).replace(/^\uFEFF/, '');
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (char === '"') {
+      if (quoted && source[i + 1] === '"') { cell += '"'; i += 1; }
+      else quoted = !quoted;
+    } else if (!quoted && char === ',') {
+      row.push(cell); cell = '';
+    } else if (!quoted && (char === '\n' || char === '\r')) {
+      if (char === '\r' && source[i + 1] === '\n') i += 1;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += char;
+  }
+  if (quoted) throw new Error('CSV 引號未閉合，請確認匯入檔案。');
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((cells) => cells.some((value) => value !== ''));
+}
+
 export function getFilteredAudits(state) {
   const { start, end, keyword, user = '', field = '', anomalyOnly = false } = state.auditFilter;
   return state.audits.filter((a) => {
@@ -103,8 +124,14 @@ export function bindAuditEvents(state, saveState, renderAll) {
     const file = e.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const rows = lines.slice(1).map((line) => line.split(',').map((cell) => cell.replace(/^"|"$/g, '').replaceAll('""', '"')));
+    let rows;
+    try {
+      rows = parseAuditCsv(text).slice(1);
+    } catch (error) {
+      alert(error.message);
+      e.target.value = '';
+      return;
+    }
     rows.forEach((row) => {
       const [orderNumber, field, before, after, changedAt, user, device] = row;
       if (!orderNumber && !field && !changedAt) return;

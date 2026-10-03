@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from api.assistant_security import SITE_ORIGIN, COMPANION_ORIGIN, contains_secret
+from api.assistant_security import SITE_ORIGIN, SITE_ORIGINS, COMPANION_ORIGIN, contains_secret
 from api.service import ApiError
 from api._common import discard_small_rejected_body
 
@@ -217,8 +217,8 @@ class CompanionHandler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
-        if self.headers.get('Origin') == SITE_ORIGIN:
-            self.send_header('Access-Control-Allow-Origin', SITE_ORIGIN)
+        if self.headers.get('Origin') in SITE_ORIGINS:
+            self.send_header('Access-Control-Allow-Origin', self.headers['Origin'])
             self.send_header('Vary', 'Origin')
         self.end_headers()
         self.wfile.write(body)
@@ -227,8 +227,8 @@ class CompanionHandler(BaseHTTPRequestHandler):
         if self.client_address[0] != '127.0.0.1' or self.headers.get_all('Host') != ['127.0.0.1:4175']:
             raise ApiError('只接受本機連線。', 403)
         origins = self.headers.get_all('Origin') or []
-        expected = COMPANION_ORIGIN if control else SITE_ORIGIN
-        if len(origins) > 1 or (self.command in ('POST', 'OPTIONS') and origins != [expected]) or (origins and origins != [expected]):
+        allowed_origins = {COMPANION_ORIGIN} if control else SITE_ORIGINS
+        if len(origins) > 1 or (self.command in ('POST', 'OPTIONS') and not origins) or (origins and origins[0] not in allowed_origins):
             raise ApiError('網站來源不符合允許範圍。', 403)
         if self.headers.get('Transfer-Encoding'):
             raise ApiError('不支援串流請求。', 400)
@@ -252,7 +252,7 @@ class CompanionHandler(BaseHTTPRequestHandler):
             if set(part.strip().lower() for part in self.headers.get('Access-Control-Request-Headers', '').split(',') if part.strip()) - allowed:
                 raise ApiError('不支援的標頭。', 403)
             self.send_response(204)
-            self.send_header('Access-Control-Allow-Origin', SITE_ORIGIN)
+            self.send_header('Access-Control-Allow-Origin', self.headers['Origin'])
             self.send_header('Vary', 'Origin')
             self.send_header('Access-Control-Allow-Methods', 'POST')
             self.send_header('Access-Control-Allow-Headers', ', '.join(sorted(allowed)))

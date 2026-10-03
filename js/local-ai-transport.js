@@ -1,4 +1,5 @@
 export const SITE_ORIGIN = 'https://omega-ten-20.vercel.app';
+export const SITE_ORIGINS = [SITE_ORIGIN, 'https://www.sanqingco.com', 'https://sanqingco.com'];
 export const COMPANION_ORIGIN = 'http://127.0.0.1:4175';
 
 // Fixed origins; scoped credentials and pairing only live in this closure.
@@ -6,7 +7,7 @@ export function createAiTransport({ siteRequest, fetchFn = fetch, origin = locat
   let ticket = '';
   let capability = '';
   let generation = 0;
-  const production = origin === SITE_ORIGIN;
+  const production = SITE_ORIGINS.includes(origin);
   const localDemo = /^http:\/\/127\.0\.0\.1:\d+$/.test(origin);
 
   async function local(path, payload, signal, credentials = { ticket, capability }) {

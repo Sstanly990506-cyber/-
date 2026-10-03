@@ -24,7 +24,7 @@ function proactiveNotify() {
   return buildSystemAlerts();
 }
 const APP_BUILD = '20261003-system-audit-1';
-import { initializeLocalAi } from './local-ai.js?v=20260904-prod-1';
+import { initializeLocalAi } from './local-ai.js?v=20261003-system-audit-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
 let internalViewsMounted = true;

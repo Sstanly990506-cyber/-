@@ -3,7 +3,7 @@ import hashlib
 import secrets
 import threading
 import time
-from api.assistant_security import SITE_ORIGIN, COMPANION_ORIGIN, contains_secret
+from api.assistant_security import SITE_ORIGIN, SITE_ORIGINS, COMPANION_ORIGIN, contains_secret
 
 from api.service import ApiError, require_account, require_entity_read_access, require_entity_access, list_entity_payload
 from api.local_ai_records import inventory_snapshot, fingerprint, update_inventory_note, RecordConflict
@@ -80,7 +80,7 @@ def validate_request(remote, host, origin, port, method, content_type='', length
     """Transport boundary, also protects the optional passwordless FAKE demo."""
     expected = f'127.0.0.1:{port}'
     if PRODUCTION:
-        if host != SITE_ORIGIN.removeprefix('https://') or (origin and origin != SITE_ORIGIN):
+        if 'https://' + host not in SITE_ORIGINS or (origin and origin != 'https://' + host):
             raise ApiError('請使用正式網站網址。', 403)
     elif remote != '127.0.0.1' or host != expected:
         raise ApiError('本機 AI 僅接受 127.0.0.1。', 403)

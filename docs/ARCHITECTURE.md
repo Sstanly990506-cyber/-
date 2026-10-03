@@ -51,3 +51,9 @@
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+同步與前端傳輸的行為測試：
+
+```bash
+node --experimental-vm-modules --test tests/store_sync.test.mjs tests/test_transport.mjs
+```
