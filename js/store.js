@@ -15,6 +15,12 @@ const ENTITY_MAP = {
 const REVERSE_ENTITY = Object.fromEntries(
   Object.entries(ENTITY_MAP).map(([key, value]) => [value, key]),
 );
+const WRITE_VIEWS = {
+  customers: 'customersView', orders: 'ordersView', audits: 'auditView',
+  receivables: 'financeView', payables: 'financeView', priceRules: 'ordersView',
+  inventoryItems: 'inventoryView', systemEvents: 'notificationsView',
+  lineDestinations: 'notificationsView',
+};
 
 const ROLE_KEYS = {
   admin: Object.keys(ENTITY_MAP),
@@ -80,8 +86,11 @@ let syncTimer = null;
 let changeCursor = 0;
 let initializedRemote = false;
 let searchBound = false;
+let saveQueue = Promise.resolve();
+let sessionVersion = 0;
 
 const snapshots = {};
+const pageRequests = {};
 
 function headers(json = false) {
   return {
@@ -195,6 +204,17 @@ function refresh() {
 }
 
 export function setAuthToken(token) {
+  if (state.authToken !== (token || null)) {
+    sessionVersion += 1;
+    initializedRemote = false;
+    changeCursor = 0;
+    for (const key of Object.keys(ENTITY_MAP)) {
+      state[key] = [];
+      snapshots[key] = new Map();
+    }
+    state.pagination = {};
+    state.serverReport = null;
+  }
   state.authToken = token || null;
 }
 
@@ -204,7 +224,11 @@ export function configureStore({ refreshFn, syncUiFn }) {
 }
 
 export function initializeStore() {
-  state.settings = mergeSettings(JSON.parse(localStorage.getItem('uiSettings') || 'null') || {});
+  try {
+    state.settings = mergeSettings(JSON.parse(localStorage.getItem('uiSettings') || 'null') || {});
+  } catch {
+    state.settings = getDefaultSettings();
+  }
 
   const now = new Date();
   state.reportRange.start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -213,12 +237,23 @@ export function initializeStore() {
 }
 
 export async function loadEntityPage(key, page = 1, query = '', refreshUi = true) {
+  const version = sessionVersion;
+  await saveQueue;
+  if (version !== sessionVersion) return;
   const entity = ENTITY_MAP[key] || key;
+  const stateKey = REVERSE_ENTITY[entity] || key;
+  const request = (pageRequests[stateKey] || 0) + 1;
+  pageRequests[stateKey] = request;
+  const localBefore = JSON.stringify(state[stateKey]);
   const data = await jsonRequest(
     `/api/data/${entity}?page=${page}&pageSize=100&q=${encodeURIComponent(query)}`,
     { headers: headers() },
   );
-  const stateKey = REVERSE_ENTITY[entity] || key;
+  if (version !== sessionVersion || pageRequests[stateKey] !== request) return data;
+  if (JSON.stringify(state[stateKey]) !== localBefore) {
+    setUi('保留本機變更', '請稍後重新搜尋', false);
+    return data;
+  }
 
   state[stateKey] = data.items || [];
   state.pagination[stateKey] = {
@@ -291,9 +326,10 @@ function bindServerSearch() {
 
 async function loadEntityPagesInBackground(keys,concurrency=2) {
   let cursor = 0;
+  const version = sessionVersion;
 
   async function worker() {
-    while (cursor < keys.length) {
+    while (cursor < keys.length && version === sessionVersion) {
       const key = keys[cursor];
       cursor += 1;
       try {
@@ -339,6 +375,7 @@ export function hydrateBootstrap(base = {}, source = '登入預載') {
   const keys = dataKeysForAccount();
   applyInitialPages(base.initialPages || {});
   normalizeStateData();
+  for (const entity of Object.keys(base.initialPages || {})) snapshot(REVERSE_ENTITY[entity] || entity);
   refresh();
   bindServerSearch();
 
@@ -347,8 +384,10 @@ export function hydrateBootstrap(base = {}, source = '登入預載') {
   );
   const missingKeys = keys.filter((key) => !loadedKeys.has(key));
   if (missingKeys.length) {
+    const version = sessionVersion;
     setUi('載入中', '背景資料', false);
     loadEntityPagesInBackground(missingKeys).then(() => {
+      if (version !== sessionVersion) return;
       normalizeStateData();
       refresh();
       setUi('已儲存', '分頁資料庫');
@@ -359,14 +398,18 @@ export function hydrateBootstrap(base = {}, source = '登入預載') {
 }
 
 async function loadBootstrap() {
+  const version = sessionVersion;
   setUi('載入中', '伺服器資料', false);
   const base = await jsonRequest('/api/bootstrap', { headers: headers() });
+  if (version !== sessionVersion) return;
   hydrateBootstrap(base, '伺服器資料');
 }
 
 export async function loadServerReport() {
+  const version = sessionVersion;
   try {
     const data = await jsonRequest('/api/reports/summary', { headers: headers() });
+    if (version !== sessionVersion) return null;
     state.serverReport = data.summary || null;
     return state.serverReport;
   } catch {
@@ -376,9 +419,14 @@ export async function loadServerReport() {
 
 async function pushChanges() {
   if (!state.authToken) return;
+  const version = sessionVersion;
 
   const jobs = [];
   for (const [key, entity] of Object.entries(ENTITY_MAP)) {
+    if (state.userRole !== 'admin') {
+      if (key === 'lineDestinations') continue;
+      if (Array.isArray(state.allowedViews) && !state.allowedViews.includes(WRITE_VIEWS[key])) continue;
+    }
     const before = snapshots[key] || new Map();
     const current = new Set();
 
@@ -395,7 +443,12 @@ async function pushChanges() {
             headers: headers(true),
             body: JSON.stringify(cleanRecord(row)),
           },
-        ));
+        ).then(() => {
+          if (version === sessionVersion) {
+            snapshots[key] ||= new Map();
+            snapshots[key].set(row.id, encoded);
+          }
+        }));
       }
     }
 
@@ -404,7 +457,9 @@ async function pushChanges() {
         jobs.push(jsonRequest(
           `/api/data/${entity}/${encodeURIComponent(id)}`,
           { method: 'DELETE', headers: headers() },
-        ));
+        ).then(() => {
+          if (version === sessionVersion) snapshots[key]?.delete(id);
+        }));
       }
     }
   }
@@ -412,8 +467,10 @@ async function pushChanges() {
   if (!jobs.length) return;
 
   setUi('儲存中', '送出變更', false);
-  await Promise.all(jobs);
-  for (const key of Object.keys(ENTITY_MAP)) snapshot(key);
+  const results = await Promise.allSettled(jobs);
+  if (version !== sessionVersion) return;
+  const failed = results.find((result) => result.status === 'rejected');
+  if (failed) throw failed.reason;
   setUi('已儲存', '單筆同步');
 }
 
@@ -423,18 +480,28 @@ function applyChange(change) {
 
   const rows = state[key] || [];
   const index = rows.findIndex((row) => row.id === change.id);
+  const baseline = snapshots[key] || new Map();
+  const local = index >= 0 ? JSON.stringify(rows[index]) : undefined;
+  if (local !== baseline.get(change.id)) return;
   if (change.deleted) {
     if (index >= 0) rows.splice(index, 1);
-    return;
+    baseline.delete(change.id);
+    return key;
   }
 
   const next = { ...(change.data || {}), id: change.id, _updatedAt: change.updatedAt };
   if (index >= 0) rows[index] = next;
   else if (rows.length < 100) rows.unshift(next);
+  if (rows.some((row) => row.id === change.id)) baseline.set(change.id, JSON.stringify(next));
+  snapshots[key] = baseline;
+  return key;
 }
 
 export async function pullServerState() {
   if (!state.authToken) return;
+  const version = sessionVersion;
+  await saveQueue;
+  if (version !== sessionVersion) return;
   if (!initializedRemote) {
     await loadBootstrap();
     return;
@@ -442,10 +509,15 @@ export async function pullServerState() {
 
   try {
     const data = await jsonRequest(`/api/changes?since=${changeCursor}&limit=5000`, { headers: headers() });
-    (data.changes || []).forEach(applyChange);
+    if (version !== sessionVersion) return;
+    const applied = (data.changes || []).filter((change) => applyChange(change));
     changeCursor = Number(data.cursor || changeCursor);
     normalizeStateData();
-    for (const key of Object.keys(ENTITY_MAP)) snapshot(key);
+    for (const change of applied) {
+      const key = REVERSE_ENTITY[change.entity];
+      const row = state[key].find((item) => item.id === change.id);
+      if (row) snapshots[key].set(change.id, JSON.stringify(row));
+    }
     if (data.changes?.length) refresh();
     setUi('已儲存', '增量同步');
   } catch (err) {
@@ -462,7 +534,11 @@ export function startStoreSync() {
 export function saveState() {
   normalizeStateData();
   localStorage.setItem('uiSettings', JSON.stringify(state.settings));
-  pushChanges().catch((err) => setUi('儲存失敗', err.message, false));
+  const version = sessionVersion;
+  saveQueue = saveQueue.then(() => {
+    if (version === sessionVersion) return pushChanges();
+  }).catch((err) => setUi('儲存失敗', err.message, false));
+  return saveQueue;
 }
 
 export function appendSystemEvent(message, level = 'info', meta = {}) {

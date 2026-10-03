@@ -15,7 +15,7 @@ except ImportError:
     abort = jsonify = request = send_from_directory = None
 
 
-app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path='') if Flask is not None else None
+app = Flask(__name__, static_folder=None) if Flask is not None else None
 
 
 def get_lan_ips():

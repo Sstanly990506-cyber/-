@@ -50,7 +50,7 @@ export function renderInventory(state) {
   const visible = getVisibleInventoryItems(state);
   if ($('inventoryItemsCount')) $('inventoryItemsCount').textContent = String(items.length);
   if ($('inventoryLowCount')) $('inventoryLowCount').textContent = String(items.filter((item) => Number(item.stock || 0) <= Number(item.safetyStock || 0)).length);
-  if ($('inventoryStockValue')) $('inventoryStockValue').textContent = `?? ${money(items.reduce((sum, item) => sum + Number(item.stock || 0), 0))}`;
+  if ($('inventoryStockValue')) $('inventoryStockValue').textContent = `總量 ${money(items.reduce((sum, item) => sum + Number(item.stock || 0), 0))}`;
   if (!body) return;
   body.innerHTML = visible.map((item) => {
     const low = Number(item.stock || 0) <= Number(item.safetyStock || 0);

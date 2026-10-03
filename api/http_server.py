@@ -11,7 +11,7 @@ from api.storage import BASE_DIR
 SENSITIVE_SUFFIXES={'.db','.sqlite','.sqlite3','.py','.bat','.ps1','.sh'};BLOCKED_PATH_PARTS={'data'};PUBLIC_ROOT=Path(BASE_DIR).resolve()
 def is_sensitive_path(path):return any(path.split('?',1)[0].lower().endswith(s) for s in SENSITIVE_SUFFIXES)
 def is_blocked_static_path(path):
-    c=Path(path);parts=[p.lower() for p in c.parts if p not in {'','.'}];return c.is_absolute() or '..' in parts or any(p in BLOCKED_PATH_PARTS for p in parts) or is_sensitive_path(path)
+    c=Path(path);parts=[p.lower() for p in c.parts if p not in {'','.'}];return c.is_absolute() or '..' in parts or any(p in BLOCKED_PATH_PARTS or p.startswith('.') for p in parts) or is_sensitive_path(path)
 def resolve_public_file(rel):
     if is_blocked_static_path(rel):return None
     f=(PUBLIC_ROOT/rel).resolve()

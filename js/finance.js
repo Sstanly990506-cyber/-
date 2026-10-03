@@ -1,5 +1,5 @@
 ﻿import { $, COMPANY_INFO, money, downloadCsv, getTodayText, escapeHtml } from './shared.js';
-import { getOrderReceivableKey } from './store.js';
+import { getOrderReceivableKey } from './store.js?v=20261003-system-audit-1';
 import { toTaiInch } from './pricing.js';
 
 const selectedInvoiceOrderIds = new Set();
@@ -246,7 +246,7 @@ function renderMonthClose(state, reportA) {
   if (monthInput && !monthInput.value) monthInput.value = currentMonthText();
   const data = getMonthCloseData(state, reportA, monthInput?.value);
   if ($('financeMonthSummary')) {
-    $('financeMonthSummary').textContent = `${data.month} ??嚗歇??${money(data.receivedTotal)}嚗歇隞?${money(data.paidTotal)}嚗楊?暸? ${money(data.cashNet)}嚗??${money(data.receivableUnpaid)}嚗隞?${money(data.payableUnpaid)}`;
+    $('financeMonthSummary').textContent = `${data.month} 月結：已收 ${money(data.receivedTotal)}，已付 ${money(data.paidTotal)}，現金淨額 ${money(data.cashNet)}，未收 ${money(data.receivableUnpaid)}，未付 ${money(data.payableUnpaid)}`;
   }
   if ($('financeMonthCloseTbody')) {
     $('financeMonthCloseTbody').innerHTML = `
@@ -343,8 +343,8 @@ function renderFinanceInsights(state, reportA) {
   const recent = [...state.audits].slice(0, 5);
   const recentWrap = $('financeRecentChanges');
   recentWrap.innerHTML = recent.length
-    ? recent.map((a) => `<li>${escapeHtml(a.changedAt || '-')}嚚?{escapeHtml(a.orderNumber || '-')}嚚?{escapeHtml(a.field || '-')}嚗?{escapeHtml(a.before)} ??${escapeHtml(a.after)}</li>`).join('')
-    : '<li>?桀?瘝??啣?蝝??/li>';
+    ? recent.map((a) => `<li>${escapeHtml(a.changedAt || '-')}｜${escapeHtml(a.orderNumber || '-')}｜${escapeHtml(a.field || '-')}：${escapeHtml(a.before)} → ${escapeHtml(a.after)}</li>`).join('')
+    : '<li>目前沒有修改紀錄。</li>';
 
   const dueLimit = new Date();
   dueLimit.setDate(dueLimit.getDate() + 7);
@@ -352,8 +352,8 @@ function renderFinanceInsights(state, reportA) {
   $('financeDueSoonCount').textContent = String(dueSoon.length);
   const dueWrap = $('financeDueSoonList');
   dueWrap.innerHTML = dueSoon.length
-    ? dueSoon.map((r) => `<li>${escapeHtml(r.date)}嚚?{escapeHtml(r.customer)}嚚?{escapeHtml(r.orderNumber)}嚚??${money(r.remain)}</li>`).join('')
-    : '<li>7 ?亙?∪翰?唳?撣單狡</li>';
+    ? dueSoon.map((r) => `<li>${escapeHtml(r.date)}｜${escapeHtml(r.customer)}｜${escapeHtml(r.orderNumber)}｜未收 ${money(r.remain)}</li>`).join('')
+    : '<li>7 天內沒有到期帳款。</li>';
 }
 
 function renderFinanceChartAndAnalysis(reportC, reportA) {
@@ -368,7 +368,7 @@ function renderFinanceChartAndAnalysis(reportC, reportA) {
       const width = Math.round((Math.abs(net) / maxNet) * 100);
       return `<div class="chart-bar-row"><span>${escapeHtml(row.month)}</span><div class="chart-bar-track"><div class="chart-bar-fill ${net < 0 ? 'neg' : ''}" style="width:${width}%"></div></div><strong>${money(net)}</strong></div>`;
     }).join('')
-    : '<p class="sub">?桀?瘝??鞈?</p>';
+    : '<p class="sub">目前沒有現金流資料。</p>';
 
   const totalRecv = reportA.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const totalReceived = reportA.reduce((sum, row) => sum + Number(row.received || 0), 0);
@@ -397,10 +397,10 @@ function renderFinanceQuickActions(state, reportA) {
         <td>${escapeHtml(r.orderNumber || '-')}</td>
         <td>${money(r.remain)}</td>
         <td class="table-actions">
-          <button class="btn small" type="button" data-finance-receivable-done="${escapeHtml(r.key)}">?嗆?</button>
-          <button class="btn small ghost" type="button" data-finance-receivable-delete="${escapeHtml(r.key)}">?芷</button>
+          <button class="btn small" type="button" data-finance-receivable-done="${escapeHtml(r.key)}">收款</button>
+          <button class="btn small ghost" type="button" data-finance-receivable-delete="${escapeHtml(r.key)}">刪除</button>
         </td>
-      </tr>`).join('') : '<tr><td colspan="4">?桀?瘝?敺甈整?/td></tr>';
+      </tr>`).join('') : '<tr><td colspan="4">目前沒有待收款資料。</td></tr>';
   }
   if (payableWrap) {
     const rows = state.payables
@@ -414,10 +414,10 @@ function renderFinanceQuickActions(state, reportA) {
         <td>${escapeHtml(p.item || '-')}</td>
         <td>${money(p.unpaid)}</td>
         <td class="table-actions">
-          <button class="btn small" type="button" data-finance-payable-done="${escapeHtml(p.id)}">隞?</button>
-          <button class="btn small ghost" type="button" data-finance-payable-delete="${escapeHtml(p.id)}">?芷</button>
+          <button class="btn small" type="button" data-finance-payable-done="${escapeHtml(p.id)}">付款</button>
+          <button class="btn small ghost" type="button" data-finance-payable-delete="${escapeHtml(p.id)}">刪除</button>
         </td>
-      </tr>`).join('') : '<tr><td colspan="4">?桀?瘝?敺?甈整?/td></tr>';
+      </tr>`).join('') : '<tr><td colspan="4">目前沒有待付款資料。</td></tr>';
   }
 }
 
@@ -431,10 +431,10 @@ function buildTodayAlerts(state, reportA) {
   const dueSoon = reportA.filter((r) => r.remain > 0 && r.date && new Date(r.date) <= dueLimit);
 
   const alerts = [];
-  unpaidToday.forEach((p) => alerts.push(`???芯?嚗?{p.vendor || '-'} / ${p.item || '-'} / ?芯? ${money(Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)))}`));
-  dueSoon.forEach((r) => alerts.push(`???嚗?{r.customer} / ${r.orderNumber} / ?芣 ${money(r.remain)}`));
-  alerts.push(...auditToday.slice(0, 3).map((a) => `隞?啣?嚗?{a.orderNumber || '-'} ${a.field || '-'} ${a.before}??{a.after}`));
-  return alerts.length ? alerts : ['隞?怎??'];
+  unpaidToday.forEach((p) => alerts.push(`待付款：${p.vendor || '-'} / ${p.item || '-'} / 未付 ${money(Math.max(0, Number(p.amount || 0) - Number(p.paid || 0)))}`));
+  dueSoon.forEach((r) => alerts.push(`帳款到期：${r.customer} / ${r.orderNumber} / 未收 ${money(r.remain)}`));
+  alerts.push(...auditToday.slice(0, 3).map((a) => `今日修改：${a.orderNumber || '-'} ${a.field || '-'} ${a.before} → ${a.after}`));
+  return alerts.length ? alerts : ['今日沒有待辦提醒。'];
 }
 
 function renderTodayAlerts(state, reportA) {
@@ -486,7 +486,7 @@ async function sendFinanceLineReminder(state, reportA) {
   const response = await fetch('/api/line/push', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
-    body: JSON.stringify({ message: buildFinanceLineReminder(state, reportA) }),
+    body: JSON.stringify({ message: buildFinanceLineReminder(state, reportA), manual: true }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
@@ -509,7 +509,7 @@ function ensureFinanceOverview(state, reportA) {
   const main = $('financeMainScreen');
   if (!main) return;
   const heading = main.querySelector(':scope > h3');
-  if (heading) heading.textContent = state.financeScreen === 'concerns' ? '?敺齒' : '鞎∠???';
+  if (heading) heading.textContent = state.financeScreen === 'concerns' ? '疑慮待辦' : '財經重點';
 
   if (!$('financeOverviewIntro')) {
     const intro = document.createElement('div');
@@ -517,13 +517,13 @@ function ensureFinanceOverview(state, reportA) {
     intro.className = 'finance-overview-intro';
     intro.innerHTML = `
       <div>
-        <strong>????嚗?閬??楛??/strong>
-        <p class="sub">擐??芷＊蝷粹?閬?憿???賊?嚗??渲???靽??典????/p>
+        <strong>先看重點，再查看明細</strong>
+        <p class="sub">收付款、疑慮與報表分開查看，讓財務資訊更清楚。</p>
       </div>
       <div class="finance-overview-actions">
-        <button class="finance-action-card" type="button" data-finance-screen="concerns"><strong>?敺齒</strong><span>?暹????隞狡?????/span></button>
-        <button class="finance-action-card" type="button" data-finance-screen="entry"><strong>?啣??嗡?甈?/strong><span>?駁????隞???/span></button>
-        <button class="finance-action-card" type="button" data-finance-screen="workspace"><strong>?潛巨?銵?/strong><span>?潛巨??蝯?摰Ｘ撠董</span></button>
+        <button class="finance-action-card" type="button" data-finance-screen="concerns"><strong>疑慮待辦</strong><span>追蹤未收、未付與異常紀錄</span></button>
+        <button class="finance-action-card" type="button" data-finance-screen="entry"><strong>新增收付款</strong><span>登記應收與應付款</span></button>
+        <button class="finance-action-card" type="button" data-finance-screen="workspace"><strong>發票與報表</strong><span>開立發票、月結與客戶對帳</span></button>
       </div>`;
     heading?.after(intro);
 
@@ -531,7 +531,7 @@ function ensureFinanceOverview(state, reportA) {
     if (kpiGrid) {
       const concern = document.createElement('div');
       concern.className = 'kpi finance-concern-kpi';
-      concern.innerHTML = '<span>?閬釣??/span><strong id="financeConcernCount">0</strong>';
+      concern.innerHTML = '<span>需要關注</span><strong id="financeConcernCount">0</strong>';
       kpiGrid.append(concern);
     }
   }
@@ -645,19 +645,19 @@ export function bindFinanceEvents(state, saveState, renderAll) {
   });
 
   $('exportReportABtn')?.addEventListener('click', () => {
-    const rows = [['摰Ｘ', '撌亙', '?', '撌脫', '?芣', '撣喲翩(憭?']];
+    const rows = [['客戶', '工單', '應收', '已收', '未收', '帳齡(天)']];
     getLinkedReceivablesData(state).forEach((r) => rows.push([r.customer, r.orderNumber, r.amount, r.received, r.remain, r.age]));
-    downloadCsv('report-A-?撣喲翩.csv', rows);
+    downloadCsv('report-A-receivables.csv', rows);
   });
   $('exportReportBBtn')?.addEventListener('click', () => {
-    const rows = [['撌亙', '摰Ｘ', '?嗅', '隡啁??(70%)', '瘥']];
+    const rows = [['工單', '客戶', '收入', '估計成本(70%)', '毛利']];
     getReportBData(state).forEach((r) => rows.push([r.orderNumber, r.customer, r.revenue, r.cost, r.gross]));
-    downloadCsv('report-B-瘥.csv', rows);
+    downloadCsv('report-B-margin.csv', rows);
   });
   $('exportReportCBtn')?.addEventListener('click', () => {
-    const rows = [['?遢', '?嗅', '?臬', '瘛券?']];
+    const rows = [['月份', '收入', '支出', '淨額']];
     getReportCData(state).forEach((r) => rows.push([r.month, r.income, r.expense, r.net]));
-    downloadCsv('report-C-?嗆?.csv', rows);
+    downloadCsv('report-C-cashflow.csv', rows);
   });
   $('financeCloseMonth')?.addEventListener('change', () => renderMonthClose(state, getLinkedReceivablesData(state)));
   $('exportMonthCloseBtn')?.addEventListener('click', () => exportMonthClose(state, getLinkedReceivablesData(state)));

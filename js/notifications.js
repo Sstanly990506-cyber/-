@@ -136,7 +136,7 @@ async function sendLineTest(state) {
   const response = await fetch('/api/line/push', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, manual: true }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);

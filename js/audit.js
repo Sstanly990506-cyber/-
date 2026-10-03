@@ -31,19 +31,19 @@ function renderAuditInsights(state) {
   const filtered = getFilteredAudits(state);
   const trend = new Map();
   filtered.forEach((row) => {
-    const key = String(row.changedAt || '').slice(0, 10) || '?芸‵?交?';
+    const key = String(row.changedAt || '').slice(0, 10) || '未知日期';
     trend.set(key, (trend.get(key) || 0) + 1);
   });
   const rows = [...trend.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-10);
   const max = Math.max(1, ...rows.map(([, count]) => count));
   trendWrap.innerHTML = rows.length
     ? rows.map(([day, count]) => `<div class="chart-bar-row"><span>${escapeHtml(day)}</span><div class="chart-bar-track"><div class="chart-bar-fill" style="width:${Math.round((count / max) * 100)}%"></div></div><strong>${count}</strong></div>`).join('')
-    : '<p class="sub">?桀??∟隅?Ｚ???/p>';
+    : '<p class="sub">目前沒有稽核紀錄。</p>';
 
   const anomalies = filtered.filter((row) => isAnomalyAudit(row)).slice(0, 8);
   anomalyWrap.innerHTML = anomalies.length
     ? anomalies.map((row) => `<li>${escapeHtml(row.changedAt || '-')}｜${escapeHtml(row.orderNumber || '-')}｜${escapeHtml(row.field || '-')}：${escapeHtml(row.before)} → ${escapeHtml(row.after)}</li>`).join('')
-    : '<li>?桀??芸皜砍?＊?啣虜??/li>';
+    : '<li>目前沒有異常紀錄。</li>';
 }
 
 function refreshFieldFilterOptions(state) {
@@ -51,7 +51,7 @@ function refreshFieldFilterOptions(state) {
   if (!select) return;
   const current = select.value;
   const fields = [...new Set(state.audits.map((a) => a.field).filter(Boolean))];
-  select.innerHTML = '<option value="">?券甈?</option>' + fields.map((field) => `<option value="${escapeHtml(field)}">${escapeHtml(field)}</option>`).join('');
+  select.innerHTML = '<option value="">全部欄位</option>' + fields.map((field) => `<option value="${escapeHtml(field)}">${escapeHtml(field)}</option>`).join('');
   select.value = fields.includes(current) ? current : '';
 }
 
@@ -110,8 +110,8 @@ export function bindAuditEvents(state, saveState, renderAll) {
       if (!orderNumber && !field && !changedAt) return;
       state.audits.unshift({
         id: crypto.randomUUID(),
-        orderNumber: orderNumber || '(憭鞈?)',
-        field: field || '憭甈?',
+        orderNumber: orderNumber || '(匯入資料)',
+        field: field || '匯入欄位',
         before: before || '',
         after: after || '',
         changedAt: changedAt || new Date().toLocaleString(),

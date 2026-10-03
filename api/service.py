@@ -19,6 +19,7 @@ def require_account(token):
 def require_entity_access(token,entity):
     account=require_account(token)
     if entity not in ENTITY_VIEW:raise ApiError('unsupported entity',404)
+    if entity=='lineDestinations' and account.get('role')!='admin':raise ApiError('admin role required',403)
     if not account_can_view(account,ENTITY_VIEW[entity]):raise ApiError('permission denied',403)
     return account
 def require_entity_read_access(token,entity):
@@ -35,6 +36,11 @@ def account_can_read_entity(account,entity):
     return entity in {'orders','customers'} and account_can_view(account,'tripsView')
 def bootstrap_entities_for_account(account):
     return [entity for entity in ENTITY_VIEW if account_can_read_entity(account,entity)]
+
+def visible_record(account,entity,row):
+    if entity not in {'orders','customers'} or account_can_view(account,ENTITY_VIEW[entity]):return row
+    fields={'id','name','address','phone','active','role','_updatedAt','updatedAt'} if entity=='customers' else {'id','orderNumber','orderDate','status','upstream','downstream','address','_updatedAt','updatedAt'}
+    return {key:value for key,value in row.items() if key in fields}
 def filter_state_for_account(state,account):
     payload=dict(DEFAULT_APP_STATE)
     for field in DEFAULT_APP_STATE:
@@ -58,6 +64,7 @@ def merge_state_for_account(current,incoming,account):
         if field=='settings':
             if (account or {}).get('role')=='admin' and field in incoming:merged[field]=incoming[field]
             continue
+        if field=='lineDestinations' and (account or {}).get('role')!='admin':continue
         if field in incoming and field in STATE_FIELD_VIEW and account_can_view(account,STATE_FIELD_VIEW[field]):
             merged[field]=incoming[field]
     if 'syncTick' in incoming:merged['syncTick']=incoming['syncTick']
@@ -90,7 +97,10 @@ def bootstrap_payload(token):
 def build_bootstrap_payload(account,include_pages=True):
     source=filter_state_for_account(read_state(),account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True
     if include_pages:
-        try:payload['initialPages']=first_pages_for_entities(bootstrap_entities_for_account(account),100)
+        try:
+            payload['initialPages']=first_pages_for_entities(bootstrap_entities_for_account(account),100)
+            for entity,page in payload['initialPages'].items():
+                page['items']=[visible_record(account,entity,row) for row in page.get('items',[])]
         except Exception as err:payload['initialPagesError']=str(err);payload['initialPages']={}
     return payload
 def get_state_payload(token):
@@ -104,8 +114,11 @@ def update_state_payload(token,payload):
     if not ok:raise ApiError('stale syncTick',409,serverSyncTick=tick)
     return {'ok':True,'syncTick':tick}
 def list_entity_payload(token,entity,page=1,page_size=100,query=''):
-    require_entity_read_access(token,entity)
-    try:return list_records(entity,page,page_size,query)
+    account=require_entity_read_access(token,entity)
+    try:
+        result=list_records(entity,page,page_size,query)
+        result['items']=[visible_record(account,entity,row) for row in result.get('items',[])]
+        return result
     except ValueError as err:raise ApiError(str(err),400) from err
 def upsert_entity_payload(token,entity,record_id,payload):
     require_entity_access(token,entity)
@@ -152,7 +165,9 @@ def restore_backup_payload(token,payload):
     result=restore_records(backup.get('records'))
     return {'ok':True,'restored':result.get('restored') or {},'syncTick':tick,'message':'備份已還原；帳號、財務密碼與系統設定安全資訊已保留。'}
 def changes_payload(token,since=0,limit=1000):
-    account=require_account(token);result=changes_since(since,limit);result['changes']=[row for row in result['changes'] if account_can_read_entity(account,row.get('entity'))];return result
+    account=require_account(token);result=changes_since(since,limit)
+    result['changes']=[{**row,'data':visible_record(account,row.get('entity'),row.get('data') or {})} for row in result['changes'] if account_can_read_entity(account,row.get('entity'))]
+    return result
 def _all_records(entity):
     first=list_records(entity,1,500);rows=list(first['items'])
     for page in range(2,first['pages']+1):rows.extend(list_records(entity,page,500)['items'])
@@ -212,6 +227,7 @@ def send_line_payload(token,payload):
     account=require_account(token)
     if not account_can_view(account,'notificationsView'):raise ApiError('permission denied',403)
     if payload is not None and not isinstance(payload,dict):raise ApiError('invalid json',400)
+    if (payload or {}).get('manual') is not True:raise ApiError('automatic LINE push is disabled',403)
     from api.line_bot import LineBotError, send_line_message
     try:return send_line_message((payload or {}).get('message'))
     except LineBotError as err:raise ApiError(str(err),err.status) from err
@@ -388,7 +404,7 @@ def execute_trip_payload(token,payload):
         'alreadySent':already_sent,
         'skippedCompleted':0,
         'missing':missing,
-        'orders':updated_orders,
+        'orders':[visible_record(account,'orders',row) for row in updated_orders],
     }
 def pricing_quote_payload(token,payload):
     account=require_account(token)

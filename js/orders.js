@@ -1,5 +1,5 @@
 import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
-import { syncOrderToReceivables } from './store.js';
+import { syncOrderToReceivables } from './store.js?v=20261003-system-audit-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';

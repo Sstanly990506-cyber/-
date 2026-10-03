@@ -1,5 +1,5 @@
 import { $, COMPANY_INFO, MODULE_DEFINITIONS, isModuleEnabledInSettings } from './shared.js?v=20260714-trip-route-text-1';
-import { applyUiSettings, bindSettingsEvents, renderSettings } from './settings.js?v=20260714-trip-route-text-1';
+import { applyUiSettings, bindSettingsEvents, renderSettings } from './settings.js?v=20261003-system-audit-1';
 import {
   state,
   configureStore,
@@ -11,22 +11,20 @@ import {
   setAuthToken,
   getIntegrityReport,
   appendSystemEvent,
-} from './store.js';
+} from './store.js?v=20261003-system-audit-1';
 import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20260714-ai-rules-3';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20260715-mobile-company-suggestions-1';
-import { renderFinance, bindFinanceEvents } from './finance.js?v=20260714-trip-route-text-1';
-import { renderAudits, bindAuditEvents } from './audit.js?v=20260714-trip-route-text-1';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261003-system-audit-1';
+import { renderFinance, bindFinanceEvents } from './finance.js?v=20261003-system-audit-1';
+import { renderAudits, bindAuditEvents } from './audit.js?v=20261003-system-audit-1';
 import { renderTrips, bindTripEvents } from './trips.js?v=20260714-factory-address-1';
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714-trip-route-text-1';
-import { renderInventory, bindInventoryEvents } from './inventory.js?v=20260714-trip-route-text-1';
-import { renderNotifications, bindNotificationEvents, refreshLineStatus } from './notifications.js?v=20260717-line-permissions-3';
-
-const APP_BUILD = '2026-07-14-order-buttons-1';
+import { renderInventory, bindInventoryEvents } from './inventory.js?v=20261003-system-audit-1';
+import { renderNotifications, bindNotificationEvents, refreshLineStatus } from './notifications.js?v=20261003-system-audit-1';
+function proactiveNotify() {
+  return buildSystemAlerts();
+}
+const APP_BUILD = '20261003-system-audit-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
-const REMINDER_LAST_SENT_AT_KEY = 'smartReminderLastSentAt';
-const REMINDER_LAST_SCORE_KEY = 'smartReminderLastScore';
-const REMINDER_LAST_SIGNATURE_KEY = 'smartReminderLastSignature';
-let lastCriticalSignature = '';
 let internalViewsFragment = null;
 let internalViewsMounted = true;
 let storeSyncStarted = false;
@@ -256,74 +254,6 @@ function buildSystemAlerts() {
   const integrity = getIntegrityReport();
   if (integrity.critical > 0) alerts.push({ level: 'critical', module: '資料完整性', text: `完整性問題 ${integrity.critical} 筆` });
 
-  return alerts;
-}
-
-function buildGlobalLineMessage(alerts) {
-  const lines = alerts.length
-    ? alerts.map((a) => `${a.level === 'critical' ? '🔴' : a.level === 'warning' ? '🟠' : '🔵'} [${a.module}] ${a.text}`)
-    : ['✅ 目前全系統狀態正常'];
-  return `【${COMPANY_INFO.name} 智能主動提醒】\n${COMPANY_INFO.address}\n時間：${new Date().toLocaleString()}\n\n${lines.join('\n')}`;
-}
-
-function getRiskScore(alerts) {
-  return alerts.reduce((sum, a) => sum + (a.level === 'critical' ? 4 : a.level === 'warning' ? 2 : 1), 0);
-}
-
-function pushGlobalLineReminder(alerts) {
-  const text = buildGlobalLineMessage(alerts);
-  const score = getRiskScore(alerts);
-  const signature = alerts.map((a) => `${a.level}|${a.module}|${a.text}`).join('\n');
-  localStorage.setItem(REMINDER_LAST_SENT_AT_KEY, String(Date.now()));
-  localStorage.setItem(REMINDER_LAST_SCORE_KEY, String(score));
-  localStorage.setItem(REMINDER_LAST_SIGNATURE_KEY, signature);
-  fetch('/api/line/push', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) },
-    body: JSON.stringify({ message: text }),
-  })
-    .then((res) => res.json().then((data) => ({ res, data })).catch(() => ({ res, data: {} })))
-    .then(({ res, data }) => {
-      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      appendSystemEvent(`已自動推送 LINE 智能提醒（風險分數 ${score}，${data.sent || 0} 個聊天室）`, 'warning', { score, count: alerts.length });
-      saveState();
-    })
-    .catch((err) => {
-      appendSystemEvent(`LINE 智能提醒未送出：${err.message}`, 'warning', { score, count: alerts.length });
-      saveState();
-    });
-}
-
-function shouldAutoPush(alerts) {
-  if (!alerts.length) return false;
-  const now = Date.now();
-  const lastSentAt = Number(localStorage.getItem(REMINDER_LAST_SENT_AT_KEY) || 0);
-  const elapsedMin = (now - lastSentAt) / 60000;
-  const lastScore = Number(localStorage.getItem(REMINDER_LAST_SCORE_KEY) || 0);
-  const score = getRiskScore(alerts);
-  const signature = alerts.map((a) => `${a.level}|${a.module}|${a.text}`).join('\n');
-  const lastSignature = localStorage.getItem(REMINDER_LAST_SIGNATURE_KEY) || '';
-
-  const criticalSignature = alerts.filter((a) => a.level === 'critical').map((a) => `${a.module}|${a.text}`).join('\n');
-  const hasNewCritical = criticalSignature && criticalSignature !== lastCriticalSignature;
-
-  if (hasNewCritical && elapsedMin >= 2) return true;
-  if (score >= 12 && score - lastScore >= 4 && elapsedMin >= 10) return true;
-  if (score >= 7 && signature !== lastSignature && elapsedMin >= 30) return true;
-  return false;
-}
-
-function proactiveNotify() {
-  const alerts = buildSystemAlerts();
-  const critical = alerts.filter((a) => a.level === 'critical');
-  const criticalSignature = critical.map((a) => `${a.module}|${a.text}`).join('\n');
-
-  if (critical.length && criticalSignature !== lastCriticalSignature) {
-    lastCriticalSignature = criticalSignature;
-    alert(`【企業級主動提醒】偵測到 ${critical.length} 項關鍵風險，系統將評估並自動通知。`);
-  }
-
-  if (shouldAutoPush(alerts)) pushGlobalLineReminder(alerts);
   return alerts;
 }
 

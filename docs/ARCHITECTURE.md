@@ -29,7 +29,7 @@
 - `api/records.py`: 統一資料讀寫介面。
 - `api/storage.py`: PostgreSQL 與本機 JSON 儲存實作。
 - `api/line_bot.py`: LINE webhook、推播、綁定與查詢回覆。
-- `api/openai_client.py`: AI 工單辨識。
+- `api/ai_orders.py`: AI 工單辨識。
 
 所有資料讀寫應集中經過 `api/records.py` / `api/service.py`，避免前端、本機伺服器與 Vercel 各自維護一份邏輯。
 

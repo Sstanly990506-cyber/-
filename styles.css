@@ -775,6 +775,12 @@ tbody tr:hover {
 .finance-action-card:hover,
 .finance-action-card.active { border-color: var(--primary); transform: translateY(-1px); }
 .finance-action-card span { color: var(--muted); font-size: 13px; }
+.finance-action-card { min-width: 0; overflow-wrap: anywhere; }
+.line-destination-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+button:focus-visible, a:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
 .finance-concern-kpi strong { color: #fbbf24; }
 .module-permission-grid,
 .account-permissions-list {

@@ -420,7 +420,7 @@ export function applyUiSettings(state) {
     const label = settings.moduleLabels[moduleId] || module?.label || moduleId;
     const description = settings.moduleDescriptions[moduleId] || module?.description || '可於設定中自訂此模組';
     const icon = settings.moduleIcons[moduleId] || module?.icon || '⚙️';
-    card.innerHTML = `<span class="nav-card-icon">${icon}</span><strong>${label}</strong>`;
+    card.innerHTML = `<span class="nav-card-icon">${escapeHtml(icon)}</span><strong>${escapeHtml(label)}</strong>`;
     card.title = description;
   });
 
