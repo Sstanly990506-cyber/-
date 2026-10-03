@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 import errno
 import socket
+import os
 
 from api.http_server import create_server, is_blocked_static_path
 from api.routes import GET_ROUTES, POST_ROUTES, resolve_get_route, resolve_post_route
 from api.line_bot import LineBotError, handle_line_webhook
 from api.service import ApiError, delete_entity_payload, list_entity_payload, upsert_entity_payload
 from api.storage import BASE_DIR, DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
+from api import local_ai
+
+if os.environ.get('VERCEL') == '1':
+    local_ai.configure_production()
 
 try:
     from flask import Flask, abort, jsonify, request, send_from_directory
@@ -30,6 +35,23 @@ def get_lan_ips():
 
 
 if app is not None:
+    @app.before_request
+    def protect_local_assistant():
+        if request.path.startswith('/api/local-ai/'):
+            try:
+                local_ai.validate_request(request.remote_addr, request.host, request.headers.get('Origin', ''), int(request.environ.get('SERVER_PORT', 80)), request.method, request.content_type or '', request.content_length or 0)
+            except ApiError as err:
+                return jsonify(err.payload), err.status
+            if request.headers.get('Transfer-Encoding'):
+                return jsonify({'ok': False, 'error': '不支援串流請求。'}), 400
+
+    @app.after_request
+    def private_ai_response(response):
+        if request.path.startswith('/api/local-ai/'):
+            response.headers['Cache-Control'] = 'no-store'
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response
+
     def bearer_token():
         scheme, _, token = request.headers.get('Authorization', '').partition(' ')
         return token.strip() if scheme.lower() == 'bearer' else ''

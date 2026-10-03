@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>三青 AI 本機配對</title>
+<style>body{margin:0;padding:32px 20px;background:#0b1120;color:#e5e7eb;font:16px/1.8 system-ui,sans-serif}main{max-width:680px;margin:auto}section{background:#1f2937;padding:24px;border-radius:16px;margin:20px 0}button,a{font:inherit;color:inherit}button{border:1px solid #64748b;border-radius:8px;background:#334155;padding:10px 16px;margin:6px;cursor:pointer}button.approve{background:#f59e0b;color:#111827;font-weight:700}button:focus-visible,a:focus-visible{outline:3px solid #a78bfa}small{font-size:14px;color:#cbd5e1}.code{font-size:28px;letter-spacing:.15em;color:#fcd34d}.error{color:#fda4af}</style></head>
+<body><main><h1>三青 AI 本機配對</h1><p>這是你電腦裡的控制頁，不是正式網站登入頁，不需要輸入密碼。</p>
+<p>只允許 <a href="https://omega-ten-20.vercel.app" target="_blank" rel="noopener noreferrer">三青正式網站</a> 配對。先在正式網站登入、按右下角 AI 的「連接這台電腦」，再回這裡核對帳號與配對編號。</p>
+<section><h2>等待你的確認</h2><div id="pending">正在讀取…</div></section>
+<section><p id="connected"></p><p>同意配對會讓該登入使用本機文件庫。只確認你自己剛剛發起的請求；新配對會取代舊配對。</p><button id="revoke" type="button">中斷所有配對</button><button id="stop" type="button">停止本機 AI</button></section><p id="status" role="status"></p>
+<small>不公開 Ollama、不開放路由器連接埠。授權最長 20 分鐘，重啟後需重新確認。</small></main><script src="/control.js" defer></script></body></html>

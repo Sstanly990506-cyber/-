@@ -1,5 +1,7 @@
 """Shared API route table for Flask, Vercel, and the built-in HTTP server."""
 
+from api.local_ai import public_config, demo_session, chat_payload, preview_payload, confirm_payload, stop_payload, session_payload, ticket_payload
+
 from api.service import (
     backup_payload,
     bootstrap_payload,
@@ -33,6 +35,8 @@ def query_value(query, key, default=''):
 
 
 GET_ROUTES = {
+    '/api/local-ai/session': lambda token, query: (session_payload, (token,)),
+    '/api/local-ai/config': lambda token, query: (public_config, (token, query)),
     '/api/health': lambda token, query: (health_payload, ()),
     '/health': lambda token, query: (health_payload, ()),
     '/api/bootstrap': lambda token, query: (bootstrap_payload, (token,)),
@@ -54,6 +58,12 @@ GET_ROUTES = {
 
 
 POST_ROUTES = {
+    '/api/local-ai/ticket': lambda token, payload: (ticket_payload, (token, payload)),
+    '/api/local-ai/stop': lambda token, payload: (stop_payload, (token, payload)),
+    '/api/local-ai/demo-session': lambda token, payload: (demo_session, (token, payload)),
+    '/api/local-ai/chat': lambda token, payload: (chat_payload, (token, payload)),
+    '/api/local-ai/preview': lambda token, payload: (preview_payload, (token, payload)),
+    '/api/local-ai/confirm': lambda token, payload: (confirm_payload, (token, payload)),
     '/api/state': lambda token, payload: (update_state_payload, (token, payload)),
     '/state': lambda token, payload: (update_state_payload, (token, payload)),
     '/api/users': lambda token, payload: (user_action_payload, (token, payload)),

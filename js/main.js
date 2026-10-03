@@ -24,6 +24,7 @@ function proactiveNotify() {
   return buildSystemAlerts();
 }
 const APP_BUILD = '20261003-system-audit-1';
+import { initializeLocalAi } from './local-ai.js?v=20260904-prod-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
 let internalViewsMounted = true;
@@ -558,6 +559,21 @@ function bootstrapFailed(err) {
 }
 
 try {
+  initializeLocalAi({
+    onDemoLogin: async ({ account, token, bootstrap }) => {
+      resetAuthenticatedSync();
+      setAuthToken(token);
+      state.user = account.display;
+      state.userRole = account.role;
+      state.allowedViews = account.allowedViews;
+      hydrateBootstrap(bootstrap, '本機假資料');
+      mountInternalViews();
+      $('welcomeText').textContent = '本機假資料示範（不是正式資料）';
+      showView('dashboardView');
+      await startAuthenticatedSync();
+    },
+    onDataChanged: async () => { await pullServerState(); renderAll(); },
+  });
   configureStore({ refreshFn: renderAll, syncUiFn: applySyncUi });
   setBuildVersion();
   initializeStore();

@@ -216,6 +216,7 @@ export function setAuthToken(token) {
     state.serverReport = null;
   }
   state.authToken = token || null;
+  window.dispatchEvent(new Event('app:auth-changed'));
 }
 
 export function configureStore({ refreshFn, syncUiFn }) {
