@@ -23,7 +23,7 @@ import { renderNotifications, bindNotificationEvents, refreshLineStatus } from '
 function proactiveNotify() {
   return buildSystemAlerts();
 }
-const APP_BUILD = '20261003-system-audit-1';
+const APP_BUILD = '20261004-navigation-1';
 import { initializeLocalAi } from './local-ai.js?v=20261003-system-audit-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
@@ -125,6 +125,7 @@ function renderDashboardNavCards() {
     button.className = 'nav-card';
     button.type = 'button';
     button.dataset.target = module.id;
+    button.addEventListener('click', () => openDashboardTarget(module.id));
     const iconNode = document.createElement('span');
     iconNode.className = 'nav-card-icon';
     iconNode.textContent = icon;
@@ -414,6 +415,12 @@ function showView(id) {
   }
 }
 
+function openDashboardTarget(id) {
+  if (!id) return;
+  if (id === 'financeView') openFinanceGate();
+  else showView(id);
+}
+
 async function verifyFinancePassword(password) {
   const res = await fetch('/api/users', {
     method: 'POST',
@@ -500,16 +507,11 @@ function bindCoreEvents() {
     });
   });
 
-  document.addEventListener('click', (e) => {
-    const priority = e.target.closest('[data-dashboard-target]');
-    if (priority?.dataset.dashboardTarget) {
-      if (priority.dataset.dashboardTarget === 'financeView') openFinanceGate();
-      else showView(priority.dataset.dashboardTarget);
-      return;
-    }
-    const opener = e.target.closest('[data-open-view]');
-    if (!opener) return;
-    showView(opener.dataset.openView);
+  document.querySelectorAll('[data-dashboard-target]').forEach((button) => {
+    button.addEventListener('click', () => openDashboardTarget(button.dataset.dashboardTarget));
+  });
+  document.querySelectorAll('[data-open-view]').forEach((button) => {
+    button.addEventListener('click', () => showView(button.dataset.openView));
   });
 
   $('logoutBtn')?.addEventListener('click', () => {
@@ -530,20 +532,11 @@ function bindCoreEvents() {
 
   document.querySelectorAll('[data-back]').forEach((btn) => btn.addEventListener('click', () => showView('dashboardView')));
 
-  document.addEventListener('click', (e) => {
-    const card = e.target.closest('.nav-card');
-    if (!card) return;
-    const target = card.dataset.target;
-    if (target === 'financeView') {
-      openFinanceGate();
-      return;
-    }
-    showView(target);
-  });
-
   window.addEventListener('keydown', (e) => {
     if (!state.settings?.enableKeyboardShortcut) return;
-    if (e.key.toLowerCase() === 'a' && !$('dashboardView').classList.contains('hidden')) showView('auditView');
+    if (typeof e.key !== 'string' || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (e.key.toLowerCase() === 'a' && $('dashboardView') && !$('dashboardView').classList.contains('hidden')) showView('auditView');
   });
 }
 

@@ -243,7 +243,9 @@ class StaticStructureTests(unittest.TestCase):
         self.assertNotIn('NT$', dashboard_block)
         self.assertIn('pendingReceivables', dashboard_block)
         self.assertIn('pendingPayables', dashboard_block)
-        self.assertIn("priority.dataset.dashboardTarget === 'financeView'", main)
+        self.assertIn("if (id === 'financeView') openFinanceGate();", main)
+        self.assertIn("openDashboardTarget(button.dataset.dashboardTarget)", main)
+        self.assertIn("button.addEventListener('click', () => openDashboardTarget(module.id))", main)
         self.assertIn('.dashboard-module-grid { grid-template-columns: repeat(2', styles)
 
     def test_user_entered_tables_avoid_raw_inner_html(self):
