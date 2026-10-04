@@ -13,7 +13,7 @@ import {
   appendSystemEvent,
 } from './store.js?v=20261003-system-audit-1';
 import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20260714-ai-rules-3';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261003-system-audit-1';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261004-ui-check-1';
 import { renderFinance, bindFinanceEvents } from './finance.js?v=20261003-system-audit-1';
 import { renderAudits, bindAuditEvents } from './audit.js?v=20261003-system-audit-1';
 import { renderTrips, bindTripEvents } from './trips.js?v=20260714-factory-address-1';
@@ -23,7 +23,7 @@ import { renderNotifications, bindNotificationEvents, refreshLineStatus } from '
 function proactiveNotify() {
   return buildSystemAlerts();
 }
-const APP_BUILD = '20261004-navigation-1';
+const APP_BUILD = '20261004-ui-check-1';
 import { initializeLocalAi } from './local-ai.js?v=20261003-system-audit-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;

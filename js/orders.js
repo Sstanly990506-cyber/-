@@ -672,7 +672,7 @@ export function renderOrders(state, renderCustomerOptions) {
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        ${positionActions}${quickActions || '<span class="sub">無快速操作</span>'}
+        <div class="order-action-group">${positionActions}${quickActions || '<span class="sub">無快速操作</span>'}</div>
       </td>`;
     body.append(tr);
   });
