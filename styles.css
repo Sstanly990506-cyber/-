@@ -31,6 +31,10 @@ body {
   padding: 28px 24px 40px;
 }
 .panel { display: grid; gap: 12px; }
+.panel > *,
+.orders-layout > *,
+.split > *,
+.settings-grid > * { min-width: 0; }
 .panel.view-entering {
   animation: viewEnter 0.28s ease both;
 }
@@ -477,7 +481,7 @@ input[type="checkbox"] { width: auto; }
 }
 .orders-layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 240px minmax(0, 1fr);
   gap: 16px;
 }
 .ai-order-recognizer {
@@ -615,6 +619,7 @@ tbody tr:hover {
   font-size: 12px;
 }
 .orders-table {
+  min-width: 560px;
   table-layout: fixed;
   font-size: 13px;
 }
@@ -706,7 +711,7 @@ tbody tr:hover {
   color: var(--muted);
   font-size: 12px;
 }
-.order-number-copy { white-space: nowrap; }
+.order-number-copy { white-space: normal; overflow-wrap: anywhere; }
 .monthly-statement-table { min-width: 850px; }
 .monthly-statement-table .numeric { text-align: right; white-space: nowrap; }
 #monthlyWarnings { color: #fcd34d; }
@@ -1220,10 +1225,12 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
 
 @media (max-width: 640px) {
   .app-shell { padding: 18px 14px 28px; }
-  .topbar { align-items: flex-start; }
+  .topbar { align-items: flex-start; flex-wrap: wrap; }
+  .topbar > div { min-width: 0; }
+  .topbar > div:last-child { width: 100%; }
   .topbar > div:last-child { justify-content: flex-start; }
   .line-destination-row { grid-template-columns: 1fr; }
-  .dashboard-accountbar { align-items: flex-start; }
+  .dashboard-accountbar { align-items: flex-start; flex-wrap: wrap; }
   .dashboard-account-actions { width: 100%; }
   .dashboard-account-actions .btn { width: auto; flex: 1; }
   .dashboard-priority-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1265,7 +1272,7 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .orders-table td::before { content: none; }
   .orders-table .order-row-actions { min-width: 144px; }
   .orders-table .order-position-actions .btn { width: auto; }
-  .orders-table .order-row-actions .btn { flex: 0 0 auto; }
+  .orders-table .order-row-actions .btn { width: auto; flex: 0 0 auto; }
   .orders-table .orders-empty-row td { display: table-cell; padding: 28px 12px; }
 }
 
