@@ -2,7 +2,7 @@
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from api.records import changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
+from api.records import get_record, write_record_batch, changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
 from api.ai_orders import OrderRecognitionError, add_recognition_review, get_order_recognition_result, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.trip_optimizer import optimize_trip
@@ -16,15 +16,26 @@ def require_account(token):
     account=verify_session_token(token)
     if not account:raise ApiError('login required',401)
     return account
+def finance_is_unlocked(account):
+    return float((account or {}).get('financeUntil') or 0) > time.time()
+
+def require_finance(account):
+    if not account_can_view(account, 'financeView'):
+        raise ApiError('permission denied', 403)
+    if not finance_is_unlocked(account):
+        raise ApiError('finance unlock required', 403, financeLocked=True)
+
 def require_entity_access(token,entity):
     account=require_account(token)
     if entity not in ENTITY_VIEW:raise ApiError('unsupported entity',404)
     if entity=='lineDestinations' and account.get('role')!='admin':raise ApiError('admin role required',403)
     if not account_can_view(account,ENTITY_VIEW[entity]):raise ApiError('permission denied',403)
+    if entity in {'receivables', 'payables'}:require_finance(account)
     return account
 def require_entity_read_access(token,entity):
     account=require_account(token)
     if entity not in ENTITY_VIEW:raise ApiError('unsupported entity',404)
+    if entity in {'receivables', 'payables'}:require_finance(account)
     if not account_can_read_entity(account,entity):raise ApiError('permission denied',403)
     return account
 def account_can_view(account,view_id):
@@ -32,13 +43,15 @@ def account_can_view(account,view_id):
     if (account or {}).get('role')=='admin':return True
     return view_id in normalize_allowed_views((account or {}).get('allowedViews'),(account or {}).get('role') or 'viewer')
 def account_can_read_entity(account,entity):
+    if entity in {'receivables','payables'} and not finance_is_unlocked(account):return False
+    if entity in {'orders','customers'} and account_can_view(account,'financeView') and finance_is_unlocked(account):return True
     if account_can_view(account,ENTITY_VIEW.get(entity,'')):return True
     return entity in {'orders','customers'} and account_can_view(account,'tripsView')
 def bootstrap_entities_for_account(account):
     return [entity for entity in ENTITY_VIEW if account_can_read_entity(account,entity)]
 
 def visible_record(account,entity,row):
-    if entity not in {'orders','customers'} or account_can_view(account,ENTITY_VIEW[entity]):return row
+    if entity not in {'orders','customers'} or account_can_view(account,ENTITY_VIEW[entity]) or (account_can_view(account,'financeView') and finance_is_unlocked(account)):return row
     fields={'id','name','address','phone','active','role','_updatedAt','updatedAt'} if entity=='customers' else {'id','orderNumber','orderDate','status','upstream','downstream','address','_updatedAt','updatedAt'}
     return {key:value for key,value in row.items() if key in fields}
 def filter_state_for_account(state,account):
@@ -46,7 +59,7 @@ def filter_state_for_account(state,account):
     for field in DEFAULT_APP_STATE:
         if field=='settings':
             payload[field]=state.get(field)
-        elif field in STATE_FIELD_VIEW and account_can_view(account,STATE_FIELD_VIEW[field]):
+        elif field in STATE_FIELD_VIEW and account_can_view(account,STATE_FIELD_VIEW[field]) and (field not in {'receivables','payables'} or finance_is_unlocked(account)):
             payload[field]=state.get(field,payload[field])
         elif field in {'syncTick'}:
             payload[field]=state.get(field) or state.get('serverUpdatedAt') or 0
@@ -65,7 +78,7 @@ def merge_state_for_account(current,incoming,account):
             if (account or {}).get('role')=='admin' and field in incoming:merged[field]=incoming[field]
             continue
         if field=='lineDestinations' and (account or {}).get('role')!='admin':continue
-        if field in incoming and field in STATE_FIELD_VIEW and account_can_view(account,STATE_FIELD_VIEW[field]):
+        if field in incoming and field in STATE_FIELD_VIEW and account_can_view(account,STATE_FIELD_VIEW[field]) and (field not in {'receivables','payables'} or finance_is_unlocked(account)):
             merged[field]=incoming[field]
     if 'syncTick' in incoming:merged['syncTick']=incoming['syncTick']
     return merged
@@ -121,9 +134,54 @@ def list_entity_payload(token,entity,page=1,page_size=100,query=''):
         return result
     except ValueError as err:raise ApiError(str(err),400) from err
 def upsert_entity_payload(token,entity,record_id,payload):
-    require_entity_access(token,entity)
-    try:return upsert_record(entity,record_id,payload)
+    account=require_entity_access(token,entity)
+    if not isinstance(payload,dict):raise ApiError('invalid record',400)
+    previous = get_record('orders', record_id) if entity == 'orders' else None
+    if entity == 'orders' and previous:
+        payload={**previous,**payload}
+    if entity == 'orders' and payload.get('actualCost') is not None:
+        import math
+        try:
+            cost = float(payload['actualCost'])
+            if not math.isfinite(cost) or cost < 0:raise ValueError()
+        except (TypeError, ValueError):raise ApiError('actual cost must be a nonnegative number',400)
+    try:
+        payload={key:value for key,value in payload.items() if key!='_updatedAt'}
+        if entity != 'orders':
+            return upsert_record(entity,record_id,payload)
+        writes=[('orders',record_id,payload)]
+        linked_writes, linked_deletes=order_receivable_changes(payload,record_id,previous)
+        writes.extend(linked_writes)
+        if previous:
+            for field,label in (('totalPrice','總價'),('status','狀態'),('actualCost','實際成本')):
+                if previous.get(field) != payload.get(field):
+                    audit_id=str(uuid.uuid4())
+                    writes.append(('audits',audit_id,{
+                        'id':audit_id,'orderNumber':payload.get('orderNumber') or previous.get('orderNumber'),
+                        'field':label,'before':previous.get(field),'after':payload.get(field),
+                        'changedAt':datetime.now(timezone.utc).isoformat(),
+                        'user':account.get('display') or account.get('username'),'device':'工單 API',
+                    }))
+        result=write_record_batch(writes,linked_deletes)
+        return {**result,'id':record_id}
     except ValueError as err:raise ApiError(str(err),400) from err
+
+def order_receivable_changes(order, record_id, previous=None):
+    key=str(order.get('orderNumber') or '').strip() or f'ORDER-{record_id}'
+    old_key=str((previous or {}).get('orderNumber') or '').strip() or key
+    existing=next((row for row in _all_records('receivables') if row.get('source')=='auto-order' and row.get('orderNumber') in {key,old_key}),None)
+    if order.get('status') not in {'已完成','已送出'} or _number(order.get('totalPrice')) <= 0:
+        return [], [('receivables',existing['id'])] if existing else []
+    row_id=(existing or {}).get('id') or str(uuid.uuid4())
+    row={
+        'id':row_id,'source':'auto-order',
+        'date':order.get('orderDate') or datetime.now(timezone.utc).date().isoformat(),
+        'customer':order.get('billingCustomer') or order.get('upstream') or '-',
+        'orderNumber':key,'amount':_number(order.get('totalPrice')),
+        'received':_number((existing or {}).get('received')),
+    }
+    return [('receivables',row_id,row)], []
+
 def delete_entity_payload(token,entity,record_id):
     require_entity_access(token,entity)
     linked_receivables=0
@@ -199,9 +257,14 @@ def _customer_names_for_ai():
     return names[:80]
 def report_payload(token):
     account=require_account(token)
-    if not account_can_view(account,'financeView'):raise ApiError('permission denied',403)
+    require_finance(account)
     orders=_all_records('orders');receivables=_all_records('receivables');payables=_all_records('payables');inventory=_all_records('inventory')
     return {'ok':True,'summary':{'ordersLoaded':len(orders),'pendingOrders':sum(1 for row in orders if row.get('status')!='已完成'),'receivableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('received'))) for row in receivables),'payableOutstanding':sum(max(0,_number(row.get('amount'))-_number(row.get('paid'))) for row in payables),'lowInventory':sum(1 for row in inventory if _number(row.get('stock'))<=_number(row.get('safetyStock')))}}
+def finance_data_payload(token):
+    account = require_account(token)
+    require_finance(account)
+    return {'ok': True, 'records': {entity: _all_records(entity) for entity in ('orders', 'customers', 'receivables', 'payables', 'audits')}}
+
 def line_status_payload(token):
     account=require_account(token)
     if not account_can_view(account,'notificationsView'):raise ApiError('permission denied',403)
@@ -282,7 +345,7 @@ def user_action_payload(token,payload):
         password=str(payload.get('password') or '')
         if not password:raise ApiError('missing finance password',400)
         if not verify_finance_module_password(password):raise ApiError('invalid finance password',401)
-        return {'ok':True}
+        return {'ok':True,'token':create_session_token(account,finance_unlocked=True),'financeUntil':int(time.time())+15*60}
     if action=='create_account':
         account=require_account(token)
         if account.get('role')!='admin':raise ApiError('admin role required',403)

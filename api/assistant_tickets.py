@@ -17,7 +17,7 @@ def issue(token):
     account = require_account(token)
     if account.get('role') != 'admin':
         raise ApiError('第一版僅開放管理員。', 403)
-    payload = {'username': account['username'], 'display': account.get('display') or account['username'], 'role': 'admin', 'expires': int(time.time()) + 1200, 'session': hashlib.sha256(token.encode('utf-8')).hexdigest()}
+    payload = {'username': account['username'], 'display': account.get('display') or account['username'], 'role': 'admin', 'expires': int(time.time()) + 1200, 'session': hashlib.sha256(token.encode('utf-8')).hexdigest(), 'revision': storage._session_revision(storage._session_user(account['username']))}
     body = base64.urlsafe_b64encode(json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')).decode('ascii')
     return 'sqai1.' + body + '.' + _sign(body)
 
@@ -31,6 +31,9 @@ def verify(ticket):
             raise ValueError()
         payload = json.loads(base64.b64decode(body, altchars=b'-_', validate=True))
         if payload['role'] != 'admin' or not time.time() < payload['expires'] <= time.time() + 1205:
+            raise ValueError()
+        user = storage._session_user(payload['username'])
+        if not user or user.get('role') != 'admin' or not hmac.compare_digest(payload.get('revision', ''), storage._session_revision(user)):
             raise ValueError()
         return {key: payload[key] for key in ('username', 'display', 'role')}
     except (ValueError, TypeError, KeyError, UnicodeError):

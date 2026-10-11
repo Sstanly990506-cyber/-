@@ -1,12 +1,14 @@
-﻿import { $, escapeHtml } from '../shared.js';
+import { $, escapeHtml } from '../shared.js';
 
 export function formatDuration(sec) {
+  if (sec == null) return '尚未取得道路資料';
   const h = Math.floor(sec / 3600);
   const m = Math.round((sec % 3600) / 60);
   return h ? `${h} 小時 ${m} 分` : `${m} 分`;
 }
 
 export function formatDistance(meters) {
+  if (meters == null) return '尚未取得道路資料';
   const kilometers = Math.max(0, Number(meters || 0)) / 1000;
   return `${new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 1 }).format(kilometers)} 公里`;
 }
@@ -49,11 +51,12 @@ export function renderResult(result) {
 
   const routeNames = result.bestRoute.orderedStops.map((s) => s.name).join(' → ');
   box.innerHTML = `
+    <p>${escapeHtml(result.notice || '')}</p>
     <p>候選路線數：<strong>${result.candidateCount}</strong></p>
     <p>建議順序：<strong>${escapeHtml(routeNames)}</strong></p>
     <p>預估時間：<strong>${formatDuration(result.bestRoute.totalDurationSec)}</strong></p>
     <p>預估距離：<strong>${formatDistance(result.bestRoute.totalDistanceM)}</strong></p>
-    <p><a class="btn" href="${escapeHtml(result.googleMapsUrl)}" target="_blank" rel="noopener">用 Google Maps 開啟</a></p>
+    ${(result.googleMapsUrls || [result.googleMapsUrl]).filter(Boolean).map((url, index) => `<p><a class="btn" href="${escapeHtml(url)}" target="_blank" rel="noopener">用 Google Maps 開啟${index ? `（第 ${index + 1} 段）` : ''}</a></p>`).join('')}
   `;
 }
 

@@ -1,7 +1,22 @@
-﻿import { $, COMPANY_INFO, money, downloadCsv, getTodayText, escapeHtml } from './shared.js';
-import { getOrderReceivableKey } from './store.js?v=20261003-system-audit-1';
+import { $, COMPANY_INFO, money, downloadCsv, getTodayText, escapeHtml } from './shared.js';
+import { getOrderReceivableKey, isRecordDirty } from './store.js?v=20261011-eight-fixes-1';
 import { toTaiInch } from './pricing.js';
 import { buildMonthlyStatement, fetchStatementRecords, statementTableHtml, statementPrintHtml } from './monthly-statement.js';
+
+export function reportState(state) {
+  if (!state.financeRecords) return state;
+  const full = { ...state };
+  for (const entity of ['orders', 'customers', 'receivables', 'payables', 'audits']) {
+    if (['receivables', 'payables'].includes(entity)) continue;
+    const rows = new Map((state.financeRecords[entity] || []).map(row => [row.id, row]));
+    for (const row of state[entity] || []) {
+      const saved = rows.get(row.id);
+      if (!saved || isRecordDirty(entity, row) || Number(row._updatedAt || 0) > Number(saved._updatedAt || 0)) rows.set(row.id, row);
+    }
+    full[entity] = [...rows.values()];
+  }
+  return full;
+}
 
 let monthlyCustomers = [];
 let monthlyPreview = null;
@@ -39,7 +54,7 @@ async function generateMonthlyStatement(state) {
   const generation = ++monthlyGeneration;
   const token = state.authToken;
   const customerId = $('monthlyCustomer').value;
-  const customers = monthlyCustomers.length ? monthlyCustomers : state.customers;
+  const customers = monthlyCustomers.length ? monthlyCustomers : reportState(state).customers;
   const customer = customers.find(row => row.id === customerId);
   monthlyPreview = null;
   $('monthlyPreview').replaceChildren();
@@ -91,11 +106,13 @@ function inRange(state, dateText) {
   return true;
 }
 
-function getInvoiceEligibleOrders(state) {
-  return state.orders.filter((o) => ['未完成', '進行中'].includes(o.status || '未完成'));
+export function getInvoiceEligibleOrders(state) {
+  state = reportState(state);
+  return state.orders.filter((o) => ['已完成', '已送出'].includes(o.status));
 }
 
 function getSelectedInvoiceOrders(state) {
+  state = reportState(state);
   const idSet = new Set(getInvoiceEligibleOrders(state).map((o) => o.id));
   [...selectedInvoiceOrderIds].forEach((id) => {
     if (!idSet.has(id)) selectedInvoiceOrderIds.delete(id);
@@ -116,6 +133,7 @@ function getInvoiceMeta() {
 
 
 function findOrderByNumber(state, key) {
+  state = reportState(state);
   const text = (key || '').trim().toLowerCase();
   if (!text) return null;
   return state.orders.find((o) => (o.orderNumber || '').trim().toLowerCase() === text)
@@ -221,10 +239,11 @@ function openInvoiceWindow(state) {
 }
 
 export function getLinkedReceivablesData(state) {
+  state = reportState(state);
   const orderMap = new Map();
 
   state.orders
-    .filter((o) => ['未完成', '進行中'].includes(o.status || '未完成'))
+    .filter((o) => ['已完成', '已送出'].includes(o.status))
     .filter((o) => inRange(state, o.orderDate))
     .forEach((o) => {
       const key = getOrderReceivableKey(o);
@@ -267,15 +286,18 @@ export function getLinkedReceivablesData(state) {
   });
 }
 
-function getReportBData(state) {
+export function getReportBData(state) {
+  state = reportState(state);
   return state.orders.filter((o) => inRange(state, o.orderDate)).map((o) => {
     const revenue = Number(o.totalPrice || 0);
-    const cost = Math.round(revenue * 0.7);
-    return { orderNumber: o.orderNumber, customer: o.billingCustomer || o.downstream || o.upstream, revenue, cost, gross: revenue - cost };
+    const value = o.actualCost;
+    const cost = value == null || value === '' || !Number.isFinite(Number(value)) || Number(value) < 0 ? null : Number(value);
+    return { orderNumber: o.orderNumber, customer: o.billingCustomer || o.downstream || o.upstream, revenue, cost, gross: cost == null ? null : revenue - cost };
   });
 }
 
 function getReportCData(state) {
+  state = reportState(state);
   const map = new Map();
   state.receivables.filter((r) => inRange(state, r.date)).forEach((r) => {
     const month = (r.date || '').slice(0, 7) || '?芸‵?交?';
@@ -295,6 +317,7 @@ function currentMonthText() {
 }
 
 function getMonthCloseData(state, reportA, month) {
+  state = reportState(state);
   const target = month || currentMonthText();
   const receivables = reportA.filter((r) => (r.date || '').slice(0, 7) === target);
   const payables = state.payables
@@ -340,6 +363,7 @@ function renderMonthClose(state, reportA) {
 }
 
 function getCustomerStatementRows(state, reportA) {
+  state = reportState(state);
   const customer = ($('statementCustomer')?.value || '').trim();
   const month = $('financeCloseMonth')?.value || currentMonthText();
   if (!customer) return { customer, month, rows: [] };
@@ -643,6 +667,7 @@ function applyFinanceScreen(state) {
 
 
 export function renderFinance(state) {
+  state = reportState(state);
   renderMonthlyCustomerOptions(state);
   if ($('monthlyCompanyPhone') && !$('monthlyCompanyPhone').value) $('monthlyCompanyPhone').value = state.settings.companyPhone || '';
   const reportA = getLinkedReceivablesData(state);
@@ -661,7 +686,7 @@ export function renderFinance(state) {
   $('kpiNet').textContent = money(monthRow.net);
 
   $('reportATbody').innerHTML = reportA.map((r) => `<tr><td>${escapeHtml(r.customer)}</td><td>${escapeHtml(r.orderNumber)}</td><td>${money(r.amount)}</td><td>${money(r.received)}</td><td>${money(r.remain)}</td><td>${escapeHtml(r.age)}</td></tr>`).join('');
-  $('reportBTbody').innerHTML = reportB.map((r) => `<tr><td>${escapeHtml(r.orderNumber)}</td><td>${escapeHtml(r.customer)}</td><td>${money(r.revenue)}</td><td>${money(r.cost)}</td><td>${money(r.gross)}</td></tr>`).join('');
+  $('reportBTbody').innerHTML = reportB.map((r) => `<tr><td>${escapeHtml(r.orderNumber)}</td><td>${escapeHtml(r.customer)}</td><td>${money(r.revenue)}</td><td>${r.cost == null ? '尚未填成本' : money(r.cost)}</td><td>${r.gross == null ? '無法計算' : money(r.gross)}</td></tr>`).join('');
   $('reportCTbody').innerHTML = reportC.map((r) => `<tr><td>${escapeHtml(r.month)}</td><td>${money(r.income)}</td><td>${money(r.expense)}</td><td>${money(r.net)}</td></tr>`).join('');
 
   $('reportStart').value = state.reportRange.start;
@@ -735,8 +760,8 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     downloadCsv('report-A-receivables.csv', rows);
   });
   $('exportReportBBtn')?.addEventListener('click', () => {
-    const rows = [['工單', '客戶', '收入', '估計成本(70%)', '毛利']];
-    getReportBData(state).forEach((r) => rows.push([r.orderNumber, r.customer, r.revenue, r.cost, r.gross]));
+    const rows = [['工單', '客戶', '收入', '實際成本', '毛利']];
+    getReportBData(state).forEach((r) => rows.push([r.orderNumber, r.customer, r.revenue, r.cost ?? '尚未填成本', r.gross ?? '無法計算']));
     downloadCsv('report-B-margin.csv', rows);
   });
   $('exportReportCBtn')?.addEventListener('click', () => {
@@ -786,7 +811,7 @@ export function bindFinanceEvents(state, saveState, renderAll) {
       if (item) {
         item.received = Number(item.amount || 0);
       } else {
-        const order = state.orders.find((o) => getOrderReceivableKey(o) === key);
+        const order = reportState(state).orders.find((o) => getOrderReceivableKey(o) === key);
         if (order) state.receivables.unshift({ id: crypto.randomUUID(), source: 'manual-close', date: getTodayText(), customer: order.billingCustomer || order.downstream || order.upstream || '-', orderNumber: key, amount: Number(order.totalPrice || 0), received: Number(order.totalPrice || 0) });
       }
     }

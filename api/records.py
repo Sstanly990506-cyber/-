@@ -24,6 +24,14 @@ RECORD_STORAGE_INIT_LOCK = Lock()
 RECORD_STORAGE_READY = False
 
 
+def all_records(entity, query=''):
+    first = list_records(entity, 1, 500, query)
+    rows = list(first.get('items') or [])
+    for page in range(2, int(first.get('pages') or 1) + 1):
+        rows.extend(list_records(entity, page, 500, query).get('items') or [])
+    return rows
+
+
 def _now():
     return int(time.time() * 1000)
 
@@ -187,6 +195,51 @@ def first_pages_for_entities(entities, page_size=100):
         items = [dict(value.get('data') or {}) | {'id': rid, '_updatedAt': int(value.get('updatedAt') or 0)} for rid, value in rows[:page_size]]
         pages[entity] = {'ok': True, 'entity': entity, 'items': items, 'page': 1, 'pageSize': page_size, 'total': total, 'pages': (total + page_size - 1) // page_size}
     return pages
+
+
+def get_record(entity, record_id):
+    ensure_record_storage()
+    if storage.DATABASE_URL:
+        with storage.get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT data_json, updated_at FROM app_records WHERE entity=%s AND record_id=%s AND deleted=FALSE', (entity, record_id))
+                row = cur.fetchone()
+                return {**row['data_json'], 'id': record_id, '_updatedAt': row['updated_at']} if row else None
+    with RECORDS_LOCK:
+        row = _load_local().get(entity, {}).get(record_id)
+        return {**row['data'], 'id': record_id, '_updatedAt': row['updatedAt']} if row and not row.get('deleted') else None
+
+
+def write_record_batch(writes, deletes=()):
+    """Commit an order, derived receivable and its audit records together."""
+    ensure_record_storage()
+    prepared = []
+    for entity, record_id, data in writes:
+        if entity not in ENTITY_FIELDS or not record_id or not isinstance(data, dict):
+            raise ValueError('invalid record')
+        prepared.append((entity, record_id, {**data, 'id': record_id}))
+    tick = _now()
+    if storage.DATABASE_URL:
+        with storage.get_db_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    for entity, record_id, data in prepared:
+                        cur.execute("""INSERT INTO app_records(entity,record_id,data_json,updated_at,deleted)
+                            VALUES (%s,%s,%s,%s,FALSE) ON CONFLICT(entity,record_id) DO UPDATE
+                            SET data_json=EXCLUDED.data_json,updated_at=EXCLUDED.updated_at,deleted=FALSE""",
+                            (entity,record_id,storage.Jsonb(data),tick))
+                    for entity, record_id in deletes:
+                        cur.execute('UPDATE app_records SET deleted=TRUE,updated_at=%s WHERE entity=%s AND record_id=%s',(tick,entity,record_id))
+    else:
+        with RECORDS_LOCK:
+            records = _load_local()
+            for entity, record_id, data in prepared:
+                records.setdefault(entity,{})[record_id]={'data':data,'updatedAt':tick,'deleted':False}
+            for entity, record_id in deletes:
+                row=records.setdefault(entity,{}).setdefault(record_id,{'data':{}})
+                row.update({'updatedAt':tick,'deleted':True})
+            _write_local(records)
+    return {'ok':True,'updatedAt':tick}
 
 
 def upsert_record(entity, record_id, data):

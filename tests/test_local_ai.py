@@ -19,7 +19,12 @@ class LocalAiTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='sanqing-ai-fake-')
         root = Path(self.temp.name)
+        users = [
+            {'id': name, 'username': name, 'role': role, 'allowedViews': views, 'password': 'fake-fixture-hash'}
+            for name, role, views in [('fake-admin','admin',None), ('fake-other','admin',None), ('fake-viewer','viewer',[]), ('fake-driver','driver',['tripsView']), ('fake-ops','ops',['inventoryView'])]
+        ]
         self.patches = [
+            patch.object(records.storage, 'read_users', return_value=users),
             patch.object(records.storage, 'DATABASE_URL', ''),
             patch.object(records.storage, 'DATA_DIR', root),
             patch.object(records, 'RECORDS_PATH', root / 'records.json'),
@@ -318,7 +323,9 @@ class BoundaryTests(unittest.TestCase):
             stop.assert_called_once_with('fake-owned')
 
     def test_stop_only_available_to_demo_admin_after_confirmation(self):
-        token = create_session_token({'username': 'fake-admin', 'role': 'admin'})
+        fixture = {'username':'fake-admin','role':'admin','password':'fake-fixture'}
+        users_patch = patch('api.storage.read_users', return_value=[fixture]); users_patch.start(); self.addCleanup(users_patch.stop)
+        token = create_session_token(fixture)
         with patch.object(local_ai, 'ENABLED', True), patch.object(local_ai, 'DEMO', False):
             with self.assertRaises(ApiError):
                 local_ai.stop_payload(token, {'confirmed': True})

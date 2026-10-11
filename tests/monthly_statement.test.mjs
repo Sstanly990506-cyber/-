@@ -57,3 +57,8 @@ test('reads every page without changing the main order list; failures do not ret
   assert.equal(rows.length, 2);
   await assert.rejects(fetchStatementRecords('orders', 'token', '', async () => ({ ok: false, status: 403 })), /403/);
 });
+
+test('including pending orders never bills cancelled orders', () => {
+  const bill = buildMonthlyStatement({ customers: [customer], orders: [order, { ...order, id: 'cancelled', status: '已取消' }, { ...order, id: 'pending', status: '未完成' }] }, { customerId: 'c1', month: '2026-09', includePending: true });
+  assert.deepEqual(Array.from(bill.rows, row => row.id).sort(), ['o1', 'pending']);
+});

@@ -78,6 +78,8 @@ export const state = {
   orderStatusFilter: '全部',
   orderScreen: 'list',
   authToken: null,
+  financeUntil: 0,
+  financeRecords: null,
 };
 
 let onRefresh = () => {};
@@ -100,6 +102,7 @@ function headers(json = false) {
 }
 
 async function jsonRequest(url, options = {}) {
+  const requestVersion = sessionVersion;
   const res = await fetch(url, options);
   let data = null;
   try {
@@ -107,7 +110,11 @@ async function jsonRequest(url, options = {}) {
   } catch {
     data = null;
   }
-  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 401 && state.authToken && requestVersion === sessionVersion) window.dispatchEvent(new Event('app:session-expired'));
+    if (data?.financeLocked && requestVersion === sessionVersion) { state.financeUntil = 0; window.dispatchEvent(new Event('app:finance-locked')); }
+    throw new Error(data?.error || `HTTP ${res.status}`);
+  }
   return data;
 }
 
@@ -214,9 +221,47 @@ export function setAuthToken(token) {
     }
     state.pagination = {};
     state.serverReport = null;
+    state.financeUntil = 0;
+    state.financeRecords = null;
   }
   state.authToken = token || null;
   window.dispatchEvent(new Event('app:auth-changed'));
+}
+
+export async function unlockFinanceSession(token, until) {
+  const version = sessionVersion;
+  await saveQueue;
+  if (version !== sessionVersion) throw new Error('登入已變更，請重新解鎖財務。');
+  sessionVersion++;
+  state.authToken = token;
+  state.financeUntil = until * 1000;
+  window.dispatchEvent(new Event('app:auth-changed'));
+  await loadFinanceData();
+}
+
+export function isRecordDirty(entity, row) { return snapshots[entity]?.get(row.id) !== JSON.stringify(row); }
+
+export async function loadFinanceData() {
+  if (Date.now() >= state.financeUntil) {
+    const wasLoaded = !!state.financeRecords;
+    state.financeRecords = null;
+    if (wasLoaded) window.dispatchEvent(new Event('app:finance-locked'));
+    for (const key of ['receivables', 'payables']) { state[key] = []; snapshots[key] = new Map(); }
+    return;
+  }
+  const version = sessionVersion;
+  const data = await jsonRequest('/api/finance/data', { headers: headers(), cache: 'no-store' });
+  if (version !== sessionVersion || Date.now() >= state.financeUntil) return;
+  state.financeRecords = data.records;
+  for (const key of ['receivables', 'payables']) {
+    const baseline = snapshots[key] || new Map();
+    const dirty = new Map((state[key] || []).filter(row => baseline.get(row.id) !== JSON.stringify(row)).map(row => [row.id, row]));
+    const rows = new Map((data.records[key] || []).map(row => [row.id, row]));
+    for (const [id, row] of baseline) if (!(state[key] || []).some(item => item.id === id)) rows.delete(id);
+    for (const [id, row] of dirty) rows.set(id, row);
+    state[key] = [...rows.values()];
+    snapshots[key] = new Map((data.records[key] || []).map(row => [row.id, JSON.stringify(row)]));
+  }
 }
 
 export function configureStore({ refreshFn, syncUiFn }) {
@@ -241,6 +286,11 @@ export async function loadEntityPage(key, page = 1, query = '', refreshUi = true
   const version = sessionVersion;
   await saveQueue;
   if (version !== sessionVersion) return;
+  if (['receivables','payables'].includes(key)) {
+    await loadFinanceData();
+    if (refreshUi) refresh();
+    return;
+  }
   const entity = ENTITY_MAP[key] || key;
   const stateKey = REVERSE_ENTITY[entity] || key;
   const request = (pageRequests[stateKey] || 0) + 1;
@@ -424,6 +474,7 @@ async function pushChanges() {
 
   const jobs = [];
   for (const [key, entity] of Object.entries(ENTITY_MAP)) {
+    if (['receivables','payables'].includes(key) && Date.now() >= state.financeUntil) continue;
     if (state.userRole !== 'admin') {
       if (key === 'lineDestinations') continue;
       if (Array.isArray(state.allowedViews) && !state.allowedViews.includes(WRITE_VIEWS[key])) continue;
@@ -519,7 +570,9 @@ export async function pullServerState() {
       const row = state[key].find((item) => item.id === change.id);
       if (row) snapshots[key].set(change.id, JSON.stringify(row));
     }
-    if (data.changes?.length) refresh();
+    await loadFinanceData();
+    if (version !== sessionVersion) return;
+    if (data.changes?.length || state.financeRecords) refresh();
     setUi('已儲存', '增量同步');
   } catch (err) {
     setUi('同步失敗', err.message, false);
@@ -587,27 +640,5 @@ export function getOrderReceivableKey(order) {
 }
 
 export function syncOrderToReceivables(order) {
-  const key = getOrderReceivableKey(order);
-  const index = state.receivables.findIndex((row) => (row.orderNumber || '').trim() === key);
-  const shouldLink = ['已完成', '已送出'].includes(order.status) && Number(order.totalPrice || 0) > 0;
-
-  if (!shouldLink) {
-    if (index >= 0 && state.receivables[index].source === 'auto-order') {
-      state.receivables.splice(index, 1);
-    }
-    return;
-  }
-
-  const row = {
-    id: index >= 0 ? state.receivables[index].id : crypto.randomUUID(),
-    source: 'auto-order',
-    date: order.orderDate || getTodayText(),
-    customer: order.billingCustomer || order.downstream || order.upstream || '-',
-    orderNumber: key,
-    amount: Number(order.totalPrice || 0),
-    received: index >= 0 ? Number(state.receivables[index].received || 0) : 0,
-  };
-
-  if (index >= 0) state.receivables[index] = row;
-  else state.receivables.unshift(row);
+  // The order API writes linked receivables using server permissions.
 }

@@ -1,7 +1,7 @@
 import { $, escapeHtml } from './shared.js';
 import { DEFAULT_FACTORY } from './trips/constants.js?v=20260714-factory-address-1';
-import { inferLatLngFromAddress, optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20260714-factory-address-1';
-import { formatDistance, formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20260714-customer-order-km-1';
+import { optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20261011-eight-fixes-1';
+import { formatDistance, formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20261011-eight-fixes-1';
 
 let manualStops = [];
 let selectedOrderIds = new Set();
@@ -59,7 +59,6 @@ function selectedOrderStops(state) {
       id: o.id,
       name: o.downstream || o.upstream || o.orderNumber || '未命名站點',
       address: o.address || '-',
-      ...inferLatLngFromAddress(o.address || o.downstream || o.upstream || o.orderNumber || ''),
       type: getOrderStopType(o.id, state),
       relatedOrderId: o.orderNumber || '',
       note: 'from-order-pool',
@@ -128,7 +127,7 @@ function updateManualHint() {
   }
   const score = evaluateRoute(manualRoute);
   const confirmNote = manualRouteConfirmed ? '（已確認）' : '（尚未確認）';
-  $('tripManualHint').textContent = `手動路線預估：${formatDuration(score.totalDurationSec)} / ${formatDistance(score.totalDistanceM)} ${confirmNote}`;
+  $('tripManualHint').textContent = `手動路線${confirmNote}；距離與時間請確認路線後查看道路服務結果。`;
 }
 
 function renderAll(state) {
@@ -172,13 +171,11 @@ function createManualStop(state) {
   }
 
   const address = customer.address || '';
-  const pos = inferLatLngFromAddress(address || customer.name);
+  if (!address || address === '-') return alert('請先填寫客戶的真實地址'), null;
   return {
     id: crypto.randomUUID(),
     name: customer.name,
     address,
-    lat: pos.lat,
-    lng: pos.lng,
     type: $('tripStopType').value || getEnabledTripTypes(state)[0],
     relatedOrderId,
     note: 'manual-trip-stop',
@@ -191,8 +188,9 @@ async function runOptimize(state) {
   const payload = { factory: DEFAULT_FACTORY, stops };
   try {
     const res = await fetch('/api/trips/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) }, body: JSON.stringify(payload) });
-    if (!res.ok) throw new Error();
-    lastResult = await res.json();
+    const data = await res.json();
+    if (!res.ok) return alert(data.error || '路線計算失敗，請檢查地址與導航設定');
+    lastResult = data;
   } catch {
     lastResult = optimizeTrip(DEFAULT_FACTORY, stops);
   }
@@ -200,20 +198,20 @@ async function runOptimize(state) {
   manualRouteConfirmed = false;
 }
 
-function confirmManualRoute() {
+async function confirmManualRoute(state) {
   if (!manualRoute.length) return alert('請先點「最佳化車輛」產生路線');
   if (!validateBusinessRoute(manualRoute)) return alert('路線需先完成所有送貨，再安排取貨。');
 
-  const score = evaluateRoute(manualRoute);
-  if (lastResult) {
-    lastResult.bestRoute.orderedStops = manualRoute.map((s) => ({ ...s }));
-    lastResult.bestRoute.pointIds = manualRoute.map((s) => s.id);
-    lastResult.bestRoute.totalDurationSec = score.totalDurationSec;
-    lastResult.bestRoute.totalDistanceM = score.totalDistanceM;
-    lastResult.googleMapsUrl = buildGoogleMapsUrl(manualRoute);
-  }
-  manualRouteConfirmed = true;
-  alert(`已確認手動路線（預估 ${formatDuration(score.totalDurationSec)}）`);
+  try {
+    const response = await fetch('/api/trips/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken}` }, body: JSON.stringify({ factory: manualRoute[0], stops: manualRoute.slice(1,-1), preserveOrder: true }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || '無法確認道路路線');
+    lastResult = result;
+    manualRouteConfirmed = true;
+    renderResult(result);
+    alert(`已確認手動路線：${result.notice}`);
+  } catch (error) { alert(error.message); }
+
 }
 
 async function executeSelectedOrders(state, renderAllApp) {
@@ -328,8 +326,8 @@ export function bindTripEvents(state, _saveState, renderAllApp) {
     renderAll(state);
   });
 
-  $('tripConfirmManualBtn')?.addEventListener('click', () => {
-    confirmManualRoute();
+  $('tripConfirmManualBtn')?.addEventListener('click', async () => {
+    await confirmManualRoute(state);
     renderAll(state);
   });
 

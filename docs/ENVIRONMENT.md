@@ -6,6 +6,7 @@ Production deployments should configure these values in Vercel Environment Varia
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | Shared PostgreSQL storage for orders, customers, finance data, audits, and settings. |
 | `APP_SESSION_SECRET` | Yes | Stable session signing secret. Use a random value with at least 32 bytes. |
+| `GOOGLE_MAPS_API_KEY` | Optional | Google Routes API 的伺服器金鑰；設定後才提供道路距離與時間。 |
 | `OPENAI_API_KEY` | Optional | Enables AI order recognition. Hide AI tools in settings if this is not configured. |
 | `LINE_CHANNEL_SECRET` | Optional | LINE Messaging API channel secret. Required for webhook signature verification. |
 | `LINE_CHANNEL_ACCESS_TOKEN` | Optional | LINE Messaging API channel access token. Required for LINE replies and push notifications. |
@@ -55,3 +56,7 @@ In groups or multi-person chats, the bot stays quiet unless it is mentioned.
 Any group member can use `@三青 ...`, for example `@三青 未完成工單`,
 `@三青 工單 115060162`, or `@三青 客戶 佳德`. Plain chat messages and
 plain command text stay quiet.
+
+## 營運與授權更新
+
+請參閱 [OPERATIONS_FIXES.md](OPERATIONS_FIXES.md)：道路服務、實際成本、完整報表、後端財務解鎖與登入撤銷。

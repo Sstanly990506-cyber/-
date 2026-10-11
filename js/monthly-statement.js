@@ -26,7 +26,7 @@ export function buildMonthlyStatement(state, { customerId, month, taxRate = 5, i
   const rows = (state.orders || [])
     .filter(order => key(order.billingCustomer || order.upstream) === key(customer.name))
     .filter(order => String(order.orderDate || '').slice(0, 7) === month)
-    .filter(order => includePending || ['已完成', '已送出'].includes(order.status))
+    .filter(order => ['已完成', '已送出', ...(includePending ? ['未完成', '進行中'] : [])].includes(order.status))
     .sort((a, b) => String(a.orderDate).localeCompare(String(b.orderDate)) || String(a.orderNumber).localeCompare(String(b.orderNumber)))
     .map(order => ({
       id: order.id, date: order.orderDate, orderNumber: order.orderNumber || '',

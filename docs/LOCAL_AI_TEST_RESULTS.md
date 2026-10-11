@@ -1,3 +1,5 @@
+> 歷史示範驗收紀錄：文中的分支與推送狀態描述當時環境，不能代表目前主分支或正式部署狀態。最新修正請見 [OPERATIONS_FIXES.md](OPERATIONS_FIXES.md)。
+
 # 本機網站 AI 測試結果
 
 日期：2026-09-04。環境：使用者 Windows 電腦、原本 sanqing-local-ai 的 Python 3.12。
