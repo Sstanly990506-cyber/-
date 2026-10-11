@@ -57,3 +57,7 @@ python -m unittest discover -s tests -v
 ```bash
 node --experimental-vm-modules --test tests/store_sync.test.mjs tests/test_transport.mjs
 ```
+
+## 營運與授權更新
+
+請參閱 [OPERATIONS_FIXES.md](OPERATIONS_FIXES.md)：道路服務、實際成本、完整報表、後端財務解鎖與登入撤銷。

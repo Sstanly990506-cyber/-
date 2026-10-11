@@ -20,6 +20,7 @@ from api.service import (
     recognize_order_status_payload,
     report_order_correction_payload,
     report_payload,
+    finance_data_payload,
     restore_backup_payload,
     send_line_payload,
     update_state_payload,
@@ -48,6 +49,7 @@ GET_ROUTES = {
         changes_payload,
         (token, query_value(query, 'since', '0'), query_value(query, 'limit', '1000')),
     ),
+    '/api/finance/data': lambda token, query: (finance_data_payload, (token,)),
     '/api/reports/summary': lambda token, query: (report_payload, (token,)),
     '/api/orders/recognize/status': lambda token, query: (
         recognize_order_status_payload,

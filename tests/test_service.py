@@ -556,13 +556,13 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(result['bootstrap'], bootstrap)
         build_bootstrap.assert_called_once_with(account, include_pages=False)
 
-    def test_session_verification_does_not_query_users(self):
-        account = {'username': 'ops', 'display': 'Ops', 'role': 'ops'}
-        token = create_session_token(account)
-        with patch('api.storage.read_users', side_effect=AssertionError('token verification queried users')):
-            verified = verify_session_token(token)
-        self.assertEqual(verified['username'], 'ops')
-        self.assertEqual(verified['role'], 'ops')
+    def test_session_verification_revokes_changed_account_permissions(self):
+        account = {'username': 'ops', 'display': 'Ops', 'role': 'ops', 'password': 'fixture'}
+        with patch('api.storage.read_users', return_value=[account]):
+            token = create_session_token(account)
+            self.assertEqual(verify_session_token(token)['role'], 'ops')
+            account['role'] = 'viewer'
+            self.assertIsNone(verify_session_token(token))
 
     def test_update_rejects_incomplete_payload(self):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}):

@@ -11,20 +11,21 @@ import {
   setAuthToken,
   getIntegrityReport,
   appendSystemEvent,
-} from './store.js?v=20261003-system-audit-1';
-import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20261004-monthly-bill-1';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261004-monthly-bill-1';
-import { renderFinance, bindFinanceEvents } from './finance.js?v=20261004-monthly-bill-1';
+} from './store.js?v=20261011-eight-fixes-1';
+import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20261011-eight-fixes-1';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261011-eight-fixes-1';
+import { unlockFinanceSession, loadFinanceData } from './store.js?v=20261011-eight-fixes-1';
+import { renderFinance, bindFinanceEvents } from './finance.js?v=20261011-eight-fixes-1';
 import { renderAudits, bindAuditEvents } from './audit.js?v=20261003-system-audit-1';
-import { renderTrips, bindTripEvents } from './trips.js?v=20260714-factory-address-1';
+import { renderTrips, bindTripEvents } from './trips.js?v=20261011-eight-fixes-1';
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714-trip-route-text-1';
 import { renderInventory, bindInventoryEvents } from './inventory.js?v=20261003-system-audit-1';
 import { renderNotifications, bindNotificationEvents, refreshLineStatus } from './notifications.js?v=20261003-system-audit-1';
 function proactiveNotify() {
   return buildSystemAlerts();
 }
-const APP_BUILD = '20261004-monthly-bill-1';
-import { initializeLocalAi } from './local-ai.js?v=20261003-system-audit-1';
+const APP_BUILD = '20261011-eight-fixes-1';
+import { initializeLocalAi } from './local-ai.js?v=20261011-eight-fixes-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
 let internalViewsMounted = true;
@@ -422,6 +423,7 @@ function openDashboardTarget(id) {
 }
 
 async function verifyFinancePassword(password) {
+  const token = state.authToken;
   const res = await fetch('/api/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) },
@@ -434,24 +436,30 @@ async function verifyFinancePassword(password) {
     data = null;
   }
   if (!res.ok || !data?.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  if (token !== state.authToken) throw new Error('登入已變更，請重新解鎖財務。');
+  await unlockFinanceSession(data.token, data.financeUntil);
+  financeUnlockedUntil = state.financeUntil;
 }
 
 async function openFinanceGate() {
+  let refreshed = false;
   if (!hasViewPermission('financeView')) return alert(isModuleEnabled('financeView') ? '此帳號沒有財經模組權限。' : '財經模組目前已停用。');
   if (Date.now() >= financeUnlockedUntil) {
     const password = window.prompt('請輸入財經系統額外密碼');
     if (!password) return;
     try {
       await verifyFinancePassword(password);
-      financeUnlockedUntil = Date.now() + 15 * 60 * 1000;
+      refreshed = true;
+      financeUnlockedUntil = state.financeUntil;
       appendSystemEvent('財經系統額外密碼驗證成功', 'info', { role: state.userRole || 'viewer' });
       saveState();
     } catch (err) {
       appendSystemEvent('財經系統額外密碼驗證失敗', 'warning', { role: state.userRole || 'viewer' });
       saveState();
-      return alert(err?.message === 'finance role required' ? '此帳號沒有財經模組權限。' : '財經系統密碼錯誤或尚未設定。');
+      return alert(err?.message === 'finance role required' ? '此帳號沒有財經模組權限。' : err?.message === 'invalid finance password' ? '財經系統密碼錯誤或尚未設定。' : err?.message || '財務資料讀取失敗，請稍後重試。');
     }
   }
+  try { if (!refreshed) await loadFinanceData(); } catch (err) { return alert(err.message); }
   showView('financeView');
 }
 
@@ -539,6 +547,13 @@ function bindCoreEvents() {
     if (e.key.toLowerCase() === 'a' && $('dashboardView') && !$('dashboardView').classList.contains('hidden')) showView('auditView');
   });
 }
+
+window.addEventListener('app:session-expired', () => { if (state.user) $('logoutBtn')?.click(); });
+window.addEventListener('app:finance-locked', () => {
+  financeUnlockedUntil = 0;
+  state.financeRecords = null;
+  if (state.user) showView('dashboardView');
+});
 
 function bootstrapFailed(err) {
   console.error(err);

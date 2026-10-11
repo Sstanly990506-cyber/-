@@ -1,5 +1,5 @@
 import { $, downloadCsv, getTodayText } from './shared.js';
-import { syncOrderToReceivables } from './store.js?v=20261003-system-audit-1';
+import { syncOrderToReceivables } from './store.js?v=20261011-eight-fixes-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
@@ -27,6 +27,7 @@ const ORDER_ENTRY_FIELD_IDS = [
   'sizeWidth', 'sizeUnit', 'machineType',
   'glossType',
   'totalPrice',
+  'actualCost',
   'orderUnitPrice',
   'orderStatus',
 ];
@@ -397,6 +398,7 @@ function buildOrderFromForm(state) {
     sizeUnit: $('sizeUnit').value || 'mm',
     machineType: getSelectedPricingTier(state),
     glossType: $('glossType').value || '',
+    actualCost: $('actualCost').value === '' ? null : Number($('actualCost').value),
     totalPrice: Number($('totalPrice').value || 0),
     status: $('orderStatus').value || getEnabledOrderStatuses(state)[0],
   };
@@ -650,6 +652,7 @@ export function renderOrders(state, renderCustomerOptions) {
 export function clearOrderForm() {
   $('orderForm').reset();
   $('orderId').value = '';
+  $('actualCost').value = '';
   $('orderDate').value = getTodayText();
   $('sizeUnit').value = 'tai-inch';
   $('sizeNotation').value = '';
@@ -684,6 +687,7 @@ export function openOrderForEdit(state, orderId) {
   $('machineType').value = order.machineType || 'BIG';
   $('glossType').value = order.glossType || '';
   $('totalPrice').value = order.totalPrice || '';
+  $('actualCost').value = order.actualCost ?? '';
   $('orderStatus').value = order.status || '未完成';
   state.orderScreen = 'form';
   renderOrderScreen(state);
@@ -713,6 +717,7 @@ function copyOrderAsNew(state, orderId) {
   $('machineType').value = order.machineType || 'BIG';
   $('glossType').value = order.glossType || '';
   $('totalPrice').value = order.totalPrice || '';
+  $('actualCost').value = '';
   $('orderStatus').value = '未完成';
   state.orderScreen = 'form';
   renderOrderScreen(state);
@@ -859,17 +864,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (duplicated) return alert(`工單編號已存在：${payload.orderNumber}`);
 
     if (existing) {
-      if (existing.totalPrice !== payload.totalPrice) {
-        state.audits.unshift({
-          orderNumber: payload.orderNumber,
-          field: '總價',
-          before: existing.totalPrice,
-          after: payload.totalPrice,
-          changedAt: new Date().toLocaleString(),
-          user: state.user,
-          device: `${location.hostname || 'localhost'} / ${navigator.userAgent.slice(0, 40)}...`,
-        });
-      }
       Object.assign(existing, payload);
       syncOrderToReceivables(existing);
     } else {
@@ -921,15 +915,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
       const before = order.status;
       order.status = quickBtn.dataset.quickStatus;
       order.updatedAt = new Date().toLocaleString();
-      state.audits.unshift({
-        orderNumber: order.orderNumber || '(空白)',
-        field: '狀態',
-        before,
-        after: order.status,
-        changedAt: new Date().toLocaleString(),
-        user: state.user || '未登入',
-        device: `${location.hostname || 'localhost'} / ${navigator.userAgent.slice(0, 40)}...`,
-      });
       syncOrderToReceivables(order);
       highlightedOrderId = order.id;
       saveState();

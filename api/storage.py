@@ -196,6 +196,7 @@ def normalize_user_record(user: dict, source: str = 'legacy-import') -> dict | N
         'allowedViews': normalize_allowed_views((user or {}).get('allowedViews'), (user or {}).get('role') or 'viewer'),
         'createdAt': str((user or {}).get('createdAt') or time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())),
         'source': str((user or {}).get('source') or source),
+        'sessionVersion': str((user or {}).get('sessionVersion') or ''),
     }
 
 
@@ -233,6 +234,7 @@ def ensure_postgres_storage():
                     '''
                 )
                 cur.execute('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS allowed_views JSONB')
+                cur.execute("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS session_version TEXT NOT NULL DEFAULT ''")
                 cur.execute(
                     '''
                     CREATE TABLE IF NOT EXISTS app_secrets (
@@ -339,7 +341,7 @@ def read_users():
             with conn.cursor() as cur:
                 cur.execute(
                     '''
-                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views
+                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views, session_version
                     FROM app_users
                     ORDER BY created_at DESC
                     '''
@@ -354,6 +356,7 @@ def read_users():
                 'display': row.get('display_name'),
                 'role': row.get('role'),
                 'allowedViews': row.get('allowed_views'),
+                'sessionVersion': row.get('session_version') or '',
                 'createdAt': row.get('created_at'),
                 'source': row.get('source'),
             }
@@ -366,6 +369,12 @@ def read_users():
 
 def write_users(users):
     ensure_storage()
+    existing={user['id']:user for user in read_users()}
+    for user in users:
+        previous=existing.get(user['id'])
+        credential_fields=('username','password','role','allowedViews')
+        changed=not previous or any(previous.get(field) != user.get(field) for field in credential_fields)
+        user['sessionVersion']=str(uuid.uuid4()) if changed else previous.get('sessionVersion') or ''
     if DATABASE_URL:
         with get_db_connection() as conn:
             with conn.transaction():
@@ -374,8 +383,8 @@ def write_users(users):
                     for user in users:
                         cur.execute(
                             '''
-                            INSERT INTO app_users (id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            INSERT INTO app_users (id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views, session_version)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ''',
                             (
                                 user['id'],
@@ -387,6 +396,7 @@ def write_users(users):
                                 user['createdAt'],
                                 user['source'],
                                 Jsonb(normalize_allowed_views(user.get('allowedViews'), user.get('role'))),
+                                user['sessionVersion'],
                             ),
                         )
             conn.commit()
@@ -406,13 +416,35 @@ def _b64url_decode(value: str) -> bytes:
     return base64.urlsafe_b64decode((value + padding).encode('ascii'))
 
 
-def create_session_token(account: dict) -> str:
+def _finance_revision():
+    value = read_secret_hash('finance_module_password') or os.environ.get('FINANCE_MODULE_PASSWORD') or os.environ.get('INIT_FINANCE_PASSWORD') or ''
+    return hmac.new(SESSION_SECRET.encode('utf-8'), str(value).encode('utf-8'), hashlib.sha256).hexdigest()
+
+
+def _session_revision(user):
+    fields = {key: user.get(key) for key in ('id', 'username', 'password', 'role', 'allowedViews')}
+    fields['sessionVersion'] = user.get('sessionVersion') or ''
+    encoded = json.dumps(fields, sort_keys=True, ensure_ascii=False).encode('utf-8')
+    return hmac.new(SESSION_SECRET.encode('utf-8'), encoded, hashlib.sha256).hexdigest()
+
+
+def _session_user(username):
+    return next((user for user in read_users() if normalize_username(user.get('username')) == normalize_username(username)), None)
+
+
+def create_session_token(account: dict, *, finance_unlocked=False) -> str:
     now = int(time.time())
+    user = _session_user(account.get('username'))
+    if not user:
+        raise ValueError('account no longer exists')
     payload = {
         'sub': account.get('username') or '',
-        'display': account.get('display') or account.get('username') or '',
-        'role': account.get('role') or 'viewer',
-        'allowedViews': normalize_allowed_views(account.get('allowedViews'), account.get('role') or 'viewer'),
+        'revision': _session_revision(user),
+        'financeUntil': now + 15 * 60 if finance_unlocked else 0,
+        'financeRevision': _finance_revision() if finance_unlocked else '',
+        'display': user.get('display') or user.get('username') or '',
+        'role': user.get('role') or 'viewer',
+        'allowedViews': normalize_allowed_views(user.get('allowedViews'), user.get('role') or 'viewer'),
         'iat': now,
         'exp': now + SESSION_TTL_SECONDS,
     }
@@ -433,13 +465,23 @@ def verify_session_token(token: str) -> dict | None:
         payload = json.loads(_b64url_decode(body).decode('utf-8'))
     except Exception:
         return None
-    if int(payload.get('exp') or 0) < int(time.time()):
+    try:
+        if int(payload.get('exp') or 0) <= int(time.time()):
+            return None
+    except (ValueError, TypeError):
         return None
     username = normalize_username(payload.get('sub') or '')
     if not username:
         return None
+    user = _session_user(username)
+    if not user or not hmac.compare_digest(str(payload.get('revision') or ''), _session_revision(user)):
+        return None
+    finance_until = payload.get('financeUntil') or 0
+    if finance_until and payload.get('financeRevision') != _finance_revision():
+        finance_until = 0
     return {
-        'id': '',
+        'id': user.get('id') or '',
+        'financeUntil': finance_until,
         'username': username,
         'display': str(payload.get('display') or username),
         'role': str(payload.get('role') or 'viewer'),
@@ -709,7 +751,7 @@ def authenticate_user(username: str, password: str):
             with conn.cursor() as cur:
                 cur.execute(
                     '''
-                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views
+                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views, session_version
                     FROM app_users
                     WHERE username_key = %s
                     LIMIT 1
@@ -725,6 +767,7 @@ def authenticate_user(username: str, password: str):
             'display': row.get('display_name'),
             'role': row.get('role'),
             'allowedViews': row.get('allowed_views'),
+            'sessionVersion': row.get('session_version') or '',
             'createdAt': row.get('created_at'),
         })
     users = read_users()

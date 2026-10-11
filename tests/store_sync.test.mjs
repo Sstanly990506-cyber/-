@@ -3,12 +3,12 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-async function harness(fetch) {
+async function harness(fetch, events = []) {
   const context = vm.createContext({
     fetch, console, setTimeout, clearTimeout, setInterval,
     queueMicrotask: () => {},
     document: { getElementById: () => null },
-    window: { dispatchEvent: () => {} },
+    window: { dispatchEvent: event => events.push(event.type) },
     Event: class { constructor(type) { this.type = type; } },
     localStorage: { getItem: () => '{invalid', setItem: () => {} },
   });
@@ -99,4 +99,75 @@ test('switching accounts discards an old in-flight page response', async () => {
 test('invalid saved UI JSON does not block initialization', async () => {
   const store = await harness(async () => response());
   assert.doesNotThrow(() => store.initializeStore());
+});
+
+test('finance unlock loads complete data without resetting the current order page', async () => {
+  const records = { orders: [{ id: 'o1' }, { id: 'o2' }], customers: [], receivables: [{ id: 'r1', amount: 20 }], payables: [], audits: [] };
+  const store = await harness(async () => response({ records }));
+  store.state.orders = [{ id: 'visible-order' }];
+  store.state.userRole = 'finance';
+  store.state.allowedViews = ['financeView'];
+  await store.unlockFinanceSession('unlocked-account', Math.floor(Date.now() / 1000) + 900);
+  assert.equal(store.state.orders[0].id, 'visible-order');
+  assert.equal(store.state.financeRecords.orders.length, 2);
+  assert.equal(store.state.receivables.length, 1);
+});
+
+test('finance data from an old account is discarded after switching accounts', async () => {
+  let release;
+  const store = await harness(async () => {
+    await new Promise(resolve => { release = resolve; });
+    return response({ records: { orders: [{ id: 'private' }], receivables: [{ id: 'private-receivable' }], payables: [] } });
+  });
+  const pending = store.unlockFinanceSession('unlocked', Math.floor(Date.now() / 1000) + 900);
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  store.setAuthToken('second-account');
+  release(); await pending;
+  assert.equal(store.state.financeRecords, null);
+  assert.equal(store.state.receivables.length, 0);
+});
+
+test('expired finance data is removed without contacting the server', async () => {
+  let calls = 0;
+  const store = await harness(async () => { calls++; return response(); });
+  store.state.financeUntil = Date.now() - 1;
+  store.state.financeRecords = { orders: [{ id: 'private' }] };
+  store.state.receivables = [{ id: 'private-r' }];
+  await store.loadFinanceData();
+  assert.equal(calls, 0);
+  assert.equal(store.state.financeRecords, null);
+  assert.equal(store.state.receivables.length, 0);
+});
+
+test('an old unauthorized response cannot log out the new account', async () => {
+  let release;
+  const events = [];
+  const store = await harness(async () => {
+    await new Promise(resolve => { release = resolve; });
+    return { ok: false, status: 401, json: async () => ({ error: 'old expired session' }) };
+  }, events);
+  const pending = store.loadEntityPage('customers');
+  const rejected = assert.rejects(pending, /old expired session/);
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  store.setAuthToken('second-account'); events.length = 0;
+  release(); await rejected;
+  assert.equal(events.includes('app:session-expired'), false);
+  assert.equal(store.state.authToken, 'second-account');
+});
+
+test('a pending finance unlock cannot replace an account switched during a save', async () => {
+  let release;
+  const store = await harness(async () => {
+    await new Promise(resolve => { release = resolve; });
+    return response();
+  });
+  store.state.customers[0].name = 'pending edit';
+  const save = store.saveState();
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  const unlock = store.unlockFinanceSession('old-unlocked-account', Math.floor(Date.now() / 1000) + 900);
+  const rejected = assert.rejects(unlock, /登入已變更/);
+  store.setAuthToken('second-account');
+  release(); await Promise.all([save, rejected]);
+  assert.equal(store.state.authToken, 'second-account');
+  assert.equal(store.state.financeUntil, 0);
 });

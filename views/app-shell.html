@@ -159,6 +159,7 @@
               <label>換算台吋<input id="sizeTaiInch" readonly /></label>
               <label class="span-2">上光種類<select id="glossType"></select></label>
               <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
+              <label>實際總成本<input id="actualCost" type="number" step="0.01" min="0" placeholder="材料、人工及其他成本合計；未知請留白" /></label>
               <label>帳單單價（大台／常規：元／令；小台：元／張）<input id="orderUnitPrice" type="number" step="0.0001" min="0" placeholder="新工單空白時記錄報價單價；舊工單請補填" /></label>
               <p id="orderSmartHint" class="sub span-2"></p>
               <label>狀態
@@ -686,7 +687,7 @@
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>工單</th><th>客戶</th><th>收入</th><th>估算成本(70%)</th><th>毛利</th></tr></thead>
+                <thead><tr><th>工單</th><th>客戶</th><th>收入</th><th>實際成本</th><th>毛利</th></tr></thead>
                 <tbody id="reportBTbody"></tbody>
               </table>
             </div>
@@ -912,7 +913,7 @@
           </article>
           <article class="card">
             <h3>更改財經系統密碼</h3>
-            <p class="sub">不需要舊密碼。新密碼會加密儲存，至少需要 8 個字元。</p>
+            <p class="sub">不需要舊密碼。新密碼會以雜湊儲存，至少需要 8 個字元。</p>
             <form id="financePasswordForm" class="form-grid compact">
               <label>新財經密碼<input id="newFinancePassword" type="password" minlength="8" required /></label>
               <label>確認新密碼<input id="newFinancePasswordConfirm" type="password" minlength="8" required /></label>

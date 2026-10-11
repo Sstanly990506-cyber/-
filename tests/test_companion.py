@@ -142,7 +142,9 @@ class PairingTests(unittest.TestCase):
 
 class TicketTests(unittest.TestCase):
     def setUp(self):
-        self.session = create_session_token({'username': 'fake-admin', 'role': 'admin'})
+        fixtures = [{'username':'fake-admin','role':'admin','password':'fake-fixture'}, {'username':'fake-viewer','role':'viewer','password':'fake-fixture'}]
+        users_patch = patch('api.storage.read_users', return_value=fixtures); users_patch.start(); self.addCleanup(users_patch.stop)
+        self.session = create_session_token(fixtures[0])
 
     def test_ticket_is_scoped_not_a_website_session(self):
         ticket = issue(self.session)

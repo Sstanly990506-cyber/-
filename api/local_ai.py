@@ -104,8 +104,11 @@ def demo_session(token, payload):
     enabled()
     if not DEMO:
         raise ApiError('示範登入未啟用。', 404)
-    from api.storage import create_session_token
+    from api.storage import create_session_token, read_users, register_user
     from api.service import build_bootstrap_payload
+    if not any(user.get('username') == 'local-demo' for user in read_users()):
+        import secrets
+        register_user('local-demo', secrets.token_urlsafe(32), '假資料示範', 'admin', source='isolated-demo')
     account = {'username': 'local-demo', 'display': '假資料示範', 'role': 'admin', 'allowedViews': []}
     return {'ok': True, 'account': account, 'token': create_session_token(account), 'bootstrap': build_bootstrap_payload(account)}
 

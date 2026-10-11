@@ -11,7 +11,7 @@
 
 ## 新增：本機 AI 假資料整合版
 
-這是獨立開發副本，尚未部署到正式網站。請使用 **`start-ai.cmd`** 啟動，開啟 `http://127.0.0.1:4173`，按「進入假資料示範」，再按右下角「三青 AI 助理」。
+主分支包含正式網站 companion 整合（見 [正式 AI 設定](docs/PRODUCTION_AI.md)），以及以下隔離假資料示範模式。請使用 **`start-ai.cmd`** 啟動，開啟 `http://127.0.0.1:4173`，按「進入假資料示範」，再按右下角「三青 AI 助理」。
 
 支援聊天、文件來源查詢、工單／客戶／庫存查詢，以及需預覽確認的庫存備註修改。
 沒有連正式資料庫，不需要輸入真實帳密，不需安裝其他服務。模型需要至少 1.5 GiB 可用記憶體。
@@ -56,7 +56,7 @@ GitHub Actions 會在推送與 Pull Request 時執行同一組測試。
 ## 重要環境變數
 
 - `DATABASE_URL`: 正式環境請使用 PostgreSQL，避免資料只存在暫存檔。
-- `APP_SESSION_SECRET`: 登入 session 加密用，正式環境必填。
+- `APP_SESSION_SECRET`: 登入 session 簽章用，正式環境必填。
 - `OPENAI_API_KEY`: 啟用 AI 工單辨識時使用。
 - `LINE_CHANNEL_SECRET`: LINE Messaging API 簽章驗證。
 - `LINE_CHANNEL_ACCESS_TOKEN`: LINE 主動推播與回覆。
@@ -70,3 +70,7 @@ GitHub Actions 會在推送與 Pull Request 時執行同一組測試。
 - [安全設定](docs/SECURITY.md)
 - [故障排除](docs/TROUBLESHOOTING.md)
 - [系統架構](docs/ARCHITECTURE.md)
+
+## 營運功能更新
+
+道路服務、實際成本、完整報表、財務解鎖及登入撤銷設定請見 [修正說明](docs/OPERATIONS_FIXES.md)。
