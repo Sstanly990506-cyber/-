@@ -707,6 +707,9 @@ tbody tr:hover {
   font-size: 12px;
 }
 .order-number-copy { white-space: nowrap; }
+.monthly-statement-table { min-width: 850px; }
+.monthly-statement-table .numeric { text-align: right; white-space: nowrap; }
+#monthlyWarnings { color: #fcd34d; }
 .order-price-cell {
   font-weight: 700;
   white-space: nowrap;

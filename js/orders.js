@@ -1,4 +1,4 @@
-import { $, COMPANY_INFO, downloadCsv, getTodayText } from './shared.js';
+import { $, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js?v=20261003-system-audit-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js';
@@ -19,6 +19,7 @@ const ORDER_ENTRY_FIELD_IDS = [
   'upstreamInput',
   'downstreamInput',
   'orderAddress',
+  'orderItemName',
   'sheetCountText',
   'sheetCount',
   'sizeNotation',
@@ -26,6 +27,7 @@ const ORDER_ENTRY_FIELD_IDS = [
   'sizeWidth', 'sizeUnit', 'machineType',
   'glossType',
   'totalPrice',
+  'orderUnitPrice',
   'orderStatus',
 ];
 
@@ -379,8 +381,9 @@ function renderPriceRuleCustomerMatches(state) {
 function buildOrderFromForm(state) {
   const sheetCount = Number($('sheetCount').value || 0);
   const billingCustomer = $('billingCustomerInput')?.value.trim() || '';
-  return {
+  const order = {
     orderNumber: $('orderNumber').value.trim(),
+    itemName: $('orderItemName').value.trim(),
     orderDate: $('orderDate').value,
     billingCustomer,
     upstream: $('upstreamInput')?.value.trim() || '',
@@ -397,56 +400,12 @@ function buildOrderFromForm(state) {
     totalPrice: Number($('totalPrice').value || 0),
     status: $('orderStatus').value || getEnabledOrderStatuses(state)[0],
   };
-}
-
-function openOrderExportWindow(order) {
-  if (!order.orderNumber) {
-    alert('請先填寫工單編號再匯出工單');
-    return;
-  }
-
-  const html = `<!doctype html>
-  <html lang="zh-Hant"><head><meta charset="UTF-8" />
-  <title>工單匯出</title>
-  <style>
-  body{font-family:"Noto Sans TC",sans-serif;padding:12px;color:#111}
-  .copy{border:2px solid #555;padding:10px;margin-bottom:12px}
-  h2{margin:0 0 8px}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{border:1px solid #777;padding:6px;text-align:left}
-  .footer{display:flex;justify-content:space-between;margin-top:12px}
-  </style></head>
-  <body>
-    <div class="copy">
-      <h2>${COMPANY_INFO.name} 工單</h2><p>${COMPANY_INFO.address}</p>
-      ${renderOrderTable(order)}
-    </div>
-    <script>window.print();</script>
-  </body></html>`;
-
-  const win = window.open('', '_blank', 'width=900,height=760');
-  if (!win) {
-    alert('無法開啟匯出視窗，請確認瀏覽器未封鎖彈出視窗');
-    return;
-  }
-  win.document.write(html);
-  win.document.close();
-}
-
-function renderOrderTable(order) {
-  const taiInch = toTaiInch(order.sizeLength, order.sizeUnit);
-  const taiInchW = toTaiInch(order.sizeWidth, order.sizeUnit);
-  const taiInchText = taiInch && taiInchW ? `天 ${taiInch.toFixed(2)} × 地 ${taiInchW.toFixed(2)} 台吋` : '-';
-  return `
-    <table>
-      <tr><th>工單編號</th><td>${order.orderNumber || '-'}</td><th>交貨日期</th><td>${order.orderDate || '-'}</td></tr>
-      <tr><th>客人</th><td colspan="3">${order.billingCustomer || '-'}</td></tr>
-      <tr><th>上游客戶</th><td>${order.upstream || '-'}</td><th>下游客戶</th><td>${order.downstream || '-'}</td></tr>
-      <tr><th>地址</th><td colspan="3">${order.address || '-'}</td></tr>
-      <tr><th>數量</th><td>${order.sheetCountText || order.sheetCount || '-'}</td><th>計算張數</th><td>${order.sheetCount || '-'}</td></tr>
-      <tr><th>天／地（台吋）</th><td>${taiInchText}</td><th>上光種類</th><td>${order.glossType || '-'}</td></tr>
-    </table>
-    <div class="footer"><span>客戶簽收：______________</span><span>製單人：______________</span></div>`;
+  const quote = calculateOrderQuote(state, order);
+  const enteredPrice = $('orderUnitPrice').value;
+  order.unitPrice = enteredPrice !== '' ? Number(enteredPrice) : $('orderId').value ? null : quote?.unitPrice ?? null;
+  const existing = state.orders.find(row => row.id === $('orderId').value);
+  order.pricingMode = existing?.pricingMode || quote?.pricingMode || (order.machineType === 'SMALL' ? 'sheet' : 'ream');
+  return order;
 }
 
 export function renderOrderScreen(state) {
@@ -709,6 +668,8 @@ export function openOrderForEdit(state, orderId) {
   if (!order) return false;
   $('orderId').value = order.id;
   $('orderNumber').value = order.orderNumber || '';
+  $('orderItemName').value = order.itemName || '';
+  $('orderUnitPrice').value = order.unitPrice ?? '';
   $('orderDate').value = order.orderDate || '';
   $('billingCustomerInput').value = order.billingCustomer || order.upstream || '';
   $('upstreamInput').value = order.upstream || '';
@@ -736,6 +697,8 @@ function copyOrderAsNew(state, orderId) {
   if (!order) return false;
   clearOrderForm();
   $('orderNumber').value = '';
+  $('orderItemName').value = order.itemName || '';
+  $('orderUnitPrice').value = order.unitPrice ?? '';
   $('orderDate').value = order.orderDate || getTodayText();
   $('billingCustomerInput').value = order.billingCustomer || '';
   $('upstreamInput').value = order.upstream || '';

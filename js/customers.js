@@ -24,6 +24,7 @@ function fillCustomerForm(customer) {
   $('customerName').value = customer.name || '';
   $('customerTaxId').value = customer.taxId || '';
   $('customerPhone').value = customer.phone || '';
+  $('customerFax').value = customer.fax || '';
   $('customerAddress').value = customer.address || '';
   $('customerRole').value = normalizeCustomerRole(customer.role) || $('customerRole').value;
 }
@@ -150,6 +151,7 @@ export function bindCustomerEvents(state, saveState, renderAll) {
     const role = $('customerRole').value || getCustomerRoles(state)[0];
     const taxId = normalizeTaxId($('customerTaxId')?.value.trim() || '');
     const phone = normalizePhone($('customerPhone').value.trim());
+    const fax = normalizePhone($('customerFax').value.trim());
     const address = $('customerAddress').value.trim();
     if ($('customerTaxId')?.value.trim() && taxId.length !== 8) return alert('統編需要 8 碼數字。');
 
@@ -160,6 +162,7 @@ export function bindCustomerEvents(state, saveState, renderAll) {
         duplicate.role = role || duplicate.role;
         duplicate.taxId = taxId || duplicate.taxId;
         duplicate.phone = phone || duplicate.phone;
+        duplicate.fax = fax || duplicate.fax;
         duplicate.address = address || duplicate.address;
         saveState();
         e.target.reset();
@@ -177,10 +180,11 @@ export function bindCustomerEvents(state, saveState, renderAll) {
       target.role = role;
       target.taxId = taxId;
       target.phone = phone;
+      target.fax = fax;
       target.address = address;
       delete e.target.dataset.editingCustomerId;
     } else {
-      state.customers.push({ id: crypto.randomUUID(), name, role, taxId, phone, address, active: true });
+      state.customers.push({ id: crypto.randomUUID(), name, role, taxId, phone, fax, address, active: true });
     }
     saveState();
     e.target.reset();

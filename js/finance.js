@@ -1,6 +1,83 @@
 ﻿import { $, COMPANY_INFO, money, downloadCsv, getTodayText, escapeHtml } from './shared.js';
 import { getOrderReceivableKey } from './store.js?v=20261003-system-audit-1';
 import { toTaiInch } from './pricing.js';
+import { buildMonthlyStatement, fetchStatementRecords, statementTableHtml, statementPrintHtml } from './monthly-statement.js';
+
+let monthlyCustomers = [];
+let monthlyPreview = null;
+let monthlyToken = null;
+let monthlyGeneration = 0;
+
+function renderMonthlyCustomerOptions(state) {
+  if (monthlyToken !== state.authToken) {
+    monthlyCustomers = []; monthlyPreview = null; monthlyToken = state.authToken; monthlyGeneration++;
+    $('monthlyPreview')?.replaceChildren();
+    if ($('monthlyCustomerDetails')) $('monthlyCustomerDetails').textContent = '';
+    if ($('monthlyWarnings')) $('monthlyWarnings').textContent = '';
+    if ($('monthlySummary')) $('monthlySummary').textContent = '請選擇客戶與月份，再產生預覽。';
+  }
+  const select = $('monthlyCustomer');
+  if (!select) return;
+  const selected = select.value;
+  select.replaceChildren(new Option('請選擇客戶', ''), ...(monthlyCustomers.length ? monthlyCustomers : state.customers).map(customer => new Option(customer.name, customer.id)));
+  select.value = selected;
+  if ($('monthlyMonth') && !$('monthlyMonth').value) $('monthlyMonth').value = currentMonthText();
+}
+
+async function loadMonthlyCustomers(state) {
+  const token = state.authToken;
+  try {
+    const customers = await fetchStatementRecords('customers', token);
+    if (token !== state.authToken) return;
+    monthlyCustomers = customers;
+    monthlyToken = token;
+    renderMonthlyCustomerOptions(state);
+  } catch (error) { if (token === state.authToken) $('monthlySummary').textContent = error.message; }
+}
+
+async function generateMonthlyStatement(state) {
+  const generation = ++monthlyGeneration;
+  const token = state.authToken;
+  const customerId = $('monthlyCustomer').value;
+  const customers = monthlyCustomers.length ? monthlyCustomers : state.customers;
+  const customer = customers.find(row => row.id === customerId);
+  monthlyPreview = null;
+  $('monthlyPreview').replaceChildren();
+  $('monthlyWarnings').textContent = '';
+  $('monthlyCustomerDetails').textContent = '';
+  if (!customer) { $('monthlySummary').textContent = '請先選擇客戶。'; return; }
+  const options = { customerId, month: $('monthlyMonth').value, taxRate: $('monthlyTaxRate').value, includePending: $('monthlyIncludePending').checked };
+  $('monthlyGenerateBtn').disabled = true;
+  $('monthlySummary').textContent = '正在讀取這位客戶的全部工單…';
+  try {
+    const orders = await fetchStatementRecords('orders', token, customer.name);
+    if (token !== state.authToken || generation !== monthlyGeneration) return;
+    monthlyPreview = buildMonthlyStatement({ customers, orders }, options);
+    const report = monthlyPreview;
+    $('monthlySummary').textContent = `${report.customer.name}｜${report.month}｜${report.rows.length} 筆｜總合 ${money(report.subtotal)}｜稅額 ${money(report.tax)}｜應付 ${money(report.total)}`;
+    $('monthlyPreview').innerHTML = statementTableHtml(report);
+    $('monthlyCustomerDetails').textContent = `電話：${report.customer.phone || '-'}｜傳真：${report.customer.fax || '-'}｜統編：${report.customer.taxId || '-'}｜地址：${report.customer.address || '-'}`;
+    $('monthlyWarnings').textContent = report.warnings.length ? `請先確認：${report.warnings.join('；')}` : '';
+  } catch (error) {
+    if (token === state.authToken && generation === monthlyGeneration) $('monthlySummary').textContent = error.message;
+  } finally { $('monthlyGenerateBtn').disabled = false; }
+}
+
+function outputMonthlyStatement(state, print = false) {
+  const report = monthlyPreview;
+  if (!report?.rows.length || monthlyToken !== state.authToken) return alert('請先產生有明細的月帳單預覽。');
+  if (report.warnings.length && !window.confirm('部分工單缺少品名、單價或金額，確定仍要輸出帳單嗎？')) return;
+  if (!print) return downloadCsv(`月帳單-${report.customer.name}-${report.month}.csv`, [
+    ['客戶名稱', report.customer.name], ['計費期間', report.month], ['電話', report.customer.phone || ''], ['傳真', report.customer.fax || ''], ['地址', report.customer.address || ''], ['統一編號', report.customer.taxId || ''], [],
+    ['日期', '工單單號', '品名', '加工', '天', '地', '尺寸單位', '數量', '數量說明', '單價', '計價單位', '估價', '送貨地點', '送貨地址'],
+    ...report.rows.map(row => [row.date, row.orderNumber, row.itemName, row.processing, row.length, row.width, row.sizeUnit, row.quantity, row.quantityNote, row.unitPrice ?? '', row.priceUnit, row.amount, row.destination, row.address]),
+    [], ['工作筆數', report.rows.length], ['總合', report.subtotal], ['稅率%', report.taxRate], ['稅額', report.tax], ['應付金額', report.total],
+  ]);
+  const win = window.open('', '_blank', 'width=980,height=760');
+  if (!win) return alert('請允許瀏覽器開啟彈出視窗。');
+  win.document.write(statementPrintHtml(report, { name: state.settings.companyName || COMPANY_INFO.name, address: state.settings.companyAddress || COMPANY_INFO.address, phone: $('monthlyCompanyPhone').value, fax: $('monthlyCompanyFax').value }));
+  win.document.close();
+}
 
 const selectedInvoiceOrderIds = new Set();
 
@@ -521,6 +598,7 @@ function ensureFinanceOverview(state, reportA) {
         <p class="sub">收付款、疑慮與報表分開查看，讓財務資訊更清楚。</p>
       </div>
       <div class="finance-overview-actions">
+        <button class="finance-action-card" type="button" data-finance-screen="billing"><strong>客戶月帳單</strong><span>按客戶與月份彙整加工明細，預覽、列印與匯出</span></button>
         <button class="finance-action-card" type="button" data-finance-screen="concerns"><strong>疑慮待辦</strong><span>追蹤未收、未付與異常紀錄</span></button>
         <button class="finance-action-card" type="button" data-finance-screen="entry"><strong>新增收付款</strong><span>登記應收與應付款</span></button>
         <button class="finance-action-card" type="button" data-finance-screen="workspace"><strong>發票與報表</strong><span>開立發票、月結與客戶對帳</span></button>
@@ -549,6 +627,7 @@ function applyFinanceScreen(state) {
   main?.classList.toggle('hidden', !['main', 'concerns'].includes(active));
   workspace?.classList.toggle('hidden', active !== 'workspace');
   entry?.classList.toggle('hidden', active !== 'entry');
+  $('financeBillingScreen')?.classList.toggle('hidden', active !== 'billing');
 
   const detailNodes = [
     $('financeRecvSummary')?.closest('.kpi-grid'),
@@ -564,6 +643,8 @@ function applyFinanceScreen(state) {
 
 
 export function renderFinance(state) {
+  renderMonthlyCustomerOptions(state);
+  if ($('monthlyCompanyPhone') && !$('monthlyCompanyPhone').value) $('monthlyCompanyPhone').value = state.settings.companyPhone || '';
   const reportA = getLinkedReceivablesData(state);
   const reportB = getReportBData(state);
   const reportC = getReportCData(state);
@@ -602,6 +683,10 @@ export function renderFinance(state) {
 }
 
 export function bindFinanceEvents(state, saveState, renderAll) {
+  $('monthlyGenerateBtn')?.addEventListener('click', () => generateMonthlyStatement(state));
+  $('monthlyPrintBtn')?.addEventListener('click', () => outputMonthlyStatement(state, true));
+  $('monthlyExportBtn')?.addEventListener('click', () => outputMonthlyStatement(state));
+  ['monthlyCustomer', 'monthlyMonth', 'monthlyTaxRate', 'monthlyIncludePending'].forEach(id => $(id)?.addEventListener('change', () => { monthlyGeneration++; monthlyPreview = null; $('monthlyPreview').replaceChildren(); $('monthlyCustomerDetails').textContent = ''; $('monthlyWarnings').textContent = ''; $('monthlySummary').textContent = '條件已變更，請重新產生預覽。'; }));
   $('receivableForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     const orderNumber = $('recvOrderNumber').value.trim();
@@ -740,5 +825,6 @@ export function bindFinanceEvents(state, saveState, renderAll) {
     if (!btn) return;
     state.financeScreen = btn.dataset.financeScreen;
     renderFinance(state);
+    if (state.financeScreen === 'billing') loadMonthlyCustomers(state);
   });
 }

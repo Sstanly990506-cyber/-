@@ -133,6 +133,7 @@
               </div>
               <label>送貨地址（下游）<input id="orderAddress" placeholder="完成上光後，要送往下一站的地址" /></label>
 
+              <label>品名<input id="orderItemName" placeholder="帳單上顯示的產品／印件名稱" /></label>
               <label>數量說明<input id="sheetCountText" type="text" maxlength="120" placeholder="例如：3箱×20張＋散裝5張" /></label>
               <label>計算張數<input id="sheetCount" type="number" min="0" step="0.01" placeholder="供價格估算與報表使用" /></label>
               <label class="span-2">尺寸寫法（可選）<input id="sizeNotation" type="text" maxlength="60" placeholder="例如：25×35台寸、25x35台吋、4K、菊5" /></label>
@@ -158,6 +159,7 @@
               <label>換算台吋<input id="sizeTaiInch" readonly /></label>
               <label class="span-2">上光種類<select id="glossType"></select></label>
               <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
+              <label>帳單單價（大台／常規：元／令；小台：元／張）<input id="orderUnitPrice" type="number" step="0.0001" min="0" placeholder="新工單空白時記錄報價單價；舊工單請補填" /></label>
               <p id="orderSmartHint" class="sub span-2"></p>
               <label>狀態
                 <select id="orderStatus"></select>
@@ -266,6 +268,7 @@
               <label>客戶名稱<input id="customerName" /></label>
               <label>統一編號<input id="customerTaxId" inputmode="numeric" maxlength="8" placeholder="8 碼統編" /></label>
               <label>電話<input id="customerPhone" /></label>
+              <label>傳真<input id="customerFax" placeholder="例如：2223-4568" /></label>
               <label>地址<input id="customerAddress" /></label>
               <label>角色
                 <select id="customerRole"></select>
@@ -601,6 +604,28 @@
           </div>
 
 
+        <article id="financeBillingScreen" class="card hidden">
+          <h3>客戶月帳單</h3>
+          <p class="sub">依交貨日期歸入月份，預設只列已完成／已送出的工單。估價採用工單已儲存的總價，不會重算歷史報價。稅額另外計算，請確認工單總價為未稅。</p>
+          <div class="form-grid">
+            <label>帳單客戶<select id="monthlyCustomer"><option value="">請選擇客戶</option></select></label>
+            <label>帳單月份<input id="monthlyMonth" type="month" /></label>
+            <label>稅率（%）<input id="monthlyTaxRate" type="number" min="0" max="100" step="0.01" value="5" /></label>
+            <label class="checkbox"><input id="monthlyIncludePending" type="checkbox" />也列入未完成工單</label>
+            <label>三青電話<input id="monthlyCompanyPhone" /></label>
+            <label>三青傳真<input id="monthlyCompanyFax" placeholder="請填帳單聯絡傳真" /></label>
+          </div>
+          <div class="filter-row">
+            <button class="btn primary" id="monthlyGenerateBtn" type="button">產生月帳單預覽</button>
+            <button class="btn" id="monthlyPrintBtn" type="button">列印／另存 PDF</button>
+            <button class="btn" id="monthlyExportBtn" type="button">匯出明細 CSV</button>
+            <button class="btn ghost" type="button" data-finance-screen="main">返回財經重點</button>
+          </div>
+          <p id="monthlySummary" role="status">請選擇客戶與月份，再產生預覽。</p>
+          <p id="monthlyCustomerDetails" class="sub"></p>
+          <p id="monthlyWarnings" class="sub"></p>
+          <div id="monthlyPreview" class="table-wrap"></div>
+        </article>
         <div id="financeWorkspaceScreen" class="split finance-split hidden">
           <article id="financeInvoiceScreen" class="card">
             <h3>發票系統（左）</h3>
