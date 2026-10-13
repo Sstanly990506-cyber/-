@@ -16,6 +16,10 @@
 .sq-ai-sources { font-size: 12px; padding-left: 20px; color: #a7c5e5; }
 .sq-ai-compose { border-top: 1px solid var(--border); padding: 12px; display: flex; align-items: flex-end; gap: 8px; }
 .sq-ai-compose textarea { flex: 1; min-width: 0; max-height: 160px; resize: vertical; }
+.sq-ai-head > div { min-width: 0; }
+.sq-ai-head > .btn,
+.sq-ai-compose > .btn { width: auto; flex: 0 0 auto; }
+.app-shell:has(~ .sq-ai:not(.hidden)) { padding-bottom: 100px; }
 .sq-ai button:disabled { opacity: .55; cursor: default; }
 .sq-ai-edit { display: grid; gap: 8px; margin-top: 10px; }
 .sq-ai-warning { border: 1px solid #fbbf24; padding: 10px; border-radius: 8px; margin-top: 10px; }
