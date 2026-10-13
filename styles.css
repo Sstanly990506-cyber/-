@@ -366,36 +366,6 @@ input[type="checkbox"] { width: auto; }
 }
 .dashboard-priorities { padding: 16px; }
 .dashboard-priorities h2 { margin-bottom: 12px; font-size: 18px; }
-.dashboard-quick-section,
-.dashboard-all-modules { display: grid; gap: 12px; }
-.dashboard-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.dashboard-section-heading h2 { margin: 0 0 3px; font-size: 19px; }
-.dashboard-section-heading .sub { margin: 0; font-size: 13px; }
-.dashboard-quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-.quick-action-card {
-  min-width: 0;
-  min-height: 82px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  color: var(--text);
-  text-align: left;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(139, 92, 246, 0.12)), var(--card);
-  border: 1px solid rgba(245, 158, 11, 0.34);
-  border-radius: 16px;
-  cursor: pointer;
-  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-}
-.quick-action-card:hover { transform: translateY(-2px); border-color: var(--primary); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.2); }
-.quick-action-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; color: #111827; background: var(--primary); font-size: 24px; font-weight: 800; }
-.quick-action-copy { display: grid; gap: 4px; min-width: 0; }
-.quick-action-copy strong { font-size: 16px; }
-.quick-action-copy small { color: var(--muted); font-size: 12px; line-height: 1.4; }
-.quick-action-arrow { color: var(--primary); font-size: 20px; }
-.dashboard-all-modules { margin-top: 4px; }
-.dashboard-module-grid { padding: 0; }
 .dashboard-priority-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1268,7 +1238,6 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
   .dashboard-priority span { font-size: 11px; }
   .dashboard-priority strong { font-size: 22px; }
   .dashboard-module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .dashboard-quick-grid { grid-template-columns: 1fr; }
   .dashboard-module-grid .nav-card { min-height: 78px; padding: 12px; }
   .dashboard-module-grid .nav-card-icon { font-size: 24px; }
   .dashboard-module-grid .nav-card strong { font-size: 15px; }

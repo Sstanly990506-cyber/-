@@ -30,18 +30,8 @@
           </div>
         </header>
 
-        <section id="dashboardQuickActions" class="dashboard-quick-section" aria-labelledby="dashboardQuickActionsTitle">
-          <div class="dashboard-section-heading">
-            <div>
-              <h2 id="dashboardQuickActionsTitle">常用操作</h2>
-              <p class="sub">選擇要做的事，直接進入對應畫面。</p>
-            </div>
-          </div>
-          <div id="dashboardQuickActionsGrid" class="dashboard-quick-grid"></div>
-        </section>
-
         <section id="dashboardPriorities" class="card dashboard-priorities">
-          <h2>今天要留意</h2>
+          <h2>待辦重點</h2>
           <div class="dashboard-priority-grid">
             <button class="dashboard-priority" type="button" data-dashboard-target>
               <span id="dashPriorityLabel1">待處理</span><strong id="dashPriorityValue1">0</strong>
@@ -55,24 +45,16 @@
           </div>
         </section>
 
-        <section class="dashboard-all-modules" aria-labelledby="dashboardModulesTitle">
-          <div class="dashboard-section-heading">
-            <div>
-              <h2 id="dashboardModulesTitle">其他功能</h2>
-              <p class="sub">依需要選擇系統。</p>
-            </div>
-          </div>
-          <div id="dashboardNavGrid" class="card-grid compact-nav-grid dashboard-module-grid">
-            <button class="nav-card" type="button" data-target="ordersView">工單作業系統</button>
-            <button class="nav-card" type="button" data-target="customersView">客戶資料系統</button>
-            <button class="nav-card" type="button" data-target="tripsView">車趟系統</button>
-            <button class="nav-card" type="button" data-target="opsCenterView">營運中心</button>
-            <button class="nav-card" type="button" data-target="inventoryView">庫存中心</button>
-            <button class="nav-card" type="button" data-target="notificationsView">通知中心</button>
-            <button class="nav-card" type="button" data-target="financeView">財經資料系統</button>
-            <button class="nav-card" type="button" data-target="auditView">稽核系統</button>
-          </div>
-        </section>
+        <div id="dashboardNavGrid" class="card-grid compact-nav-grid dashboard-module-grid">
+          <button class="nav-card" type="button" data-target="ordersView">工單作業系統</button>
+          <button class="nav-card" type="button" data-target="customersView">客戶資料系統</button>
+          <button class="nav-card" type="button" data-target="tripsView">車趟系統</button>
+          <button class="nav-card" type="button" data-target="opsCenterView">營運中心</button>
+          <button class="nav-card" type="button" data-target="inventoryView">庫存中心</button>
+          <button class="nav-card" type="button" data-target="notificationsView">通知中心</button>
+          <button class="nav-card" type="button" data-target="financeView">財經資料系統</button>
+          <button class="nav-card" type="button" data-target="auditView">稽核系統</button>
+        </div>
       </section>
 
       <section id="ordersView" class="panel hidden">
