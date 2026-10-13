@@ -24,7 +24,7 @@ import { renderNotifications, bindNotificationEvents, refreshLineStatus } from '
 function proactiveNotify() {
   return buildSystemAlerts();
 }
-const APP_BUILD = '20261011-eight-fixes-1';
+const APP_BUILD = '20261013-quick-actions-1';
 import { initializeLocalAi } from './local-ai.js?v=20261011-eight-fixes-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
@@ -116,7 +116,7 @@ function renderDashboardNavCards() {
   const grid = $('dashboardNavGrid');
   if (!grid) return;
   const visibleModules = MODULE_DEFINITIONS
-    .filter((module) => module.id !== 'settingsView' && module.id !== 'dashboardView' && module.id !== 'loginView')
+    .filter((module) => !['ordersView', 'settingsView', 'dashboardView', 'loginView'].includes(module.id))
     .filter((module) => isModuleEnabled(module.id) && hasViewPermission(module.id));
 
   grid.replaceChildren(...visibleModules.map((module) => {
@@ -132,7 +132,72 @@ function renderDashboardNavCards() {
     iconNode.textContent = icon;
     const labelNode = document.createElement('strong');
     labelNode.textContent = label;
-    button.append(iconNode, labelNode);
+    const detail = document.createElement('small');
+    detail.textContent = state.settings?.moduleDescriptions?.[module.id] || module.description || '';
+    button.append(iconNode, labelNode, detail);
+    return button;
+  }));
+}
+
+function renderDashboardQuickActions() {
+  const grid = $('dashboardQuickActionsGrid');
+  const section = $('dashboardQuickActions');
+  if (!grid || !section) return;
+
+  const actions = [
+    { id: 'new-order', view: 'ordersView', icon: '＋', label: '新增工單', description: '建立一筆工單' },
+    { id: 'find-order', view: 'ordersView', icon: '⌕', label: '找工單', description: '搜尋或更新工單' },
+    { id: 'plan-trips', view: 'tripsView', icon: '↗', label: '安排車趟', description: '挑選工單並安排路線' },
+    { id: 'open-finance', view: 'financeView', icon: '$', label: '查看應收應付', description: '帳款與財務報表' },
+    { id: 'open-alerts', view: 'notificationsView', icon: '!', label: '查看提醒', description: '處理提醒與系統通知' },
+    { id: 'open-audits', view: 'auditView', icon: '✓', label: '查看稽核', description: '追蹤系統與工單異動' },
+  ];
+  const actionIdsByRole = {
+    admin: ['new-order', 'find-order', 'plan-trips', 'open-finance'],
+    ops: ['new-order', 'find-order', 'plan-trips'],
+    finance: ['open-finance', 'open-alerts'],
+    audit: ['open-audits', 'open-alerts'],
+    driver: ['plan-trips'],
+    viewer: ['open-alerts'],
+  };
+  let visibleActions = actions.filter((action) => (actionIdsByRole[state.userRole] || []).includes(action.id)
+    && hasViewPermission(action.view));
+  if (!visibleActions.length) {
+    visibleActions = MODULE_DEFINITIONS
+      .filter((module) => isModuleEnabled(module.id) && hasViewPermission(module.id))
+      .slice(0, 3)
+      .map((module) => ({
+        id: `open-${module.id}`,
+        view: module.id,
+        icon: state.settings?.moduleIcons?.[module.id] || module.icon || '→',
+        label: state.settings?.moduleLabels?.[module.id] || module.label,
+        description: state.settings?.moduleDescriptions?.[module.id] || module.description,
+      }));
+  }
+
+  section.classList.toggle('hidden', visibleActions.length === 0);
+  grid.replaceChildren(...visibleActions.map((action) => {
+    const button = document.createElement('button');
+    button.className = 'quick-action-card';
+    button.type = 'button';
+    button.dataset.dashboardAction = action.id;
+    button.dataset.dashboardView = action.view;
+    const icon = document.createElement('span');
+    icon.className = 'quick-action-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = action.icon;
+    const copy = document.createElement('span');
+    copy.className = 'quick-action-copy';
+    const label = document.createElement('strong');
+    label.textContent = action.label;
+    const description = document.createElement('small');
+    description.textContent = action.description;
+    copy.append(label, description);
+    const arrow = document.createElement('span');
+    arrow.className = 'quick-action-arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = '→';
+    button.append(icon, copy, arrow);
     return button;
   }));
 }
@@ -314,6 +379,7 @@ function renderDashboard() {
   });
 
   applyRoleUi();
+  renderDashboardQuickActions();
 }
 
 function renderAll() {
@@ -536,6 +602,25 @@ function bindCoreEvents() {
     setAuthToken(null);
     showView('loginView');
     unmountInternalViews();
+  });
+
+  $('dashboardQuickActionsGrid')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-dashboard-action]');
+    if (!button) return;
+    const action = button.dataset.dashboardAction;
+    if (action === 'new-order') {
+      showView('ordersView');
+      document.querySelector('[data-order-screen="form"]')?.click();
+      $('orderNumber')?.focus();
+      return;
+    }
+    if (action === 'find-order') {
+      showView('ordersView');
+      $('orderSearch')?.focus();
+      return;
+    }
+    const target = button.dataset.dashboardView;
+    if (target) openDashboardTarget(target);
   });
 
   document.querySelectorAll('[data-back]').forEach((btn) => btn.addEventListener('click', () => showView('dashboardView')));
