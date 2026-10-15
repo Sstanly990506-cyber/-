@@ -36,7 +36,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
             if self.headers.get('Transfer-Encoding'):raise ApiError('不支援串流請求。',400)
             if local_ai.DEMO:
                 path=urlparse(self.path).path
-                if path.startswith('/api/') and not (path.startswith('/api/local-ai/') or self.command=='GET' and (path in {'/api/health','/api/bootstrap','/api/changes','/api/reports/summary'} or path.startswith('/api/data/'))):
+                if path.startswith('/api/') and not (path.startswith('/api/local-ai/') or self.command=='GET' and (path in {'/api/health','/api/bootstrap','/api/dashboard','/api/changes','/api/reports/summary'} or path.startswith('/api/data/'))):
                     raise ApiError('假資料示範只開放查詢與 AI 備註確認；其餘功能請回原網站操作。',403)
             return True
         except ApiError as err:

@@ -642,19 +642,20 @@ class ServiceTests(unittest.TestCase):
         def records(entity):
             return orders if entity == 'orders' else []
 
-        with patch('api.service.verify_session_token', return_value=driver), patch('api.service._all_records', side_effect=records), patch('api.service.upsert_record', return_value={'ok': True, 'updatedAt': 99}) as upsert:
+        with patch('api.service.verify_session_token', return_value=driver), patch('api.service._all_records', side_effect=records), patch('api.service.get_record', side_effect=lambda entity, rid: next((row for row in orders if entity == 'orders' and row['id'] == rid), None)), patch('api.service.write_record_batch', return_value={'ok': True, 'updatedAt': 99}) as batch:
             result = execute_trip_payload('token', {'orderIds': ['o1', 'o2', 'o3']})
 
         self.assertEqual(result['updated'], 2)
         self.assertEqual(result['alreadySent'], 1)
         self.assertEqual(result['skippedCompleted'], 0)
         self.assertEqual(result['orders'][0]['status'], '已送出')
-        order_writes = [call for call in upsert.call_args_list if call.args[0] == 'orders']
-        self.assertEqual([call.args[1] for call in order_writes], ['o1', 'o3'])
-        self.assertTrue(all(call.args[2]['status'] == '已送出' for call in order_writes))
-        self.assertTrue(all('_updatedAt' not in call.args[2] for call in order_writes))
-        self.assertTrue(any(call.args[0] == 'audits' for call in upsert.call_args_list))
-        self.assertTrue(any(call.args[0] == 'receivables' for call in upsert.call_args_list))
+        writes = [write for call in batch.call_args_list for write in call.args[0]]
+        order_writes = [write for write in writes if write[0] == 'orders']
+        self.assertEqual([write[1] for write in order_writes], ['o1', 'o3'])
+        self.assertTrue(all(write[2]['status'] == '已送出' for write in order_writes))
+        self.assertTrue(all('_updatedAt' not in write[2] for write in order_writes))
+        self.assertTrue(any(write[0] == 'audits' for write in writes))
+        self.assertTrue(any(write[0] == 'receivables' for write in writes))
 
     def test_ops_can_request_pricing_quote(self):
         payload = {'width': 26, 'height': 18, 'quantity': 1000, 'coatingType': 'PVA', 'machineType': 'BIG'}
@@ -704,11 +705,10 @@ class ServiceTests(unittest.TestCase):
         }
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), \
                 patch('api.service._all_records', side_effect=lambda entity: records[entity]), \
-                patch('api.service.delete_record', return_value={'ok': True}) as remove:
+                patch('api.service.write_record_batch', return_value={'ok': True}) as remove:
             result = delete_entity_payload('token', 'orders', 'o-1')
-        self.assertEqual(remove.call_args_list[0].args, ('orders', 'o-1'))
-        self.assertEqual(remove.call_args_list[1].args, ('receivables', 'r-1'))
-        self.assertEqual(remove.call_count, 2)
+        self.assertEqual(remove.call_args.args[1], [('orders', 'o-1'), ('receivables', 'r-1')])
+        self.assertEqual(remove.call_count, 1)
         self.assertEqual(result['deletedLinkedReceivables'], 1)
 
     def test_non_admin_cannot_change_finance_password(self):
@@ -781,8 +781,8 @@ class ServiceTests(unittest.TestCase):
         with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_state', return_value={'syncTick': 1}), patch('api.service.write_state', return_value=(True, 10)) as write, patch('api.service.restore_records', return_value={'restored': {'orders': 0}}) as restore:
             result = restore_backup_payload('token', {'confirm': '還原備份', 'backup': backup})
         self.assertEqual(result['restored']['orders'], 0)
-        self.assertEqual(write.call_args.args[0]['settings']['appTitle'], 'A')
-        restore.assert_called_once_with({'orders': []})
+        write.assert_not_called()
+        restore.assert_called_once_with({'orders': []}, state_updates={'settings': {'appTitle': 'A'}, 'glossOptions': ['PVA']})
 
     def test_ops_can_list_ai_corrections(self):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}), patch('api.service.list_records', return_value={'ok': True, 'items': [], 'total': 0}):

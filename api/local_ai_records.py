@@ -57,6 +57,8 @@ def update_inventory_note(record_id, expected, note, actor):
         with records.storage.get_db_connection() as conn:
             with conn.transaction():
                 with conn.cursor() as cur:
+                    # Match the CRUD/restore lock order before acquiring a row lock.
+                    cur.execute('LOCK TABLE app_records IN SHARE ROW EXCLUSIVE MODE')
                     cur.execute('SELECT data_json, updated_at, deleted FROM app_records WHERE entity=%s AND record_id=%s FOR UPDATE', ('inventory', record_id))
                     row = cur.fetchone()
                     value = None if not row else {'data': row['data_json'], 'updatedAt': int(row['updated_at']), 'deleted': row['deleted']}

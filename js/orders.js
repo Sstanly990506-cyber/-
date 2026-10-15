@@ -1,5 +1,5 @@
 import { $, downloadCsv, getTodayText } from './shared.js';
-import { syncOrderToReceivables } from './store.js?v=20261011-eight-fixes-1';
+import { syncOrderToReceivables } from './store.js?v=20261015-audit-fixes-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
@@ -596,7 +596,7 @@ export function renderOrders(state, renderCustomerOptions) {
     .filter((order) => matchesOrderSearch(order, keyword));
 
   const summary = $('ordersListSummary');
-  if (summary) summary.textContent = `顯示 ${filtered.length} 筆，共 ${state.orders.length} 筆工單`;
+  if (summary) summary.textContent = `本頁顯示 ${filtered.length} 筆，共 ${state.pagination?.orders?.total ?? state.orders.length} 筆工單`;
 
   if (!filtered.length) {
     body.innerHTML = '<tr class="orders-empty-row"><td colspan="4">目前沒有符合條件的工單。</td></tr>';
@@ -629,11 +629,11 @@ export function renderOrders(state, renderCustomerOptions) {
     tr.dataset.edit = order.id;
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
-      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><strong>${escapeHtml(order.orderNumber || '-')}</strong></td>
+      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><strong>${escapeHtml(order.orderNumber || '-')}</strong><div class="sub">${escapeHtml(order.billingCustomer || order.downstream || order.upstream || '-')}</div></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        <div class="order-action-group">${positionActions}${quickActions || '<span class="sub">無快速操作</span>'}</div>
+        <div class="order-action-group"><button class="btn small" type="button" data-edit="${escapeHtml(order.id)}">編輯</button><button class="btn small" type="button" data-copy-order-button="${escapeHtml(order.id)}">複製</button>${positionActions}${quickActions}</div>
       </td>`;
     body.append(tr);
   });
@@ -886,12 +886,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
       const label = order.orderNumber || '未命名工單';
       if (!window.confirm(`確定要刪除工單「${label}」嗎？刪除後無法復原。`)) return;
       state.orders.splice(index, 1);
-      for (let i = state.receivables.length - 1; i >= 0; i -= 1) {
-        const receivable = state.receivables[i];
-        if (receivable.source === 'auto-order' && receivable.orderNumber === order.orderNumber) {
-          state.receivables.splice(i, 1);
-        }
-      }
       saveState();
       renderAll();
       return;
@@ -923,6 +917,11 @@ export function bindOrderEvents(state, saveState, renderAll) {
       return;
     }
 
+    const copyBtn = e.target.closest('button[data-copy-order-button]');
+    if (copyBtn) {
+      copyOrderAsNew(state, copyBtn.dataset.copyOrderButton);
+      return;
+    }
     const btn = e.target.closest('button[data-edit]');
     if (btn) {
       openOrderForEdit(state, btn.dataset.edit);

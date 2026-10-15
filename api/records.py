@@ -197,6 +197,43 @@ def first_pages_for_entities(entities, page_size=100):
     return pages
 
 
+def dashboard_counts(entities, today):
+    """Count the complete dataset independently of any list page or search."""
+    ensure_record_storage()
+    selected = [entity for entity in entities if entity in ENTITY_FIELDS]
+    def number(field):
+        value = f"data_json->>'{field}'"
+        return f"(CASE WHEN {value} ~ '^[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]+)?$' THEN ({value})::numeric ELSE 0 END)"
+    if storage.DATABASE_URL:
+        with storage.get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f'''SELECT entity, COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE entity='orders' AND COALESCE(data_json->>'status','未完成') NOT IN ('已完成','已送出','已取消')) AS pending,
+                    COUNT(*) FILTER (WHERE entity='orders' AND left(data_json->>'orderDate',10)=%s) AS today,
+                    COUNT(*) FILTER (WHERE entity='inventory' AND {number('stock')} <= {number('safetyStock')}) AS low,
+                    COUNT(*) FILTER (WHERE entity='receivables' AND {number('amount')} > {number('received')}) AS unpaid_receivable,
+                    COUNT(*) FILTER (WHERE entity='payables' AND {number('amount')} > {number('paid')}) AS unpaid_payable
+                    FROM app_records WHERE deleted=FALSE AND entity = ANY(%s) GROUP BY entity''', (today, selected))
+                return {row['entity']: {key: int(value) for key, value in row.items() if key != 'entity'} for row in cur.fetchall()}
+    with RECORDS_LOCK:
+        source = _load_local()
+    result = {}
+    def numeric(value):
+        try:return float(value or 0)
+        except (TypeError, ValueError):return 0
+    for entity in selected:
+        rows = [row['data'] for row in source.get(entity, {}).values() if not row.get('deleted')]
+        result[entity] = {
+            'total': len(rows),
+            'pending': sum(row.get('status', '未完成') not in {'已完成','已送出','已取消'} for row in rows),
+            'today': sum(str(row.get('orderDate') or '')[:10] == today for row in rows),
+            'low': sum(numeric(row.get('stock')) <= numeric(row.get('safetyStock')) for row in rows),
+            'unpaid_receivable': sum(numeric(row.get('amount')) > numeric(row.get('received')) for row in rows),
+            'unpaid_payable': sum(numeric(row.get('amount')) > numeric(row.get('paid')) for row in rows),
+        }
+    return result
+
+
 def get_record(entity, record_id):
     ensure_record_storage()
     if storage.DATABASE_URL:
@@ -210,19 +247,61 @@ def get_record(entity, record_id):
         return {**row['data'], 'id': record_id, '_updatedAt': row['updatedAt']} if row and not row.get('deleted') else None
 
 
-def write_record_batch(writes, deletes=()):
-    """Commit an order, derived receivable and its audit records together."""
+class RecordConflict(ValueError):
+    """The caller's snapshot is no longer current."""
+
+
+def write_record_batch(writes, deletes=(), expected_versions=None, unique_orders=False):
+    """Commit related writes together, checking versions and order uniqueness."""
     ensure_record_storage()
     prepared = []
     for entity, record_id, data in writes:
         if entity not in ENTITY_FIELDS or not record_id or not isinstance(data, dict):
             raise ValueError('invalid record')
         prepared.append((entity, record_id, {**data, 'id': record_id}))
+    expected_versions = expected_versions or {}
     tick = _now()
+
+    def validate(current):
+        nonlocal tick
+        for key, expected in expected_versions.items():
+            row = current.get(key)
+            actual = int(row['updatedAt']) if row and not row.get('deleted') else 0
+            if actual != expected:
+                raise RecordConflict('資料已由其他人更新；你的修改已保留，請核對最新資料後再儲存。')
+            tick = max(tick, actual + 1)
+        if unique_orders:
+            for entity, record_id, data in prepared:
+                number = str(data.get('orderNumber') or '').strip()
+                if entity != 'orders' or not number:
+                    continue
+                if any(e == 'orders' and rid != record_id and not row.get('deleted')
+                       and str(row['data'].get('orderNumber') or '').strip() == number
+                       for (e, rid), row in current.items()):
+                    raise RecordConflict(f'工單編號已存在：{number}，請使用其他編號。')
+
     if storage.DATABASE_URL:
         with storage.get_db_connection() as conn:
             with conn.transaction():
                 with conn.cursor() as cur:
+                    # Also serializes inserts: two new orders cannot claim the same number.
+                    cur.execute('LOCK TABLE app_records IN SHARE ROW EXCLUSIVE MODE')
+                    cur.execute('SELECT MAX(updated_at) AS latest FROM app_records')
+                    tick = max(tick, int((cur.fetchone() or {}).get('latest') or 0) + 1)
+                    current = {}
+                    for entity, record_id in expected_versions:
+                        cur.execute('SELECT data_json, updated_at, deleted FROM app_records WHERE entity=%s AND record_id=%s', (entity, record_id))
+                        row = cur.fetchone()
+                        if row:
+                            current[(entity, record_id)] = {'data': row['data_json'], 'updatedAt': row['updated_at'], 'deleted': row['deleted']}
+                    if unique_orders:
+                        for entity, record_id, data in prepared:
+                            if entity != 'orders' or not data.get('orderNumber'):
+                                continue
+                            cur.execute("SELECT record_id, data_json, updated_at FROM app_records WHERE entity='orders' AND deleted=FALSE AND btrim(data_json->>'orderNumber')=%s", (str(data['orderNumber']).strip(),))
+                            for row in cur.fetchall():
+                                current[('orders', row['record_id'])] = {'data': row['data_json'], 'updatedAt': row['updated_at'], 'deleted': False}
+                    validate(current)
                     for entity, record_id, data in prepared:
                         cur.execute("""INSERT INTO app_records(entity,record_id,data_json,updated_at,deleted)
                             VALUES (%s,%s,%s,%s,FALSE) ON CONFLICT(entity,record_id) DO UPDATE
@@ -233,6 +312,8 @@ def write_record_batch(writes, deletes=()):
     else:
         with RECORDS_LOCK:
             records = _load_local()
+            tick = max([tick, *(int(row.get('updatedAt') or 0) + 1 for rows in records.values() for row in rows.values())])
+            validate({(entity, rid): row for entity, rows in records.items() for rid, row in rows.items()})
             for entity, record_id, data in prepared:
                 records.setdefault(entity,{})[record_id]={'data':data,'updatedAt':tick,'deleted':False}
             for entity, record_id in deletes:
@@ -321,25 +402,89 @@ def export_records(entities=None):
     return data
 
 
-def restore_records(records_by_entity):
-    ensure_record_storage()
-    if not isinstance(records_by_entity, dict):
-        raise ValueError('invalid backup records')
-    selected = list(ENTITY_FIELDS.keys())
-    clear_records(selected)
-    restored = {entity: 0 for entity in selected}
-    for entity in selected:
-        rows = records_by_entity.get(entity) or []
+def validate_backup_records(records_by_entity):
+    if not isinstance(records_by_entity, dict) or set(ENTITY_FIELDS) - set(records_by_entity):
+        raise ValueError('備份缺少資料分類，請使用完整匯出的備份檔。')
+    prepared = []
+    for entity in ENTITY_FIELDS:
+        rows = records_by_entity[entity]
         if not isinstance(rows, list):
-            continue
+            raise ValueError(f'備份的 {entity} 格式錯誤，未還原任何資料。')
+        seen = set()
         for index, row in enumerate(rows):
             if not isinstance(row, dict):
-                continue
+                raise ValueError(f'備份的 {entity} 第 {index + 1} 筆格式錯誤。')
+            record_id = str(row.get('id') or '').strip()
+            if not record_id or record_id in seen:
+                raise ValueError(f'備份的 {entity} 包含空白或重複的資料 ID。')
+            seen.add(record_id)
             payload = {key: value for key, value in row.items() if key != '_updatedAt'}
-            record_id = _record_id(entity, payload, index)
-            upsert_record(entity, record_id, payload)
-            restored[entity] += 1
-    return {'ok': True, 'restored': restored}
+            # Validate serialization before touching either records or settings.
+            json.dumps(payload, allow_nan=False)
+            prepared.append((entity, record_id, {**payload, 'id': record_id}))
+    return prepared
+
+
+def restore_records(records_by_entity, state_updates=None):
+    ensure_record_storage()
+    prepared = validate_backup_records(records_by_entity)
+    if state_updates is not None:
+        json.dumps(state_updates, allow_nan=False)
+    selected = list(ENTITY_FIELDS.keys())
+    restored = {entity: 0 for entity in selected}
+    tick = _now()
+    if storage.DATABASE_URL:
+        with storage.get_db_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute('LOCK TABLE app_records IN SHARE ROW EXCLUSIVE MODE')
+                    cur.execute('SELECT MAX(updated_at) AS latest FROM app_records')
+                    tick = max(tick, int((cur.fetchone() or {}).get('latest') or 0) + 1)
+                    cur.execute('SELECT entity, record_id FROM app_records WHERE entity = ANY(%s)', (selected,))
+                    for row in cur.fetchall():
+                        tick += 1
+                        cur.execute('UPDATE app_records SET deleted=TRUE, updated_at=%s WHERE entity=%s AND record_id=%s', (tick, row['entity'], row['record_id']))
+                    for entity, record_id, payload in prepared:
+                        tick += 1
+                        cur.execute('''INSERT INTO app_records(entity,record_id,data_json,updated_at,deleted)
+                            VALUES (%s,%s,%s,%s,FALSE) ON CONFLICT(entity,record_id) DO UPDATE
+                            SET data_json=EXCLUDED.data_json,updated_at=EXCLUDED.updated_at,deleted=FALSE''',
+                            (entity, record_id, storage.Jsonb(payload), tick))
+                        restored[entity] += 1
+                    if state_updates is not None:
+                        cur.execute('SELECT state_json, updated_at FROM app_state WHERE id=1 FOR UPDATE')
+                        previous = cur.fetchone()
+                        state_tick = max(tick, int(previous['updated_at']) + 1)
+                        payload = {**previous['state_json'], **state_updates, 'syncTick': state_tick}
+                        cur.execute('UPDATE app_state SET state_json=%s, updated_at=%s WHERE id=1', (storage.Jsonb(payload), state_tick))
+    else:
+        with RECORDS_LOCK, storage.LOCAL_FILE_LOCK:
+            records = _load_local()
+            tick = max([tick, *(int(row.get('updatedAt') or 0) + 1 for rows in records.values() for row in rows.values())])
+            for entity in selected:
+                for row in records.setdefault(entity, {}).values():
+                    tick += 1
+                    row.update({'deleted': True, 'updatedAt': tick})
+            for entity, record_id, payload in prepared:
+                tick += 1
+                records[entity][record_id] = {'data': payload, 'deleted': False, 'updatedAt': tick}
+                restored[entity] += 1
+            paths = [RECORDS_PATH] + ([storage.LOCAL_STATE_PATH] if state_updates is not None else [])
+            originals = {path: path.read_bytes() if path.exists() else None for path in paths}
+            try:
+                if state_updates is not None:
+                    previous = storage.load_local_state_file()
+                    state_tick = max(tick, int(previous.get('syncTick') or 0) + 1)
+                    storage.write_local_state_file({**previous, **state_updates, 'syncTick': state_tick, 'serverUpdatedAt': state_tick})
+                _write_local(records)
+            except Exception:
+                for path, content in originals.items():
+                    if content is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        path.write_bytes(content)
+                raise
+    return {'ok': True, 'restored': restored, 'updatedAt': tick}
 
 
 def changes_since(since, limit=1000):

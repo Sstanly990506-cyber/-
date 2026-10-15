@@ -171,3 +171,45 @@ test('a pending finance unlock cannot replace an account switched during a save'
   assert.equal(store.state.authToken, 'second-account');
   assert.equal(store.state.financeUntil, 0);
 });
+
+test('successful saves advance the version without discarding edits made in flight', async () => {
+  let release;
+  const calls = [];
+  const store = await harness(async (url, options) => {
+    if (url === '/api/dashboard') return response({summary:{pendingOrders:51}});
+    const body = JSON.parse(options.body); calls.push(body);
+    if (calls.length === 1) await new Promise(resolve => { release = resolve; });
+    return response({updatedAt:100 + calls.length});
+  });
+  store.state.customers[0].name = 'first';
+  const first = store.saveState();
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  store.state.customers[0].name = 'second';
+  const second = store.saveState();
+  release(); await Promise.all([first,second]);
+  assert.equal(calls[0]._expectedVersion,0);
+  assert.equal(calls[1]._expectedVersion,101);
+  assert.equal(store.state.customers[0]._updatedAt,102);
+  await store.saveState();
+  assert.equal(calls.length,2);
+});
+
+test('a conflict preserves the draft and retries with the original version', async () => {
+  const calls = [];
+  const store = await harness(async (url, options) => {
+    calls.push(JSON.parse(options.body));
+    return {ok:false,status:409,json:async()=>({error:'conflict',conflict:true})};
+  });
+  store.state.customers[0].name = 'draft';
+  await store.saveState(); await store.saveState();
+  assert.equal(store.state.customers[0].name,'draft');
+  assert.equal(calls.length,2);
+  assert.equal(calls[1]._expectedVersion,calls[0]._expectedVersion);
+});
+
+test('changing a list page leaves the complete dashboard summary unchanged', async () => {
+  const store = await harness(async () => response({items:[],page:2,pages:2,total:150}));
+  store.state.dashboardSummary = {pendingOrders:51};
+  await store.loadEntityPage('customers',2);
+  assert.equal(store.state.dashboardSummary.pendingOrders,51);
+});

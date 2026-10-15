@@ -72,6 +72,7 @@ export const state = {
   inventoryItems: [],
   pagination: {},
   serverReport: null,
+  dashboardSummary: null,
   reportRange: { start: '', end: '' },
   financeScreen: 'main',
   auditFilter: { start: '', end: '', keyword: '', user: '', field: '', anomalyOnly: false },
@@ -113,7 +114,9 @@ async function jsonRequest(url, options = {}) {
   if (!res.ok) {
     if (res.status === 401 && state.authToken && requestVersion === sessionVersion) window.dispatchEvent(new Event('app:session-expired'));
     if (data?.financeLocked && requestVersion === sessionVersion) { state.financeUntil = 0; window.dispatchEvent(new Event('app:finance-locked')); }
-    throw new Error(data?.error || `HTTP ${res.status}`);
+    const error = new Error(data?.error || `HTTP ${res.status}`);
+    error.conflict = !!data?.conflict;
+    throw error;
   }
   return data;
 }
@@ -221,6 +224,7 @@ export function setAuthToken(token) {
     }
     state.pagination = {};
     state.serverReport = null;
+    state.dashboardSummary = null;
     state.financeUntil = 0;
     state.financeRecords = null;
   }
@@ -261,6 +265,18 @@ export async function loadFinanceData() {
     for (const [id, row] of dirty) rows.set(id, row);
     state[key] = [...rows.values()];
     snapshots[key] = new Map((data.records[key] || []).map(row => [row.id, JSON.stringify(row)]));
+  }
+  await loadDashboardSummary();
+}
+
+export async function loadDashboardSummary() {
+  const version = sessionVersion;
+  try {
+    const data = await jsonRequest('/api/dashboard', { headers: headers(), cache: 'no-store' });
+    if (version !== sessionVersion) return;
+    state.dashboardSummary = data?.summary || null;
+  } catch {
+    if (version === sessionVersion) state.dashboardSummary = null;
   }
 }
 
@@ -418,6 +434,7 @@ function dataKeysForAccount() {
 }
 
 export function hydrateBootstrap(base = {}, source = '登入預載') {
+  state.dashboardSummary = base.dashboardSummary || null;
   state.glossOptions = base.glossOptions || ['PVA光', 'PVB光/油', '耐磨', '壓光', '其他'];
   state.settings = mergeSettings(base.settings || state.settings);
   changeCursor = Number(base.syncTick || 0);
@@ -493,12 +510,17 @@ async function pushChanges() {
           {
             method: 'PUT',
             headers: headers(true),
-            body: JSON.stringify(cleanRecord(row)),
+            body: JSON.stringify({ ...cleanRecord(row), _expectedVersion: JSON.parse(before.get(row.id) || 'null')?._updatedAt || 0 }),
           },
-        ).then(() => {
+        ).then((result) => {
           if (version === sessionVersion) {
             snapshots[key] ||= new Map();
-            snapshots[key].set(row.id, encoded);
+            const saved = JSON.parse(encoded);
+            if (Number.isFinite(result?.updatedAt)) {
+              saved._updatedAt = result.updatedAt;
+              row._updatedAt = result.updatedAt;
+            }
+            snapshots[key].set(row.id, JSON.stringify(saved));
           }
         }));
       }
@@ -523,6 +545,8 @@ async function pushChanges() {
   if (version !== sessionVersion) return;
   const failed = results.find((result) => result.status === 'rejected');
   if (failed) throw failed.reason;
+  await loadDashboardSummary();
+  refresh();
   setUi('已儲存', '單筆同步');
 }
 
@@ -571,6 +595,7 @@ export async function pullServerState() {
       if (row) snapshots[key].set(change.id, JSON.stringify(row));
     }
     await loadFinanceData();
+    if (!state.financeRecords && (data.changes?.length || !state.dashboardSummary)) await loadDashboardSummary();
     if (version !== sessionVersion) return;
     if (data.changes?.length || state.financeRecords) refresh();
     setUi('已儲存', '增量同步');
@@ -591,7 +616,10 @@ export function saveState() {
   const version = sessionVersion;
   saveQueue = saveQueue.then(() => {
     if (version === sessionVersion) return pushChanges();
-  }).catch((err) => setUi('儲存失敗', err.message, false));
+  }).catch((err) => {
+    setUi(err.conflict ? '資料衝突，修改尚未儲存' : '儲存失敗', err.message, false);
+    if (err.conflict) window.alert?.(`${err.message}\n請先複製保留目前修改，再重新登入取得最新資料。`);
+  });
   return saveQueue;
 }
 

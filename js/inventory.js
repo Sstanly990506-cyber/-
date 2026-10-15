@@ -1,5 +1,7 @@
 ﻿import { $, money, downloadCsv, escapeHtml } from './shared.js';
 
+import { parseInventoryCsv } from './csv.js?v=20261015-audit-fixes-1';
+
 function buildItem(state) {
   return {
     id: $('inventoryItemId').value || crypto.randomUUID(),
@@ -95,20 +97,17 @@ export function bindInventoryEvents(state, saveState, renderAll) {
     const file = e.target.files?.[0];
     if (!file) return;
     const text = await file.text();
-    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const rows = lines.slice(1).map((line) => line.split(',').map((cell) => cell.replace(/^"|"$/g, '').replaceAll('""', '"')));
+    let rows;
+    try { rows = parseInventoryCsv(text); }
+    catch (error) { e.target.value = ''; return alert(`${error.message}\n未匯入任何資料。`); }
+    if (!rows.length) { e.target.value = ''; return alert('檔案沒有庫存資料。'); }
+    const preview = rows.slice(0, 5).map(row => `${row.material}：${row.stock} ${row.unit}`).join('\n');
+    if (!window.confirm(`準備匯入 ${rows.length} 個品項；同名品項將更新庫存。\n${preview}${rows.length > 5 ? '\n…' : ''}\n確定匯入？`)) { e.target.value = ''; return; }
     rows.forEach((row) => {
-      const [material, category, stock, unit, safetyStock, note] = row;
-      if (!material) return;
-      const existing = state.inventoryItems.find((item) => (item.material || '').trim() === material.trim());
+      const existing = state.inventoryItems.find((item) => (item.material || '').trim() === row.material);
       const payload = {
         id: existing?.id || crypto.randomUUID(),
-        material: material.trim(),
-        category: (category || '').trim(),
-        stock: toSafeNumber(stock),
-        unit: (unit || '').trim() || 'kg',
-        safetyStock: toSafeNumber(safetyStock, Number(state.settings?.inventoryLowStockDefault || 100)),
-        note: (note || '').trim(),
+        ...row,
         updatedAt: new Date().toLocaleString(),
       };
       if (existing) Object.assign(existing, payload);
