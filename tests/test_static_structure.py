@@ -547,13 +547,11 @@ class StaticStructureTests(unittest.TestCase):
         service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
         self.assertIn('data-delete-order', orders)
         self.assertIn('確定要刪除工單', orders)
-        self.assertIn("receivable.source === 'auto-order'", orders)
         self.assertIn('id="saveOrderBtn"', view)
         self.assertIn('ORDER_ENTRY_FIELD_IDS', orders)
         self.assertIn('bindOrderEnterNavigation', orders)
         self.assertIn("event.key !== 'Enter'", orders)
         self.assertIn('event.isComposing', orders)
-        self.assertIn("linked_receivables", service)
 
     def test_order_size_notation_supports_tai_inches_and_configurable_presets(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
@@ -677,13 +675,11 @@ class StaticStructureTests(unittest.TestCase):
         service = (ROOT / 'api' / 'service.py').read_text(encoding='utf-8')
         self.assertIn('data-delete-order', orders)
         self.assertIn('確定要刪除工單', orders)
-        self.assertIn("receivable.source === 'auto-order'", orders)
         self.assertIn('id="saveOrderBtn"', view)
         self.assertIn('ORDER_ENTRY_FIELD_IDS', orders)
         self.assertIn('bindOrderEnterNavigation', orders)
         self.assertIn("event.key !== 'Enter'", orders)
         self.assertIn('event.isComposing', orders)
-        self.assertIn("linked_receivables", service)
 
     def test_orders_can_be_reordered_and_copied_as_new(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')

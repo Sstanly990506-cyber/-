@@ -11,21 +11,21 @@ import {
   setAuthToken,
   getIntegrityReport,
   appendSystemEvent,
-} from './store.js?v=20261011-eight-fixes-1';
-import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20261011-eight-fixes-1';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261011-eight-fixes-1';
-import { unlockFinanceSession, loadFinanceData } from './store.js?v=20261011-eight-fixes-1';
-import { renderFinance, bindFinanceEvents } from './finance.js?v=20261011-eight-fixes-1';
+} from './store.js?v=20261015-audit-fixes-1';
+import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20261015-audit-fixes-1';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261015-audit-fixes-1';
+import { unlockFinanceSession, loadFinanceData } from './store.js?v=20261015-audit-fixes-1';
+import { renderFinance, bindFinanceEvents } from './finance.js?v=20261015-audit-fixes-1';
 import { renderAudits, bindAuditEvents } from './audit.js?v=20261003-system-audit-1';
-import { renderTrips, bindTripEvents } from './trips.js?v=20261011-eight-fixes-1';
+import { renderTrips, bindTripEvents } from './trips.js?v=20261015-audit-fixes-1';
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714-trip-route-text-1';
-import { renderInventory, bindInventoryEvents } from './inventory.js?v=20261003-system-audit-1';
+import { renderInventory, bindInventoryEvents } from './inventory.js?v=20261015-audit-fixes-1';
 import { renderNotifications, bindNotificationEvents, refreshLineStatus } from './notifications.js?v=20261003-system-audit-1';
 function proactiveNotify() {
   return buildSystemAlerts();
 }
-const APP_BUILD = '20261011-eight-fixes-1';
-import { initializeLocalAi } from './local-ai.js?v=20261011-eight-fixes-1';
+const APP_BUILD = '20261015-audit-fixes-1';
+import { initializeLocalAi } from './local-ai.js?v=20261015-audit-fixes-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
 let internalViewsMounted = true;
@@ -261,24 +261,23 @@ function buildSystemAlerts() {
 }
 
 function renderDashboard() {
-  const today = new Date().toISOString().slice(0, 10);
-  const todayCount = state.orders.filter((o) => (o.orderDate || '').slice(0, 10) === today).length;
-  const pending = state.orders.filter((o) => (o.status || '未完成') !== '已完成').length;
-  const pendingReceivables = state.receivables.filter((r) => Number(r.amount || 0) > Number(r.received || 0)).length;
-  const pendingPayables = state.payables.filter((p) => Number(p.amount || 0) > Number(p.paid || 0)).length;
-  const inventoryWarnings = state.inventoryItems.filter((item) => Number(item.stock || 0) <= Number(item.safetyStock || 0));
+  const summary = state.dashboardSummary;
+  const pending = summary?.pendingOrders ?? '—';
+  const financeLocked = Date.now() >= state.financeUntil || summary?.financeLocked !== false;
+  const pendingReceivables = financeLocked ? '待解鎖' : (summary?.pendingReceivables ?? '—');
+  const pendingPayables = financeLocked ? '待解鎖' : (summary?.pendingPayables ?? '—');
   const alerts = proactiveNotify();
   const integrity = getIntegrityReport();
   const moduleCount = MODULE_DEFINITIONS.filter((module) => isModuleEnabled(module.id) && hasViewPermission(module.id)).length;
   const summaries = {
     admin: [
       ['未完成工單', pending, 'ordersView'],
-      ['低庫存', inventoryWarnings.length, 'inventoryView'],
+      ['低庫存', summary?.lowInventory ?? '—', 'inventoryView'],
       ['重要提醒', alerts.length, 'notificationsView'],
     ],
     ops: [
       ['未完成工單', pending, 'ordersView'],
-      ['低庫存', inventoryWarnings.length, 'inventoryView'],
+      ['低庫存', summary?.lowInventory ?? '—', 'inventoryView'],
       ['重要提醒', alerts.length, 'notificationsView'],
     ],
     finance: [
@@ -288,11 +287,11 @@ function renderDashboard() {
     ],
     audit: [
       ['完整性問題', integrity.total, 'auditView'],
-      ['稽核紀錄', state.audits.length, 'auditView'],
+      ['稽核紀錄', summary?.auditCount ?? '—', 'auditView'],
       ['重要提醒', alerts.length, 'notificationsView'],
     ],
     viewer: [
-      ['今日新增工單', todayCount, null],
+      ['今日交貨工單', summary?.todayOrders ?? '—', null],
       ['重要提醒', alerts.length, 'notificationsView'],
       ['可用功能', moduleCount, null],
     ],

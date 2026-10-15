@@ -1,7 +1,7 @@
 import { $, escapeHtml } from './shared.js';
 import { DEFAULT_FACTORY } from './trips/constants.js?v=20260714-factory-address-1';
-import { optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20261011-eight-fixes-1';
-import { formatDistance, formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20261011-eight-fixes-1';
+import { optimizeTrip, evaluateRoute, buildGoogleMapsUrl, validateBusinessRoute } from './trips/core.js?v=20261015-audit-fixes-1';
+import { formatDistance, formatDuration, renderCustomerOptions, renderResult, renderManualRoute } from './trips/ui.js?v=20261015-audit-fixes-1';
 
 let manualStops = [];
 let selectedOrderIds = new Set();
@@ -9,6 +9,20 @@ let orderStopTypes = {};
 let manualRoute = [];
 let lastResult = null;
 let manualRouteConfirmed = false;
+let plannedSignature = null;
+let routeRevision = 0;
+
+function stopSignature(state) {
+  return JSON.stringify(allStops(state));
+}
+
+function invalidateRoute() {
+  routeRevision += 1;
+  manualRoute = [];
+  lastResult = null;
+  manualRouteConfirmed = false;
+  plannedSignature = null;
+}
 
 function getTripModuleSettings(state) {
   return state.settings?.moduleInternals?.trips || { stopTypes: { delivery: true, pickup: true }, showManualRoute: true, showManualStopForm: true, showOrderPool: true };
@@ -131,6 +145,7 @@ function updateManualHint() {
 }
 
 function renderAll(state) {
+  if (plannedSignature !== null && plannedSignature !== stopSignature(state)) invalidateRoute();
   renderCustomerOptions(state.customers);
   renderTripTypeOptions(state);
   const settings = getTripModuleSettings(state);
@@ -186,26 +201,35 @@ async function runOptimize(state) {
   const stops = allStops(state);
   if (!stops.length) return alert('請先勾選工單或新增站點');
   const payload = { factory: DEFAULT_FACTORY, stops };
+  const signature = stopSignature(state);
+  const revision = ++routeRevision;
+  let result;
   try {
     const res = await fetch('/api/trips/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {}) }, body: JSON.stringify(payload) });
     const data = await res.json();
     if (!res.ok) return alert(data.error || '路線計算失敗，請檢查地址與導航設定');
-    lastResult = data;
+    result = data;
   } catch {
-    lastResult = optimizeTrip(DEFAULT_FACTORY, stops);
+    result = optimizeTrip(DEFAULT_FACTORY, stops);
   }
+  if (revision !== routeRevision || signature !== stopSignature(state)) return;
+  lastResult = result;
+  plannedSignature = signature;
   manualRoute = (lastResult.bestRoute.orderedStops || []).map((r) => ({ ...r }));
   manualRouteConfirmed = false;
 }
 
 async function confirmManualRoute(state) {
+  if (plannedSignature !== stopSignature(state)) { invalidateRoute(); return alert('站點已變更，請重新產生路線。'); }
   if (!manualRoute.length) return alert('請先點「最佳化車輛」產生路線');
   if (!validateBusinessRoute(manualRoute)) return alert('路線需先完成所有送貨，再安排取貨。');
 
   try {
+    const revision = routeRevision;
     const response = await fetch('/api/trips/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken}` }, body: JSON.stringify({ factory: manualRoute[0], stops: manualRoute.slice(1,-1), preserveOrder: true }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || '無法確認道路路線');
+    if (revision !== routeRevision || plannedSignature !== stopSignature(state)) return;
     lastResult = result;
     manualRouteConfirmed = true;
     renderResult(result);
@@ -218,7 +242,7 @@ async function executeSelectedOrders(state, renderAllApp) {
   const selectedOrders = getTripOrders(state)
     .filter((order) => selectedOrderIds.has(order.id) && canExecuteOrder(order));
   if (!selectedOrders.length) return alert('請勾選一筆「未完成」或「已完成」的工單後再執行車趟。已送出的工單不能重複送出。');
-  if (manualRoute.length && !manualRouteConfirmed) return alert('你有手動調整路線，請先按「確認手動路線」');
+  if (!manualRoute.length || !manualRouteConfirmed || plannedSignature !== stopSignature(state)) return alert('請先產生路線，並按「確認手動路線」後再執行。');
 
   const button = $('tripExecuteBtn');
   const originalText = button?.textContent || '執行車趟並標記已送出';
@@ -255,6 +279,7 @@ async function executeSelectedOrders(state, renderAllApp) {
     lastResult = null;
     manualRoute = [];
     manualRouteConfirmed = false;
+    plannedSignature = null;
     renderAllApp();
     alert(`車趟已執行，${data.updated} 筆工單已改成「已送出」。`);
   } catch (error) {
@@ -288,7 +313,7 @@ export function bindTripEvents(state, _saveState, renderAllApp) {
     const stop = createManualStop(state);
     if (!stop) return;
     manualStops.push(stop);
-    manualRouteConfirmed = false;
+    invalidateRoute();
     e.target.reset();
     $('tripCustomerAddress').value = '';
     renderAll(state);
@@ -298,9 +323,8 @@ export function bindTripEvents(state, _saveState, renderAllApp) {
     const typeSelect = e.target.closest('select[data-trip-order-type]');
     if (typeSelect) {
       orderStopTypes[typeSelect.dataset.tripOrderType] = typeSelect.value;
-      manualRouteConfirmed = false;
-      renderSelectedStops(state);
-      updateManualHint();
+      invalidateRoute();
+      renderAll(state);
       return;
     }
 
@@ -308,16 +332,15 @@ export function bindTripEvents(state, _saveState, renderAllApp) {
     if (!cb) return;
     if (cb.checked) selectedOrderIds.add(cb.dataset.tripOrderCheck);
     else selectedOrderIds.delete(cb.dataset.tripOrderCheck);
-    manualRouteConfirmed = false;
-    renderSelectedStops(state);
-    updateManualHint();
+    invalidateRoute();
+    renderAll(state);
   });
 
   $('tripStopsTbody')?.addEventListener('click', (e) => {
     const del = e.target.closest('button[data-del-stop]');
     if (!del) return;
     manualStops = manualStops.filter((s) => s.id !== del.dataset.delStop);
-    manualRouteConfirmed = false;
+    invalidateRoute();
     renderAll(state);
   });
 
@@ -335,9 +358,7 @@ export function bindTripEvents(state, _saveState, renderAllApp) {
     manualStops = [];
     selectedOrderIds = new Set();
     orderStopTypes = {};
-    manualRoute = [];
-    lastResult = null;
-    manualRouteConfirmed = false;
+    invalidateRoute();
     renderAll(state);
   });
 
@@ -353,6 +374,7 @@ export function bindTripEvents(state, _saveState, renderAllApp) {
     const target = up ? idx - 1 : idx + 1;
     if (target <= 0 || target >= manualRoute.length - 1) return;
     [manualRoute[idx], manualRoute[target]] = [manualRoute[target], manualRoute[idx]];
+    routeRevision += 1;
     manualRouteConfirmed = false;
     updateManualHint();
     renderManualRoute(manualRoute, manualRouteConfirmed);

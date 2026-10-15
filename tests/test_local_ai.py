@@ -223,9 +223,9 @@ class LocalAiTests(unittest.TestCase):
         with patch.object(records.storage, 'DATABASE_URL', 'fake-test-only'), patch.object(records.storage, 'get_db_connection') as connect, patch.object(records.storage, 'Jsonb', side_effect=lambda value: value):
             connect.return_value.__enter__.return_value = conn
             local_ai_records.update_inventory_note('fake-stock', local_ai_records.fingerprint(snapshot), '測試', 'fake-admin')
-        self.assertIn('FOR UPDATE', cur.execute.call_args_list[0].args[0])
-        self.assertEqual(cur.execute.call_args_list[0].args[1], ('inventory', 'fake-stock'))
-        self.assertEqual(cur.execute.call_count, 3)
+        row_lock = next(call for call in cur.execute.call_args_list if 'FOR UPDATE' in call.args[0])
+        self.assertEqual(row_lock.args[1], ('inventory', 'fake-stock'))
+        self.assertEqual(cur.execute.call_count, 4)
         conn.transaction.assert_called_once()
         conn.commit.assert_called_once()
 

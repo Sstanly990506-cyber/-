@@ -123,7 +123,7 @@ class CompleteDataTests(unittest.TestCase):
             with patch('api.records.RECORDS_PATH',Path(directory)/'records.json'),patch('api.records.RECORD_STORAGE_READY',True),patch('api.storage.DATABASE_URL',''),patch('api.storage.ensure_storage'),patch('api.service.verify_session_token',return_value={'username':'ops-fixture','role':'ops'}):
                 records.upsert_record('orders','o1',{'id':'o1','orderNumber':'WO-1','status':'未完成','totalPrice':100})
                 with patch('api.records._write_local',side_effect=OSError('fixture failure')):
-                    with self.assertRaises(OSError):service.upsert_entity_payload('token','orders','o1',{'status':'已完成','totalPrice':150})
+                    with self.assertRaises(OSError):service.upsert_entity_payload('token','orders','o1',{'status':'已完成','totalPrice':150,'_expectedVersion':records.get_record('orders','o1')['_updatedAt']})
                 self.assertEqual(records.get_record('orders','o1')['totalPrice'],100)
                 self.assertEqual(records.all_records('audits'),[])
                 self.assertEqual(records.all_records('receivables'),[])
@@ -132,14 +132,14 @@ class CompleteDataTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with patch('api.records.RECORDS_PATH',Path(directory)/'records.json'),patch('api.records.RECORD_STORAGE_READY',True),patch('api.storage.DATABASE_URL',''),patch('api.storage.ensure_storage'),patch('api.service.verify_session_token',return_value={'username':'ops-fixture','role':'ops'}):
                 records.upsert_record('orders','o1',{'id':'o1','orderNumber':'WO-1','status':'未完成','totalPrice':100,'actualCost':None})
-                service.upsert_entity_payload('token','orders','o1',{'status':'已完成','totalPrice':150,'actualCost':40})
+                service.upsert_entity_payload('token','orders','o1',{'status':'已完成','totalPrice':150,'actualCost':40,'_expectedVersion':records.get_record('orders','o1')['_updatedAt']})
                 audits=records.all_records('audits')
                 self.assertEqual({row['field'] for row in audits},{'總價','狀態','實際成本'})
                 self.assertTrue(all(row['id'] and row['user']=='ops-fixture' for row in audits))
                 receivable=records.all_records('receivables')[0]
                 self.assertEqual(receivable['amount'],150)
                 records.upsert_record('receivables',receivable['id'],{**receivable,'received':30})
-                service.upsert_entity_payload('token','orders','o1',{'orderNumber':'WO-RENAMED'})
+                service.upsert_entity_payload('token','orders','o1',{'orderNumber':'WO-RENAMED','_expectedVersion':records.get_record('orders','o1')['_updatedAt']})
                 self.assertEqual(len(records.all_records('receivables')),1)
                 self.assertEqual(records.all_records('receivables')[0]['received'],30)
                 self.assertEqual(records.all_records('receivables')[0]['orderNumber'],'WO-RENAMED')

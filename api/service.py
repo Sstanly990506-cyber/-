@@ -2,7 +2,7 @@
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from api.records import get_record, write_record_batch, changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
+from api.records import RecordConflict, dashboard_counts, get_record, write_record_batch, changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
 from api.ai_orders import OrderRecognitionError, add_recognition_review, get_order_recognition_result, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.trip_optimizer import optimize_trip
@@ -107,6 +107,21 @@ def capacity_payload(token):
     return {'ok':True,'status':status,'storageMode':get_storage_mode(),'checkedAt':int(time.time()*1000),'storageMs':round(storage_ms,1),'countMs':query_ms,'counts':counts,'totalRecords':total,'timingsMs':timings,'warnings':warnings,'errors':errors}
 def bootstrap_payload(token):
     return build_bootstrap_payload(require_account(token))
+
+def dashboard_payload(token):
+    return {'ok':True,'summary':dashboard_summary(require_account(token))}
+
+def dashboard_summary(account):
+    entities=[entity for entity in ('orders','inventory','receivables','payables','audits') if account_can_read_entity(account,entity)]
+    today=datetime.now(timezone(timedelta(hours=8))).date().isoformat()
+    counts=dashboard_counts(entities,today)
+    summary={'financeLocked':not finance_is_unlocked(account)}
+    fields={'orders':{'pendingOrders':'pending','todayOrders':'today','ordersTotal':'total'},
+            'inventory':{'lowInventory':'low'},'receivables':{'pendingReceivables':'unpaid_receivable'},
+            'payables':{'pendingPayables':'unpaid_payable'},'audits':{'auditCount':'total'}}
+    for entity in entities:
+        for key,source in fields[entity].items():summary[key]=counts.get(entity,{}).get(source,0)
+    return summary
 def build_bootstrap_payload(account,include_pages=True):
     source=filter_state_for_account(read_state(),account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True
     if include_pages:
@@ -114,6 +129,7 @@ def build_bootstrap_payload(account,include_pages=True):
             payload['initialPages']=first_pages_for_entities(bootstrap_entities_for_account(account),100)
             for entity,page in payload['initialPages'].items():
                 page['items']=[visible_record(account,entity,row) for row in page.get('items',[])]
+            payload['dashboardSummary']=dashboard_summary(account)
         except Exception as err:payload['initialPagesError']=str(err);payload['initialPages']={}
     return payload
 def get_state_payload(token):
@@ -136,9 +152,22 @@ def list_entity_payload(token,entity,page=1,page_size=100,query=''):
 def upsert_entity_payload(token,entity,record_id,payload):
     account=require_entity_access(token,entity)
     if not isinstance(payload,dict):raise ApiError('invalid record',400)
-    previous = get_record('orders', record_id) if entity == 'orders' else None
+    return save_entity_record(account,entity,record_id,payload,require_version=True)
+
+def save_entity_record(account,entity,record_id,payload,require_version=False):
+    previous = get_record(entity, record_id)
+    expected = payload.get('_expectedVersion', payload.get('_updatedAt'))
+    if require_version and previous and expected is None:
+        raise ApiError('畫面版本已過期；請先保留修改，再重新登入取得最新資料。',409,conflict=True)
+    if expected is not None:
+        try:expected=int(expected)
+        except (ValueError,TypeError):raise ApiError('invalid record version',400)
+        if expected != int((previous or {}).get('_updatedAt') or 0):
+            raise ApiError('資料已由其他人更新；你的修改已保留，請核對最新資料後再儲存。',409,conflict=True)
     if entity == 'orders' and previous:
         payload={**previous,**payload}
+    if entity == 'orders' and 'orderNumber' in payload:
+        payload['orderNumber']=str(payload['orderNumber'] or '').strip()
     if entity == 'orders' and payload.get('actualCost') is not None:
         import math
         try:
@@ -146,12 +175,20 @@ def upsert_entity_payload(token,entity,record_id,payload):
             if not math.isfinite(cost) or cost < 0:raise ValueError()
         except (TypeError, ValueError):raise ApiError('actual cost must be a nonnegative number',400)
     try:
-        payload={key:value for key,value in payload.items() if key!='_updatedAt'}
+        payload={key:value for key,value in payload.items() if key not in {'_updatedAt','_expectedVersion'}}
+        guards={(entity,record_id):int((previous or {}).get('_updatedAt') or 0)}
         if entity != 'orders':
-            return upsert_record(entity,record_id,payload)
+            result=write_record_batch([(entity,record_id,payload)],expected_versions=guards)
+            return {**result,'id':record_id}
         writes=[('orders',record_id,payload)]
         linked_writes, linked_deletes=order_receivable_changes(payload,record_id,previous)
         writes.extend(linked_writes)
+        for linked_entity, linked_id, *_ in [*linked_writes,*linked_deletes]:
+            linked=get_record(linked_entity,linked_id)
+            guards[(linked_entity,linked_id)]=int((linked or {}).get('_updatedAt') or 0)
+            # A payment made after the derived row was read must not be overwritten.
+            if linked and linked_writes and _number(linked.get('received')) != linked_writes[0][2].get('received'):
+                raise RecordConflict('收款資料已更新，請重新載入後再儲存工單。')
         if previous:
             for field,label in (('totalPrice','總價'),('status','狀態'),('actualCost','實際成本')):
                 if previous.get(field) != payload.get(field):
@@ -162,19 +199,28 @@ def upsert_entity_payload(token,entity,record_id,payload):
                         'changedAt':datetime.now(timezone.utc).isoformat(),
                         'user':account.get('display') or account.get('username'),'device':'工單 API',
                     }))
-        result=write_record_batch(writes,linked_deletes)
+        result=write_record_batch(writes,linked_deletes,expected_versions=guards,unique_orders=True)
         return {**result,'id':record_id}
+    except RecordConflict as err:raise ApiError(str(err),409,conflict=True) from err
     except ValueError as err:raise ApiError(str(err),400) from err
 
 def order_receivable_changes(order, record_id, previous=None):
     key=str(order.get('orderNumber') or '').strip() or f'ORDER-{record_id}'
     old_key=str((previous or {}).get('orderNumber') or '').strip() or key
-    existing=next((row for row in _all_records('receivables') if row.get('source')=='auto-order' and row.get('orderNumber') in {key,old_key}),None)
+    rows=[row for row in _all_records('receivables') if row.get('source')=='auto-order']
+    existing=next((row for row in rows if row.get('orderId')==record_id),None)
+    if not existing:
+        legacy=[row for row in rows if not row.get('orderId') and str(row.get('orderNumber') or '').strip() in {key,old_key}]
+        if legacy:
+            others=[row for row in _all_records('orders') if row.get('id')!=record_id and str(row.get('orderNumber') or '').strip() in {key,old_key}]
+            if len(legacy)>1 or others:
+                raise ApiError('舊帳款存在重複工號，請先在財務資料核對工單關聯，避免覆蓋收款。',409,conflict=True)
+            existing=legacy[0]
     if order.get('status') not in {'已完成','已送出'} or _number(order.get('totalPrice')) <= 0:
         return [], [('receivables',existing['id'])] if existing else []
-    row_id=(existing or {}).get('id') or str(uuid.uuid4())
+    row_id=(existing or {}).get('id') or f'auto-order-{record_id}'
     row={
-        'id':row_id,'source':'auto-order',
+        'id':row_id,'source':'auto-order','orderId':record_id,
         'date':order.get('orderDate') or datetime.now(timezone.utc).date().isoformat(),
         'customer':order.get('billingCustomer') or order.get('upstream') or '-',
         'orderNumber':key,'amount':_number(order.get('totalPrice')),
@@ -184,19 +230,18 @@ def order_receivable_changes(order, record_id, previous=None):
 
 def delete_entity_payload(token,entity,record_id):
     require_entity_access(token,entity)
-    linked_receivables=0
-    order_number=''
     if entity=='orders':
         order=next((row for row in _all_records('orders') if str(row.get('id') or '')==str(record_id or '')),None)
         order_number=str((order or {}).get('orderNumber') or '').strip()
-    result=delete_record(entity,record_id)
-    if order_number:
-        for receivable in _all_records('receivables'):
-            if receivable.get('source')=='auto-order' and str(receivable.get('orderNumber') or '').strip()==order_number:
-                delete_record('receivables',receivable.get('id'))
-                linked_receivables+=1
-    if entity=='orders':result['deletedLinkedReceivables']=linked_receivables
-    return result
+        ambiguous=any(row.get('id')!=record_id and str(row.get('orderNumber') or '').strip()==order_number for row in _all_records('orders'))
+        linked=[row for row in _all_records('receivables') if row.get('source')=='auto-order' and
+                (row.get('orderId')==record_id or (not row.get('orderId') and order_number and not ambiguous and str(row.get('orderNumber') or '').strip()==order_number))]
+        guards={('orders',record_id):int((order or {}).get('_updatedAt') or 0)}
+        guards.update({('receivables',row['id']):int(row.get('_updatedAt') or 0) for row in linked})
+        try:result=write_record_batch([], [('orders',record_id),*(('receivables',row['id']) for row in linked)], expected_versions=guards)
+        except RecordConflict as err:raise ApiError(str(err),409,conflict=True) from err
+        return {**result,'id':record_id,'deletedLinkedReceivables':len(linked)}
+    return delete_record(entity,record_id)
 def clear_test_data_payload(token,payload):
     account=require_account(token)
     if account.get('role')!='admin':raise ApiError('admin role required',403)
@@ -215,13 +260,12 @@ def restore_backup_payload(token,payload):
     if not isinstance(payload,dict) or str(payload.get('confirm') or '').strip()!='還原備份':raise ApiError('confirmation required',400)
     backup=payload.get('backup')
     if not isinstance(backup,dict) or not isinstance(backup.get('records'),dict):raise ApiError('invalid backup file',400)
-    current=read_state();next_state=dict(current);next_state['syncTick']=int(time.time()*1000)
-    if isinstance(backup.get('settings'),dict):next_state['settings']=backup.get('settings')
-    if isinstance(backup.get('glossOptions'),list):next_state['glossOptions']=backup.get('glossOptions')
-    ok,tick=write_state(next_state)
-    if not ok:raise ApiError('stale syncTick',409,serverSyncTick=tick)
-    result=restore_records(backup.get('records'))
-    return {'ok':True,'restored':result.get('restored') or {},'syncTick':tick,'message':'備份已還原；帳號、財務密碼與系統設定安全資訊已保留。'}
+    updates={}
+    if isinstance(backup.get('settings'),dict):updates['settings']=backup['settings']
+    if isinstance(backup.get('glossOptions'),list):updates['glossOptions']=backup['glossOptions']
+    try:result=restore_records(backup['records'],state_updates=updates)
+    except (ValueError,TypeError) as err:raise ApiError(str(err),400) from err
+    return {'ok':True,'restored':result.get('restored') or {},'syncTick':result.get('updatedAt'),'message':'備份已還原；帳號、財務密碼與系統設定安全資訊已保留。'}
 def changes_payload(token,since=0,limit=1000):
     account=require_account(token);result=changes_since(since,limit)
     result['changes']=[{**row,'data':visible_record(account,row.get('entity'),row.get('data') or {})} for row in result['changes'] if account_can_read_entity(account,row.get('entity'))]
@@ -410,9 +454,7 @@ def execute_trip_payload(token,payload):
     if len(order_ids)>200:raise ApiError('too many orders',400)
 
     orders_by_id={str(row.get('id') or ''):row for row in _all_records('orders')}
-    receivables_by_order={str(row.get('orderNumber') or '').strip():row for row in _all_records('receivables') if str(row.get('orderNumber') or '').strip()}
     changed_at=datetime.now(timezone(timedelta(hours=8))).isoformat(timespec='seconds')
-    actor=account.get('display') or account.get('username') or account.get('role') or 'trip-user'
     updated_orders=[];missing=[];already_sent=0
 
     for order_id in order_ids:
@@ -425,40 +467,10 @@ def execute_trip_payload(token,payload):
 
         order={key:value for key,value in source.items() if key!='_updatedAt'}
         order['status']='已送出';order['updatedAt']=changed_at
-        saved=upsert_record('orders',order_id,order)
+        order['_expectedVersion']=int(source.get('_updatedAt') or 0)
+        saved=save_entity_record(account,'orders',order_id,order)
+        order.pop('_expectedVersion',None)
         updated_orders.append({**order,'_updatedAt':saved.get('updatedAt')})
-
-        audit_id=str(uuid.uuid4())
-        upsert_record('audits',audit_id,{
-            'id':audit_id,
-            'orderNumber':order.get('orderNumber') or '(空白)',
-            'field':'狀態',
-            'before':status,
-            'after':'已送出',
-            'changedAt':changed_at,
-            'user':actor,
-            'device':'車趟系統執行',
-        })
-
-        receivable_key=str(order.get('orderNumber') or '').strip() or f'ORDER-{order_id}'
-        existing=receivables_by_order.get(receivable_key)
-        amount=_number(order.get('totalPrice'))
-        if amount>0:
-            receivable_id=str((existing or {}).get('id') or uuid.uuid4())
-            receivable={
-                'id':receivable_id,
-                'source':'auto-order',
-                'date':order.get('orderDate') or changed_at[:10],
-                'customer':order.get('billingCustomer') or order.get('downstream') or order.get('upstream') or '-',
-                'orderNumber':receivable_key,
-                'amount':amount,
-                'received':_number((existing or {}).get('received')),
-            }
-            upsert_record('receivables',receivable_id,receivable)
-            receivables_by_order[receivable_key]=receivable
-        elif existing and existing.get('source')=='auto-order':
-            delete_record('receivables',existing.get('id'))
-            receivables_by_order.pop(receivable_key,None)
 
     return {
         'ok':True,

@@ -1,4 +1,4 @@
-import { state } from './store.js?v=20261011-eight-fixes-1';
+import { state } from './store.js?v=20261015-audit-fixes-1';
 import { createAiTransport, COMPANION_ORIGIN } from './local-ai-transport.js?v=20261003-system-audit-1';
 
 const node = (tag, className = '', text = '') => {
