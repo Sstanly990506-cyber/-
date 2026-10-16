@@ -6,6 +6,11 @@
 .orders-table td { overflow-wrap: anywhere; }
 .order-number-copy { cursor: pointer; }
 .form-grid > label { min-width: 0; }
+#orderSmartHint:empty, #customerSmartHint:empty, #financeSmartHint:empty,
+#sizeNotationHint:empty { display: none; }
+.usage-details { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.usage-details summary { cursor: pointer; padding: 8px 0; }
+.usage-details p { margin: 8px 0; }
 
 @media (max-width: 767px) {
   .app-shell {

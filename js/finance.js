@@ -145,7 +145,7 @@ function updateFinanceSmartHint(state) {
   if (!hint) return;
   const order = findOrderByNumber(state, $('recvOrderNumber')?.value || '');
   if (!order) {
-    hint.textContent = '輸入工單編號後，系統會自動帶入客人、日期與金額。';
+    hint.textContent = '';
     return;
   }
   hint.textContent = `已找到工單 ${order.orderNumber || '-'}，可自動帶入應收款資料。`;

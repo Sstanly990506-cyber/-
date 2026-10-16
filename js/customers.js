@@ -57,25 +57,25 @@ function updateCustomerSmartHint(state) {
   if (!hint) return;
   const name = $('customerName')?.value.trim() || '';
   if (!name) {
-    hint.textContent = '智能建議：可直接輸入電話與地址，系統會避免重複客戶。';
+    hint.textContent = '';
     return;
   }
 
   const existed = state.customers.find((c) => (c.name || '').trim().toLowerCase() === name.toLowerCase());
   if (existed) {
-    hint.textContent = `智能提醒：客戶「${name}」已存在（目前${existed.active === false ? '停用' : '啟用'}）。`;
+    hint.textContent = `客戶「${name}」已存在（目前${existed.active === false ? '停用' : '啟用'}）。`;
     return;
   }
 
   const role = inferRoleFromHistory(state, name);
   if (role) {
-    hint.textContent = `智能建議：歷史工單顯示「${name}」常用角色為「${role}」，已幫你預選。`;
+    hint.textContent = `已依歷史資料選用「${role}」。`;
     const roles = getCustomerRoles(state);
     if (roles.includes(role)) $('customerRole').value = role;
     return;
   }
 
-  hint.textContent = `智能建議：尚無「${name}」歷史資料，請確認角色/地址後新增。`;
+  hint.textContent = '';
 }
 
 export function renderCustomerOptions(state) {

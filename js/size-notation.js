@@ -1,7 +1,7 @@
 import { $ } from './shared.js';
 import { parseSizeNotation } from './pricing.js';
 
-const EMPTY_HINT = '輸入尺寸後會換算成台吋；K 數與菊版請先在設定的報價公式中填入對應天×地。';
+const EMPTY_HINT = '';
 
 export function applySizeNotation(state, onResolved = () => {}) {
   const input = $('sizeNotation');

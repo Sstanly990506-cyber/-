@@ -59,7 +59,7 @@
 
       <section id="ordersView" class="panel hidden">
         <header class="topbar card">
-          <div class="topbar-heading"><h2 data-module-title="ordersView">工單作業系統</h2><p class="sub module-page-note" data-module-note="ordersView"></p></div>
+          <div class="topbar-heading"><h2 data-module-title="ordersView">工單作業系統</h2></div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
@@ -77,7 +77,7 @@
             <div class="orders-list-head">
               <div>
                 <h3>工單列表</h3>
-                <p class="sub"><span id="ordersListSummary">共 0 筆工單</span>｜點一下編輯，連點兩下複製；第二下按住拖曳排序</p>
+                <p class="sub"><span id="ordersListSummary">共 0 筆工單</span></p>
               </div>
               <input id="orderSearch" placeholder="搜尋工單編號 / 客戶 / 地址 / 狀態" />
             </div>
@@ -95,11 +95,11 @@
             <section id="aiOrderRecognizer" class="ai-order-recognizer">
               <div>
                 <strong>AI 識別工單</strong>
-                <p class="sub">拍照或上傳工單後，系統會先提升文字對比並分區辨識；不確定欄位會標示給你確認，再儲存。</p>
+
               </div>
               <input id="aiOrderImage" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" />
-              <button id="recognizeOrderBtn" class="btn" type="button">開始精準辨識</button>
-              <button id="reportAiCorrectionBtn" class="btn hidden" type="button">回報修正，讓下次更準</button>
+              <button id="recognizeOrderBtn" class="btn" type="button">辨識工單</button>
+              <button id="reportAiCorrectionBtn" class="btn hidden" type="button">回報修正</button>
               <span id="aiOrderStatus" class="sync-detail"></span>
               <div id="aiRecognitionReview" class="ai-recognition-review hidden" aria-live="polite"></div>
             </section>
@@ -109,19 +109,19 @@
               <label>交貨日期<input id="orderDate" type="date" /></label>
               <div class="customer-price-row span-2">
                 <label>客人
-                  <input id="billingCustomerInput" autocomplete="off" placeholder="通常是工單最上方最大字的公司" />
+                  <input id="billingCustomerInput" autocomplete="off" placeholder="客戶名稱" />
                   <datalist id="billingCustomerOptions"></datalist>
                 </label>
                 <button id="openPriceRulesFromOrderBtn" class="btn" type="button" data-order-screen="pricing">設定客人價格</button>
               </div>
 
               <label>上游客戶（可搜尋）
-                <input id="upstreamInput" autocomplete="off" placeholder="請找廠商／印刷廠欄位" />
+                <input id="upstreamInput" autocomplete="off" placeholder="廠商／印刷廠" />
                 <datalist id="upstreamOptions"></datalist>
               </label>
 
               <label>下游客戶（可搜尋）
-                <input id="downstreamInput" autocomplete="off" placeholder="請找軋盒／軋工等下一站" />
+                <input id="downstreamInput" autocomplete="off" placeholder="下一站廠商" />
                 <datalist id="downstreamOptions"></datalist>
               </label>
               <div id="orderMissingCustomerPrompt" class="order-missing-customer span-2 hidden" aria-live="polite">
@@ -131,12 +131,12 @@
                   <button id="dismissMissingCustomerBtn" class="btn" type="button">暫不新增</button>
                 </div>
               </div>
-              <label>送貨地址（下游）<input id="orderAddress" placeholder="完成上光後，要送往下一站的地址" /></label>
+              <label>送貨地址（下游）<input id="orderAddress" placeholder="送貨地址" /></label>
 
-              <label>品名<input id="orderItemName" placeholder="帳單上顯示的產品／印件名稱" /></label>
+              <label>品名<input id="orderItemName" placeholder="產品／印件名稱" /></label>
               <label>數量說明<input id="sheetCountText" type="text" maxlength="120" placeholder="例如：3箱×20張＋散裝5張" /></label>
-              <label>計算張數<input id="sheetCount" type="number" min="0" step="0.01" placeholder="供價格估算與報表使用" /></label>
-              <label class="span-2">尺寸寫法（可選）<input id="sizeNotation" type="text" maxlength="60" placeholder="例如：25×35台寸、25x35台吋、4K、菊5" /></label>
+              <label>計算張數<input id="sheetCount" type="number" min="0" step="0.01" placeholder="張數" /></label>
+              <label class="span-2">尺寸寫法（可選）<input id="sizeNotation" type="text" maxlength="60" placeholder="例：25×35台吋、4K" /></label>
               <label>天<input id="sizeLength" type="number" step="0.01" min="0" /></label>
               <label>地<input id="sizeWidth" type="number" step="0.01" min="0" /></label>
               <label>單位
@@ -147,7 +147,7 @@
                   <option value="inch">inch</option>
                 </select>
               </label>
-              <p id="sizeNotationHint" class="sub span-2">輸入尺寸後會換算成台吋；K 數與菊版請先在設定的報價公式中填入對應天×地。</p>
+              <p id="sizeNotationHint" class="sub span-2"></p>
               <label>尺寸級距
                 <select id="machineType">
                   <option value="" selected>依天／地自動判斷</option>
@@ -159,8 +159,8 @@
               <label>換算台吋<input id="sizeTaiInch" readonly /></label>
               <label class="span-2">上光種類<select id="glossType"></select></label>
               <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
-              <label>實際總成本<input id="actualCost" type="number" step="0.01" min="0" placeholder="材料、人工及其他成本合計；未知請留白" /></label>
-              <label>帳單單價（大台／常規：元／令；小台：元／張）<input id="orderUnitPrice" type="number" step="0.0001" min="0" placeholder="新工單空白時記錄報價單價；舊工單請補填" /></label>
+              <label>實際總成本<input id="actualCost" type="number" step="0.01" min="0" placeholder="未知可留白" /></label>
+              <label>帳單單價（元／令；小台元／張）<input id="orderUnitPrice" type="number" step="0.0001" min="0" placeholder="單價" /></label>
               <p id="orderSmartHint" class="sub span-2"></p>
               <label>狀態
                 <select id="orderStatus"></select>
@@ -177,13 +177,13 @@
             <div class="section-head">
               <div>
                 <h3>客人價格表</h3>
-                <p class="sub">選一位客人，像預設價格一樣填寫大台、常規、小台的專屬價格。大台、常規用元／令，小台用單張價。</p>
+
               </div>
-              <button class="btn" type="button" data-order-screen="form">返回新增工單</button>
+              <button class="btn" type="button" data-order-screen="form">返回工單</button>
             </div>
             <article class="pricing-formula-card">
               <strong>三青上光報價公式</strong>
-              <p id="priceRuleFormulaText" class="sub"></p>
+              <details class="usage-details"><summary>計價明細</summary><p id="priceRuleFormulaText" class="sub"></p></details>
               <div class="kpi-grid kpi-grid-2">
                 <div class="kpi"><span>目前工單計算價</span><strong id="priceRuleCalculatedPrice">請輸入完整資料</strong></div>
                 <div class="kpi"><span>最低收費後報價</span><strong id="priceRuleFinalPrice">請輸入完整資料</strong></div>
@@ -221,7 +221,7 @@
               </div>
               <label class="span-2">備註<input id="priceRuleNote" placeholder="例如：三青專屬價、含稅或未稅" /></label>
               <button class="btn primary" type="submit">儲存客人價格</button>
-              <button class="btn ghost" type="button" id="clearPriceRuleBtn">清空價格表單</button>
+              <button class="btn ghost" type="button" id="clearPriceRuleBtn">清空</button>
             </form>
             <div class="table-wrap">
               <table>
@@ -236,11 +236,11 @@
           <div class="section-head">
             <div>
               <h3>AI 修正中心</h3>
-              <p class="sub">查看已回報的 AI 識別錯誤，確認系統下次會參考哪些修正案例。</p>
+
             </div>
             <div class="actions">
-              <button class="btn" type="button" id="refreshAiCorrectionsBtn">刷新修正紀錄</button>
-              <button class="btn" type="button" id="exportAiCorrectionsBtn">匯出 AI 修正 CSV</button>
+              <button class="btn" type="button" id="refreshAiCorrectionsBtn">重新整理</button>
+              <button class="btn" type="button" id="exportAiCorrectionsBtn">匯出 CSV</button>
             </div>
           </div>
           <p id="aiCorrectionsSummary" class="sub">尚未載入修正紀錄。</p>
@@ -255,7 +255,7 @@
 
       <section id="customersView" class="panel hidden">
         <header class="topbar card">
-          <div class="topbar-heading"><h2 data-module-title="customersView">客戶資料系統</h2><p class="sub module-page-note" data-module-note="customersView"></p></div>
+          <div class="topbar-heading"><h2 data-module-title="customersView">客戶資料系統</h2></div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
@@ -274,7 +274,7 @@
               <label>角色
                 <select id="customerRole"></select>
               </label>
-              <p id="customerSmartHint" class="sub">智能建議：可直接輸入電話與地址，系統會避免重複客戶。</p>
+              <p id="customerSmartHint" class="sub"></p>
               <button class="btn primary" type="submit">新增客戶</button>
             </form>
           </article>
@@ -294,7 +294,7 @@
 
       <section id="tripsView" class="panel hidden">
         <header class="topbar card">
-          <div class="topbar-heading"><h2 data-module-title="tripsView">車趟系統</h2><p class="sub module-page-note" data-module-note="tripsView"></p></div>
+          <div class="topbar-heading"><h2 data-module-title="tripsView">車趟系統</h2></div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
@@ -350,7 +350,7 @@
           <div class="filter-row">
             <button class="btn primary" type="button" id="tripOptimizeBtn">最佳化車輛</button>
             <button class="btn primary" type="button" id="tripConfirmManualBtn">確認手動路線</button>
-            <button class="btn" type="button" id="tripExecuteBtn">執行車趟並標記已送出</button>
+            <button class="btn" type="button" id="tripExecuteBtn">執行並標記送出</button>
           </div>
           <div id="tripManualRoute" class="trip-route-list"></div>
         </article>
@@ -358,7 +358,7 @@
 
       <section id="opsCenterView" class="panel hidden">
         <header class="topbar card">
-          <div class="topbar-heading"><h2 data-module-title="opsCenterView">營運中心</h2><p class="sub module-page-note" data-module-note="opsCenterView"></p></div>
+          <div class="topbar-heading"><h2 data-module-title="opsCenterView">營運中心</h2></div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
@@ -375,12 +375,12 @@
         <div class="split">
           <article class="card">
             <h3>逾期待處理工單</h3>
-            <p class="sub">點擊工單可直接開啟詳細頁面。</p>
+
             <ul id="opsDelayedList" class="list"></ul>
           </article>
           <article class="card">
             <h3>資料待補工單</h3>
-            <p class="sub">點擊工單可直接開啟詳細頁面。</p>
+
             <ul id="opsMissingDataList" class="list"></ul>
           </article>
         </div>
@@ -388,7 +388,7 @@
 
       <section id="inventoryView" class="panel hidden">
         <header class="topbar card">
-          <div class="topbar-heading"><h2 data-module-title="inventoryView">庫存中心</h2><p class="sub module-page-note" data-module-note="inventoryView"></p></div>
+          <div class="topbar-heading"><h2 data-module-title="inventoryView">庫存中心</h2></div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
@@ -444,7 +444,7 @@
 
       <section id="notificationsView" class="panel hidden">
         <header class="topbar card">
-          <div class="topbar-heading"><h2 data-module-title="notificationsView">通知中心</h2><p class="sub module-page-note" data-module-note="notificationsView"></p></div>
+          <div class="topbar-heading"><h2 data-module-title="notificationsView">通知中心</h2></div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
@@ -504,7 +504,7 @@
 
       <section id="financeView" class="panel hidden">
         <header class="topbar card">
-          <div class="topbar-heading"><h2 data-module-title="financeView">財經資料系統</h2><p class="sub module-page-note" data-module-note="financeView"></p></div>
+          <div class="topbar-heading"><h2 data-module-title="financeView">財經資料系統</h2></div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
@@ -556,7 +556,7 @@
           <div class="split finance-split">
             <article class="card">
               <h3>待收款快速處理</h3>
-              <p class="sub">可直接把未收款標記為已收，或刪除錯誤資料。</p>
+
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>客戶</th><th>工單</th><th>未收</th><th>動作</th></tr></thead>
@@ -566,7 +566,7 @@
             </article>
             <article class="card">
               <h3>待付款快速處理</h3>
-              <p class="sub">可直接把未付款標記為已付，或刪除錯誤資料。</p>
+
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>供應商</th><th>項目</th><th>未付</th><th>動作</th></tr></thead>
@@ -586,7 +586,7 @@
                 <label>工單編號<input id="recvOrderNumber" required /></label>
                 <label>應收金額<input id="recvAmount" type="number" min="0" step="0.01" required /></label>
                 <label>已收金額<input id="recvReceived" type="number" min="0" step="0.01" value="0" required /></label>
-                <p id="financeSmartHint" class="sub">智能建議：輸入工單編號可自動帶入客戶與金額。</p>
+                <p id="financeSmartHint" class="sub"></p>
                 <button class="btn primary" type="submit">新增應收</button>
               </form>
             </article>
@@ -663,7 +663,7 @@
             </div>
             <article class="card">
               <h4>月結與客戶對帳單</h4>
-              <p class="sub">選擇月份後可匯出月結摘要；輸入客戶名稱可匯出或列印對帳單。</p>
+
               <div class="filter-row">
                 <input id="financeCloseMonth" type="month" />
                 <input id="statementCustomer" placeholder="客戶名稱，例如：Client001" />
@@ -705,7 +705,7 @@
         <header class="topbar card">
           <div class="topbar-heading">
             <h2>系統設定</h2>
-            <p class="sub">調整品牌、功能名稱、權限開放與畫面主題，讓所有人都能更容易使用。</p>
+
           </div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
@@ -789,7 +789,7 @@
             <div class="section-head">
               <div>
                 <h3>功能模組設定</h3>
-                <p class="sub">先選擇要調整的系統，再進入該系統的名稱、顯示方式與內部功能設定。</p>
+
               </div>
             </div>
             <div id="settingsModulesList" class="settings-modules-list"></div>
@@ -811,8 +811,10 @@
               </div>
               <div class="settings-subgroup pricing-settings-group" data-settings-internal-module="ordersView">
                 <h4>報價公式</h4>
+                <details class="usage-details"><summary>計價說明</summary>
                 <p class="sub">級距判斷：天／地較短邊 ≤ 小台短邊上限，且較長邊 ≤ 小台長邊上限，就是小台；超過小台但仍在常規短邊/長邊上限內，就是常規；超過常規上限就是大台。</p>
                 <p class="sub">計價公式：大台、常規＝天台吋 × 地台吋 × 張數 × 元／令 ÷（公式除數 × 100）；小台＝張數 × 單張價。最低收費會在最後套用。</p>
+                </details>
                 <label class="span-2">K 數／菊版尺寸對照（台吋）<textarea id="settingsPricingSizePresets" rows="4" maxlength="2000" placeholder="每行一個，例如：&#10;4K=18x25&#10;菊5=天x地"></textarea></label>
                 <p class="sub span-2">名稱可填 2K、4K、菊5；輸入「橘5」會自動視為「菊5」。請填你們實際裁切後的天×地台吋，避免誤用其他紙廠規格。</p>
                 <label>公式除數<input id="settingsPricingDivisor" type="number" min="1" step="0.01" /></label>
@@ -861,7 +863,7 @@
               </div>
               <div id="settingsModuleNoInternals" class="settings-subgroup hidden">
                 <h4>此系統目前沒有額外細節</h4>
-                <p class="sub">你仍可在上方調整名稱、圖示、說明，以及是否顯示此模組。</p>
+
               </div>
               </div>
             </div>
@@ -899,13 +901,13 @@
           </article>
           <article class="card">
             <h3>帳號權限管理</h3>
-            <p class="sub">可針對每個帳號設定能看的系統；例如司機只勾選車趟系統。</p>
+
             <div class="actions"><button class="btn" type="button" id="refreshAccountsBtn">刷新帳號</button></div>
             <div id="accountPermissionsList" class="account-permissions-list"></div>
           </article>
           <article class="card">
             <h3>系統健康 / 容量監控</h3>
-            <p class="sub">檢查目前資料量、儲存模式與 API 速度，提早知道哪裡可能開始變慢。</p>
+
             <div class="actions"><button class="btn primary" type="button" id="refreshCapacityBtn">重新檢測</button></div>
             <div id="capacitySummary" class="hero-badge">尚未檢測</div>
             <div id="capacityMetrics" class="capacity-grid"></div>
@@ -936,7 +938,7 @@
 
       <section id="auditView" class="panel hidden">
         <header class="topbar card">
-          <div class="topbar-heading"><h2 data-module-title="auditView">稽核系統</h2><p class="sub module-page-note" data-module-note="auditView"></p></div>
+          <div class="topbar-heading"><h2 data-module-title="auditView">稽核系統</h2></div>
           <div>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>

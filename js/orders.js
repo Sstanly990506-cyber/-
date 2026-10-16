@@ -2,7 +2,7 @@ import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview
 import { $, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js?v=20261015-audit-fixes-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
-import { applySizeNotation } from './size-notation.js';
+import { applySizeNotation } from './size-notation.js?v=20261016-concise-ui-1';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
 import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
 import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
@@ -171,7 +171,7 @@ function updateOrderSmartHint(state) {
   if (!hint) return;
   const suggestion = findSmartPriceSuggestion(state, $('orderId').value);
   if (!suggestion || !suggestion.estimated) {
-    hint.textContent = '智能估價：輸入客人、上光種類、尺寸與計算張數後，系統會先找客人價格表；沒有符合才用歷史工單估算。';
+    hint.textContent = '';
     return;
   }
   if (suggestion.source !== 'history') {
