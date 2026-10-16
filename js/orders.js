@@ -627,13 +627,14 @@ export function renderOrders(state, renderCustomerOptions) {
     const moveClass = move?.movedId === order.id ? (move.direction < 0 ? ' order-moving-up' : ' order-moving-down') : move?.displacedId === order.id ? (move.direction < 0 ? ' order-shifting-down' : ' order-shifting-up') : '';
     tr.className = `order-preview-row${moveClass}${highlightedOrderId === order.id ? ' is-just-completed' : ''}`;
     tr.dataset.edit = order.id;
+    tr.title = "點一下編輯，連點兩下複製成新工單";
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
-      <td data-label="工單單號" class="order-number-copy" data-copy-order="${escapeHtml(order.id)}" title="雙擊複製成新工單"><strong>${escapeHtml(order.orderNumber || '-')}</strong><div class="sub">${escapeHtml(order.billingCustomer || order.downstream || order.upstream || '-')}</div></td>
+      <td data-label="工單單號" class="order-number-copy"><strong>${escapeHtml(order.orderNumber || '-')}</strong><div class="sub">${escapeHtml(order.billingCustomer || order.downstream || order.upstream || '-')}</div></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        <div class="order-action-group"><button class="btn small" type="button" data-edit="${escapeHtml(order.id)}">編輯</button><button class="btn small" type="button" data-copy-order-button="${escapeHtml(order.id)}">複製</button>${positionActions}${quickActions}</div>
+        <div class="order-action-group">${positionActions}${quickActions}</div>
       </td>`;
     body.append(tr);
   });
@@ -877,7 +878,15 @@ export function bindOrderEvents(state, saveState, renderAll) {
     renderAll();
   });
 
+  let pendingRowClick = null;
+  let pendingRowId = null;
+  const cancelRowClick = () => {
+    clearTimeout(pendingRowClick);
+    pendingRowClick = null;
+    pendingRowId = null;
+  };
   $('ordersTbody')?.addEventListener('click', (e) => {
+    if (e.target.closest('button')) cancelRowClick();
     const deleteBtn = e.target.closest('button[data-delete-order]');
     if (deleteBtn) {
       const index = state.orders.findIndex((order) => order.id === deleteBtn.dataset.deleteOrder);
@@ -917,23 +926,22 @@ export function bindOrderEvents(state, saveState, renderAll) {
       return;
     }
 
-    const copyBtn = e.target.closest('button[data-copy-order-button]');
-    if (copyBtn) {
-      copyOrderAsNew(state, copyBtn.dataset.copyOrderButton);
+    if (e.target.closest('button, input, select, textarea, a')) return;
+    const row = e.target.closest('tr[data-edit]');
+    if (!row) return;
+    const orderId = row.dataset.edit;
+    if (pendingRowClick && pendingRowId === orderId) {
+      cancelRowClick();
+      e.preventDefault();
+      copyOrderAsNew(state, orderId);
       return;
     }
-    const btn = e.target.closest('button[data-edit]');
-    if (btn) {
-      openOrderForEdit(state, btn.dataset.edit);
-      return;
-    }
-    const row = e.target.closest('[data-copy-order], [data-order-move], button') ? null : e.target.closest('tr[data-edit]');
-    if (row) openOrderForEdit(state, row.dataset.edit);
-  });
-  $('ordersTbody')?.addEventListener('dblclick', (e) => {
-    const cell = e.target.closest('[data-copy-order]');
-    if (!cell) return;
-    copyOrderAsNew(state, cell.dataset.copyOrder);
+    cancelRowClick();
+    pendingRowId = orderId;
+    pendingRowClick = setTimeout(() => {
+      cancelRowClick();
+      openOrderForEdit(state, orderId);
+    }, 350);
   });
 
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });
