@@ -5,6 +5,7 @@
 .orders-table th:nth-child(4), .orders-table td:nth-child(4) { width: 26%; }
 .orders-table td { overflow-wrap: anywhere; }
 .order-number-copy { cursor: pointer; }
+.form-grid > label { min-width: 0; }
 
 @media (max-width: 767px) {
   .app-shell {
@@ -17,6 +18,29 @@
   .form-grid.compact { max-width: none; }
   .span-2 { grid-column: auto; }
   input, select, textarea { min-width: 0; max-width: 100%; font-size: 16px; }
+  /* Safari's native date editor otherwise contributes an intrinsic field width. */
+  input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    inline-size: 100%;
+    max-inline-size: 100%;
+    text-align: left;
+  }
+  input[type="date"]::-webkit-date-and-time-value {
+    min-width: 0;
+    min-height: 1.5em;
+    text-align: left;
+  }
+  input[type="date"]::-webkit-datetime-edit {
+    min-width: 0;
+    padding: 0;
+  }
   input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
   .btn { min-height: 44px; }
   .topbar { align-items: flex-start; flex-wrap: wrap; gap: 10px; }
