@@ -11,21 +11,21 @@ import {
   setAuthToken,
   getIntegrityReport,
   appendSystemEvent,
-} from './store.js?v=20261016-order-drag-1';
-import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20261016-order-drag-1';
-import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261016-order-drag-1';
-import { unlockFinanceSession, loadFinanceData } from './store.js?v=20261016-order-drag-1';
-import { renderFinance, bindFinanceEvents } from './finance.js?v=20261016-order-drag-1';
+} from './store.js?v=20261015-audit-fixes-1';
+import { renderCustomers, renderCustomerOptions, bindCustomerEvents } from './customers.js?v=20261015-audit-fixes-1';
+import { renderOrders, renderOrderScreen, clearOrderForm, bindOrderEvents, openOrderForEdit } from './orders.js?v=20261016-responsive-1';
+import { unlockFinanceSession, loadFinanceData } from './store.js?v=20261015-audit-fixes-1';
+import { renderFinance, bindFinanceEvents } from './finance.js?v=20261015-audit-fixes-1';
 import { renderAudits, bindAuditEvents } from './audit.js?v=20261003-system-audit-1';
-import { renderTrips, bindTripEvents } from './trips.js?v=20261016-order-drag-1';
+import { renderTrips, bindTripEvents } from './trips.js?v=20261015-audit-fixes-1';
 import { renderOpsCenter, bindOpsCenterEvents } from './ops-center.js?v=20260714-trip-route-text-1';
-import { renderInventory, bindInventoryEvents } from './inventory.js?v=20261016-order-drag-1';
+import { renderInventory, bindInventoryEvents } from './inventory.js?v=20261015-audit-fixes-1';
 import { renderNotifications, bindNotificationEvents, refreshLineStatus } from './notifications.js?v=20261003-system-audit-1';
 function proactiveNotify() {
   return buildSystemAlerts();
 }
-const APP_BUILD = '20261016-order-drag-1';
-import { initializeLocalAi } from './local-ai.js?v=20261016-order-drag-1';
+const APP_BUILD = '20261016-responsive-1';
+import { initializeLocalAi } from './local-ai.js?v=20261015-audit-fixes-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
 let internalViewsMounted = true;

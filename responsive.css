@@ -1,0 +1,84 @@
+/* Shared data and controls, with layouts tuned for each screen size. */
+.orders-table th:nth-child(1), .orders-table td:nth-child(1) { width: 34%; }
+.orders-table th:nth-child(2), .orders-table td:nth-child(2) { width: 22%; }
+.orders-table th:nth-child(3), .orders-table td:nth-child(3) { width: 18%; }
+.orders-table th:nth-child(4), .orders-table td:nth-child(4) { width: 26%; }
+.orders-table td { overflow-wrap: anywhere; }
+.order-number-copy { cursor: pointer; }
+
+@media (max-width: 767px) {
+  .app-shell {
+    padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      calc(100px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  .card { padding: 14px; border-radius: 16px; }
+  .panel, .form-grid, .login-grid { min-width: 0; }
+  .login-grid, .order-grid, .settings-form-grid, .ai-order-recognizer { grid-template-columns: minmax(0, 1fr); }
+  .form-grid.compact { max-width: none; }
+  .span-2 { grid-column: auto; }
+  input, select, textarea { min-width: 0; max-width: 100%; font-size: 16px; }
+  input:not([type="checkbox"]):not([type="radio"]), select { min-height: 44px; }
+  .btn { min-height: 44px; }
+  .topbar { align-items: flex-start; flex-wrap: wrap; gap: 10px; }
+  .topbar > div { min-width: 0; max-width: 100%; }
+  .topbar > div:last-child { width: 100%; justify-content: flex-start; }
+  .topbar > div:last-child .btn { width: auto; }
+  .orders-layout > .side-menu {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 6px; gap: 6px;
+  }
+  .orders-layout > .side-menu .side-btn { text-align: center; padding: 10px 6px; }
+  .orders-list-head { gap: 12px; }
+  .orders-list-head .sub { margin-top: 6px; font-size: 12px; line-height: 1.7; }
+  #orderStatusFilters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  #orderStatusFilters .btn { width: 100%; padding: 8px 2px; font-size: 12px; }
+
+  /* Each order becomes a card; no sideways scrolling is needed. */
+  .orders-table-wrap { overflow: visible; max-height: none; border-radius: 0; }
+  .orders-table { display: block; min-width: 0; width: 100%; table-layout: auto; }
+  .orders-table thead { display: none; }
+  .orders-table tbody { display: grid; gap: 12px; }
+  .orders-table .order-preview-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px;
+    margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px;
+    background: var(--card-strong); animation: none; transform: none;
+    user-select: none; -webkit-touch-callout: none;
+  }
+  .orders-table .order-preview-row:hover { transform: none; }
+  .orders-table .order-preview-row td {
+    display: block; width: auto; min-width: 0; padding: 0; border: 0; line-height: 1.5;
+  }
+  .orders-table .order-number-copy { grid-column: 1; grid-row: 1; font-size: 15px; }
+  .orders-table .order-number-copy .sub { margin: 4px 0 0; font-size: 13px; font-weight: 400; }
+  .orders-table .order-preview-status { grid-column: 2; grid-row: 1; align-self: start; }
+  .orders-table .order-preview-date { grid-column: 1; grid-row: 2; align-self: center; font-size: 13px; }
+  .orders-table .order-preview-date::before {
+    content: "交貨日期"; display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px;
+  }
+  .orders-table .order-row-actions { grid-column: 2; grid-row: 2; min-width: 0; align-self: end; }
+  .orders-table .order-action-group { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .orders-table .order-row-actions .btn { width: auto; min-height: 44px; padding: 8px 10px; font-size: 13px; }
+  .orders-table .orders-empty-row { display: block; }
+  .orders-table .orders-empty-row td { display: block; width: 100%; padding: 24px 12px; }
+
+  /* Wide reports scroll inside their own panel, keeping the page in place. */
+  .table-wrap:not(.orders-table-wrap) { max-width: 100%; overscroll-behavior-x: contain; }
+  .table-wrap:not(.orders-table-wrap) > table { min-width: 580px; }
+  .table-actions { flex-wrap: wrap; }
+  .table-actions .btn { width: auto; }
+  .data-pager { align-items: center; }
+  .data-pager .btn { width: auto; flex: 1; }
+  .data-pager .sync-detail { width: 100%; order: -1; text-align: center; }
+  .dashboard-module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi { min-width: 0; overflow-wrap: anywhere; }
+  .sq-ai { right: max(12px, env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .sq-ai-toggle { padding: 12px 16px; min-height: 44px; }
+  .sq-ai-panel { max-width: calc(100vw - 24px); max-height: calc(100dvh - 110px - env(safe-area-inset-bottom)); }
+}
+
+@media (min-width: 768px) {
+  .orders-table-wrap { max-height: 720px; }
+  .orders-layout > .side-menu .btn { min-height: 44px; }
+  .orders-list-head .sub { line-height: 1.6; font-size: 12px; }
+}
