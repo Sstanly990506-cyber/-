@@ -82,3 +82,43 @@
   .orders-layout > .side-menu .btn { min-height: 44px; }
   .orders-list-head .sub { line-height: 1.6; font-size: 12px; }
 }
+
+.is-order-dragging, .is-order-dragging * { cursor: grabbing !important; }
+.is-order-dragging { user-select: none; -webkit-user-select: none; }
+.orders-table .order-preview-row.is-drag-placeholder {
+  background: rgba(245, 158, 11, .07);
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+  box-shadow: none;
+  transform: none;
+  animation: none;
+}
+.orders-table .is-drag-placeholder > td { visibility: hidden; }
+.order-drag-preview {
+  position: fixed;
+  z-index: 1600;
+  pointer-events: none;
+  will-change: transform;
+}
+.order-drag-preview * { pointer-events: none !important; }
+.order-drag-preview .orders-table {
+  margin: 0;
+  background: var(--card-strong);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, .5);
+  transform: scale(1);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+.order-drag-preview.is-lifted .orders-table { transform: scale(.94); }
+.order-drag-preview .orders-table .order-preview-row.is-dragging {
+  opacity: 1;
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  transform: none;
+  animation: none;
+}
+.order-drag-preview.is-dropping { transition: transform 180ms ease-out; }
+.order-drag-preview.is-dropping .orders-table { box-shadow: none; }
+@media (prefers-reduced-motion: reduce) {
+  .order-drag-preview, .order-drag-preview .orders-table { transition: none; }
+}

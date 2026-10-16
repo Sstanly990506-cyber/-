@@ -1,3 +1,4 @@
+import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview-1';
 import { $, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js?v=20261015-audit-fixes-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
@@ -888,35 +889,44 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (!row || !pendingRowClick || pendingRowId !== row.dataset.edit) return;
     cancelRowClick();
     event.preventDefault();
-    drag = { row, id: row.dataset.edit, y: point.clientY, held: false, targetId: null, after: false };
+    drag = { row, id: row.dataset.edit, x: point.clientX, y: point.clientY, held: false, targetId: null, after: false };
+    drag.point = { clientX: point.clientX, clientY: point.clientY };
     drag.timer = setTimeout(() => {
       if (!drag) return;
-      drag.held = true;
-      row.classList.add('is-dragging');
+      liftRow();
     }, 300);
+  }
+  function liftRow() {
+    if (!drag || drag.held) return;
+    clearTimeout(drag.timer);
+    drag.held = true;
+    drag.preview = createOrderDragPreview(orderBody, drag.row, { clientX: drag.x, clientY: drag.y }, (targetId, after) => {
+      if (!drag) return;
+      drag.targetId = targetId;
+      drag.after = after;
+    }, () => finishRowHold(true));
+    drag.preview.move(drag.point);
   }
   function moveRowHold(event, point) {
     if (!drag) return;
     event.preventDefault();
-    if (Math.abs(point.clientY - drag.y) > 8) {
-      clearTimeout(drag.timer);
-      drag.held = true;
-      drag.row.classList.add('is-dragging');
-    }
-    if (!drag.held) return;
-    const target = document.elementFromPoint(point.clientX, point.clientY)?.closest('tr[data-edit]');
-    if (!target || target === drag.row || target.parentElement !== orderBody) return;
-    drag.targetId = target.dataset.edit;
-    drag.after = point.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
-    orderBody.insertBefore(drag.row, drag.after ? target.nextSibling : target);
+    drag.point = { clientX: point.clientX, clientY: point.clientY };
+    if (Math.hypot(point.clientX - drag.x, point.clientY - drag.y) > 8) liftRow();
+    drag.preview?.move(drag.point);
   }
   function finishRowHold(cancelled = false) {
     if (!drag) return;
+    // Resolve the last move before capturing the drop target for persistence.
+    if (!cancelled) drag.preview?.flush();
     const finished = drag;
     clearTimeout(finished.timer);
     drag = null;
     suppressRowClickUntil = Date.now() + 500;
-    finished.row.classList.remove('is-dragging');
+    let reordered = false;
+    const restoreList = () => {
+      if (reordered) saveState();
+      renderAll();
+    };
     if (!cancelled && finished.held && finished.targetId) {
       const ordered = sortedOrders(state).filter(order => order.id !== finished.id);
       const moved = state.orders.find(order => order.id === finished.id);
@@ -924,13 +934,16 @@ export function bindOrderEvents(state, saveState, renderAll) {
       if (moved && index >= 0) {
         ordered.splice(index + (finished.after ? 1 : 0), 0, moved);
         ordered.forEach((order, position) => { order.sortOrder = position; });
-        saveState();
+        reordered = true;
       }
-      renderAll();
+      finished.preview.drop(restoreList);
     } else if (!cancelled && !finished.held) {
       copyOrderAsNew(state, finished.id);
+    } else if (finished.preview) {
+      if (cancelled) finished.preview.cancel(restoreList);
+      else finished.preview.drop(restoreList);
     } else {
-      renderAll();
+      restoreList();
     }
   }
   orderBody?.addEventListener('touchstart', event => {
@@ -942,6 +955,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
   }, { passive: false });
   document.addEventListener('touchend', () => finishRowHold());
   document.addEventListener('touchcancel', () => finishRowHold(true));
+  orderBody?.addEventListener('contextmenu', event => { if (drag) event.preventDefault(); });
   orderBody?.addEventListener('pointerdown', event => {
     if (event.pointerType === 'mouse' && event.button === 0) beginRowHold(event, event);
   });
@@ -951,7 +965,11 @@ export function bindOrderEvents(state, saveState, renderAll) {
   document.addEventListener('pointerup', event => {
     if (event.pointerType === 'mouse') finishRowHold();
   });
+  document.addEventListener('pointercancel', event => {
+    if (event.pointerType === 'mouse') finishRowHold(true);
+  });
   window.addEventListener('blur', () => { cancelRowClick(); finishRowHold(true); });
+  window.addEventListener('resize', () => { cancelRowClick(); finishRowHold(true); });
   $('ordersTbody')?.addEventListener('click', (e) => {
     if (Date.now() < suppressRowClickUntil) return;
     if (e.target.closest('button')) cancelRowClick();
