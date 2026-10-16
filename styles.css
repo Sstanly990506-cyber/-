@@ -1287,3 +1287,5 @@ menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0
     transition-duration: 0.001ms !important;
   }
 }
+
+.orders-table .order-preview-row.is-dragging { opacity: .65; outline: 2px solid #f59e0b; cursor: grabbing; user-select: none; animation: none; }

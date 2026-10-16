@@ -610,12 +610,6 @@ export function renderOrders(state, renderCustomerOptions) {
     const completed = status === '已完成';
     const showSentAction = settings.quickActions?.['已送出'] !== false;
     const showDoneAction = settings.quickActions?.['已完成'] !== false;
-    const orderPosition = sortedOrders(state).findIndex((item) => item.id === order.id);
-    const positionActions = `
-      <span class="order-position-actions" aria-label="調整工單順序">
-        <button class="btn small ghost" type="button" data-order-move="${escapeHtml(order.id)}" data-order-direction="-1" title="上移" aria-label="上移" ${orderPosition <= 0 ? 'disabled' : ''}>↑</button>
-        <button class="btn small ghost" type="button" data-order-move="${escapeHtml(order.id)}" data-order-direction="1" title="下移" aria-label="下移" ${orderPosition >= state.orders.length - 1 ? 'disabled' : ''}>↓</button>
-      </span>`;
     const quickActions = [
       showSentAction
         ? `<button class="btn small order-sent-action" type="button" data-quick-status="已送出" data-id="${escapeHtml(order.id)}" ${sent ? 'disabled' : ''}>送出</button>`
@@ -627,14 +621,14 @@ export function renderOrders(state, renderCustomerOptions) {
     const moveClass = move?.movedId === order.id ? (move.direction < 0 ? ' order-moving-up' : ' order-moving-down') : move?.displacedId === order.id ? (move.direction < 0 ? ' order-shifting-down' : ' order-shifting-up') : '';
     tr.className = `order-preview-row${moveClass}${highlightedOrderId === order.id ? ' is-just-completed' : ''}`;
     tr.dataset.edit = order.id;
-    tr.title = "點一下編輯，連點兩下複製成新工單";
+    tr.title = "點一下編輯，連點兩下複製，第二下按住拖曳排序";
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
       <td data-label="工單單號" class="order-number-copy"><strong>${escapeHtml(order.orderNumber || '-')}</strong><div class="sub">${escapeHtml(order.billingCustomer || order.downstream || order.upstream || '-')}</div></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        <div class="order-action-group">${positionActions}${quickActions}</div>
+        <div class="order-action-group">${quickActions}</div>
       </td>`;
     body.append(tr);
   });
@@ -885,7 +879,81 @@ export function bindOrderEvents(state, saveState, renderAll) {
     pendingRowClick = null;
     pendingRowId = null;
   };
+  const orderBody = $('ordersTbody');
+  let drag = null;
+  let suppressRowClickUntil = 0;
+  function beginRowHold(event, point) {
+    if (event.target.closest('button, input, select, textarea, a')) return;
+    const row = event.target.closest('tr[data-edit]');
+    if (!row || !pendingRowClick || pendingRowId !== row.dataset.edit) return;
+    cancelRowClick();
+    event.preventDefault();
+    drag = { row, id: row.dataset.edit, y: point.clientY, held: false, targetId: null, after: false };
+    drag.timer = setTimeout(() => {
+      if (!drag) return;
+      drag.held = true;
+      row.classList.add('is-dragging');
+    }, 300);
+  }
+  function moveRowHold(event, point) {
+    if (!drag) return;
+    event.preventDefault();
+    if (Math.abs(point.clientY - drag.y) > 8) {
+      clearTimeout(drag.timer);
+      drag.held = true;
+      drag.row.classList.add('is-dragging');
+    }
+    if (!drag.held) return;
+    const target = document.elementFromPoint(point.clientX, point.clientY)?.closest('tr[data-edit]');
+    if (!target || target === drag.row || target.parentElement !== orderBody) return;
+    drag.targetId = target.dataset.edit;
+    drag.after = point.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2;
+    orderBody.insertBefore(drag.row, drag.after ? target.nextSibling : target);
+  }
+  function finishRowHold(cancelled = false) {
+    if (!drag) return;
+    const finished = drag;
+    clearTimeout(finished.timer);
+    drag = null;
+    suppressRowClickUntil = Date.now() + 500;
+    finished.row.classList.remove('is-dragging');
+    if (!cancelled && finished.held && finished.targetId) {
+      const ordered = sortedOrders(state).filter(order => order.id !== finished.id);
+      const moved = state.orders.find(order => order.id === finished.id);
+      const index = ordered.findIndex(order => order.id === finished.targetId);
+      if (moved && index >= 0) {
+        ordered.splice(index + (finished.after ? 1 : 0), 0, moved);
+        ordered.forEach((order, position) => { order.sortOrder = position; });
+        saveState();
+      }
+      renderAll();
+    } else if (!cancelled && !finished.held) {
+      copyOrderAsNew(state, finished.id);
+    } else {
+      renderAll();
+    }
+  }
+  orderBody?.addEventListener('touchstart', event => {
+    if (event.touches.length === 1) beginRowHold(event, event.touches[0]);
+    else finishRowHold(true);
+  }, { passive: false });
+  document.addEventListener('touchmove', event => {
+    if (event.touches.length === 1) moveRowHold(event, event.touches[0]);
+  }, { passive: false });
+  document.addEventListener('touchend', () => finishRowHold());
+  document.addEventListener('touchcancel', () => finishRowHold(true));
+  orderBody?.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' && event.button === 0) beginRowHold(event, event);
+  });
+  document.addEventListener('pointermove', event => {
+    if (event.pointerType === 'mouse') moveRowHold(event, event);
+  });
+  document.addEventListener('pointerup', event => {
+    if (event.pointerType === 'mouse') finishRowHold();
+  });
+  window.addEventListener('blur', () => { cancelRowClick(); finishRowHold(true); });
   $('ordersTbody')?.addEventListener('click', (e) => {
+    if (Date.now() < suppressRowClickUntil) return;
     if (e.target.closest('button')) cancelRowClick();
     const deleteBtn = e.target.closest('button[data-delete-order]');
     if (deleteBtn) {
@@ -897,16 +965,6 @@ export function bindOrderEvents(state, saveState, renderAll) {
       state.orders.splice(index, 1);
       saveState();
       renderAll();
-      return;
-    }
-    const moveBtn = e.target.closest('button[data-order-move]');
-    if (moveBtn) {
-      const movement = moveOrderByStep(state, moveBtn.dataset.orderMove, Number(moveBtn.dataset.orderDirection));
-      if (movement) {
-        pendingOrderMove = movement;
-        saveState();
-        renderAll();
-      }
       return;
     }
     const quickBtn = e.target.closest('button[data-quick-status]');
