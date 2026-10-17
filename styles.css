@@ -649,6 +649,10 @@ tbody tr:hover {
 .order-actions-dialog .order-delete-action { color: #fca5a5; border-color: #ef4444; }
 .orders-table tbody tr:hover { background: rgba(255,255,255,0.035); }
 .orders-table .order-preview-row {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: pan-y;
   cursor: pointer;
   animation: orderRowEnter 0.24s ease both;
   animation-delay: calc(var(--row-index, 0) * 28ms);

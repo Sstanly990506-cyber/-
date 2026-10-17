@@ -1,5 +1,5 @@
 // A stationary hold opens actions; moving or scrolling keeps normal list gestures.
-export function bindOrderDeleteHold(body, findOrder, requestDelete) {
+export function bindOrderDeleteHold(body, findOrder, requestDelete, onOpen = () => {}) {
   if (!body) return;
   let hold = null;
   let suppressClickUntil = 0;
@@ -8,6 +8,7 @@ export function bindOrderDeleteHold(body, findOrder, requestDelete) {
     hold = null;
   }
   function openActions(order) {
+    onOpen();
     const dialog = document.createElement('dialog');
     dialog.className = 'order-actions-dialog';
     const title = document.createElement('h3');
@@ -31,13 +32,12 @@ export function bindOrderDeleteHold(body, findOrder, requestDelete) {
     document.body.append(dialog);
     dialog.showModal();
   }
-  body.addEventListener('pointerdown', event => {
+  function startHold(event, point, kind) {
     cancelHold();
-    if (event.isPrimary === false || event.button !== 0) return;
     if (event.target.closest('button, input, select, textarea, a')) return;
     const row = event.target.closest('tr[data-edit]');
     if (!row) return;
-    const current = { row, pointerId: event.pointerId, x: event.clientX, y: event.clientY, fired: false };
+    const current = { row, pointerId: point.pointerId ?? point.identifier, kind, x: point.clientX, y: point.clientY, fired: false };
     hold = current;
     current.timer = setTimeout(() => {
       if (hold !== current || !row.isConnected || row.classList.contains('is-drag-placeholder')) return cancelHold();
@@ -47,13 +47,41 @@ export function bindOrderDeleteHold(body, findOrder, requestDelete) {
       suppressClickUntil = Infinity;
       openActions(order);
     }, 3000);
+  }
+  // Mobile browsers may cancel pointer events for their built-in long press.
+  // Track the touch lifecycle directly and ignore its duplicate pointer events.
+  body.addEventListener('touchstart', event => {
+    if (event.touches.length === 1) startHold(event, event.touches[0], 'touch');
+    else cancelHold();
+  }, { passive: true });
+  document.addEventListener('touchmove', event => {
+    if (hold?.kind !== 'touch') return;
+    if (event.touches.length !== 1) return cancelHold();
+    const point = event.touches[0];
+    if (!hold.fired && Math.hypot(point.clientX - hold.x, point.clientY - hold.y) > 18) cancelHold();
+    else if (hold?.fired && event.cancelable) event.preventDefault();
+  }, { passive: false });
+  function endTouch(event) {
+    if (hold?.kind !== 'touch') return;
+    if (hold.fired) {
+      suppressClickUntil = Date.now() + 700;
+      if (event.cancelable) event.preventDefault();
+    }
+    cancelHold();
+  }
+  document.addEventListener('touchend', endTouch, { passive: false });
+  document.addEventListener('touchcancel', endTouch, { passive: false });
+  body.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'touch') return;
+    if (event.isPrimary === false || event.button !== 0) return cancelHold();
+    startHold(event, event, 'pointer');
   });
   document.addEventListener('pointermove', event => {
-    if (hold && event.pointerId === hold.pointerId && !hold.fired
+    if (hold?.kind === 'pointer' && event.pointerId === hold.pointerId && !hold.fired
       && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > 8) cancelHold();
   });
   function endHold(event) {
-    if (!hold || event.pointerId !== hold.pointerId) return;
+    if (hold?.kind !== 'pointer' || event.pointerId !== hold.pointerId) return;
     if (hold.fired) suppressClickUntil = Date.now() + 700;
     cancelHold();
   }
@@ -63,7 +91,14 @@ export function bindOrderDeleteHold(body, findOrder, requestDelete) {
     if (Date.now() < suppressClickUntil) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      return;
     }
+    const button = event.target.closest('button[data-order-menu]');
+    if (!button) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const order = findOrder(button.dataset.orderMenu);
+    if (order) openActions(order);
   }, true);
   body.addEventListener('contextmenu', event => { if (hold) event.preventDefault(); });
   const reset = () => {

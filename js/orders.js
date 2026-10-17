@@ -1,5 +1,5 @@
 import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview-1';
-import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-delete-hold-1';
+import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-mobile-delete-1';
 import { $, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js?v=20261015-audit-fixes-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
@@ -631,7 +631,7 @@ export function renderOrders(state, renderCustomerOptions) {
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        <div class="order-action-group">${quickActions}</div>
+        <div class="order-action-group">${quickActions}<button class="btn small ghost" type="button" data-order-menu="${escapeHtml(order.id)}" aria-label="工單選項">更多</button></div>
       </td>`;
     body.append(tr);
   });
@@ -893,7 +893,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     saveState();
     renderAll();
   }
-  bindOrderDeleteHold(orderBody, id => state.orders.find(order => order.id === id), requestDeleteOrder);
+  bindOrderDeleteHold(orderBody, id => state.orders.find(order => order.id === id), requestDeleteOrder, cancelRowClick);
   let drag = null;
   let suppressRowClickUntil = 0;
   function beginRowHold(event, point) {

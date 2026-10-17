@@ -81,3 +81,44 @@ test('confirmation cancellation preserves data; confirmation deletes only the se
   confirmed = true; context.requestDeleteOrder('A');
   assert.deepEqual(state.orders.map(o => o.id), ['B']); assert.equal(saves, 1); assert.equal(renders, 1);
 });
+
+test('mobile hold survives pointer cancellation and small finger drift', () => {
+  const h = harness();
+  const point = { identifier: 7, clientX: 10, clientY: 10 };
+  const touch = { target: h.pointer.target, touches: [point] };
+  h.body.emit('pointerdown', { ...h.pointer, pointerType: 'touch' });
+  assert.equal(h.timers.size, 0);
+  h.body.emit('touchstart', touch);
+  h.document.emit('pointercancel', { ...h.pointer, pointerType: 'touch' });
+  h.document.emit('touchmove', { touches: [{ ...point, clientX: 20 }] });
+  assert.equal(h.timers.size, 1);
+  h.fire(); assert.equal(h.page.children[0].open, true);
+  let prevented = false;
+  h.document.emit('touchend', { cancelable: true, preventDefault: () => { prevented = true; } });
+  assert(prevented); assert.equal(h.deletes.length, 0);
+});
+
+test('mobile scrolling, release, cancellation and multitouch cancel pending holds', () => {
+  for (const cancel of [
+    h => h.document.emit('touchmove', { touches: [{ clientX: 60, clientY: 10 }] }),
+    h => h.document.emit('touchend', {}),
+    h => h.document.emit('touchcancel', {}),
+    h => h.body.emit('touchstart', { touches: [{}, {}] }),
+    h => h.document.emit('scroll'),
+  ]) {
+    const h = harness();
+    h.body.emit('touchstart', { target: h.pointer.target, touches: [{ identifier: 7, clientX: 10, clientY: 10 }] });
+    cancel(h); h.fire(); assert.equal(h.page.children.length, 0);
+  }
+});
+
+test('More opens the same menu without a hold and does not delete until selected', () => {
+  const h = harness();
+  let stopped = false;
+  h.body.emit('click', {
+    target: { closest: () => ({ dataset: { orderMenu: 'A' } }) },
+    preventDefault() {}, stopImmediatePropagation() { stopped = true; },
+  });
+  assert(stopped); assert.equal(h.page.children[0].open, true); assert.equal(h.deletes.length, 0);
+  h.page.children[0].children[2].emit('click'); assert.equal(h.deletes.length, 0);
+});
