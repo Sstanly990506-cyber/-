@@ -1,4 +1,5 @@
 import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview-1';
+import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-delete-hold-1';
 import { $, downloadCsv, getTodayText } from './shared.js';
 import { syncOrderToReceivables } from './store.js?v=20261015-audit-fixes-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
@@ -622,7 +623,7 @@ export function renderOrders(state, renderCustomerOptions) {
     const moveClass = move?.movedId === order.id ? (move.direction < 0 ? ' order-moving-up' : ' order-moving-down') : move?.displacedId === order.id ? (move.direction < 0 ? ' order-shifting-down' : ' order-shifting-up') : '';
     tr.className = `order-preview-row${moveClass}${highlightedOrderId === order.id ? ' is-just-completed' : ''}`;
     tr.dataset.edit = order.id;
-    tr.title = "點一下編輯，連點兩下複製，第二下按住拖曳排序";
+    tr.title = "點一下編輯，連點兩下複製，第二下按住拖曳排序；長按 3 秒開啟刪除選項";
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
       <td data-label="序號" class="order-sequence">${index + 1}</td>
@@ -882,6 +883,17 @@ export function bindOrderEvents(state, saveState, renderAll) {
     pendingRowId = null;
   };
   const orderBody = $('ordersTbody');
+  function requestDeleteOrder(id) {
+    cancelRowClick();
+    const index = state.orders.findIndex(order => order.id === id);
+    if (index < 0) return;
+    const label = state.orders[index].orderNumber || '未命名工單';
+    if (!window.confirm(`確認刪除此工單「${label}」？刪除後無法復原。`)) return;
+    state.orders.splice(index, 1);
+    saveState();
+    renderAll();
+  }
+  bindOrderDeleteHold(orderBody, id => state.orders.find(order => order.id === id), requestDeleteOrder);
   let drag = null;
   let suppressRowClickUntil = 0;
   function beginRowHold(event, point) {
@@ -976,14 +988,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (e.target.closest('button')) cancelRowClick();
     const deleteBtn = e.target.closest('button[data-delete-order]');
     if (deleteBtn) {
-      const index = state.orders.findIndex((order) => order.id === deleteBtn.dataset.deleteOrder);
-      if (index < 0) return;
-      const order = state.orders[index];
-      const label = order.orderNumber || '未命名工單';
-      if (!window.confirm(`確定要刪除工單「${label}」嗎？刪除後無法復原。`)) return;
-      state.orders.splice(index, 1);
-      saveState();
-      renderAll();
+      requestDeleteOrder(deleteBtn.dataset.deleteOrder);
       return;
     }
     const quickBtn = e.target.closest('button[data-quick-status]');

@@ -635,6 +635,18 @@ tbody tr:hover {
 .orders-table th:nth-child(5),
 .orders-table td:nth-child(5) { width: 38%; }
 .orders-table .order-sequence { color: var(--muted); font-variant-numeric: tabular-nums; }
+.order-actions-dialog {
+  width: min(360px, calc(100% - 32px));
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card-strong);
+  color: var(--text);
+}
+.order-actions-dialog::backdrop { background: rgba(0, 0, 0, .65); }
+.order-actions-dialog h3 { margin: 0 0 20px; overflow-wrap: anywhere; }
+.order-actions-dialog .btn { display: block; width: 100%; min-height: 44px; margin-top: 12px; }
+.order-actions-dialog .order-delete-action { color: #fca5a5; border-color: #ef4444; }
 .orders-table tbody tr:hover { background: rgba(255,255,255,0.035); }
 .orders-table .order-preview-row {
   cursor: pointer;
