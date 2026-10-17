@@ -600,7 +600,7 @@ export function renderOrders(state, renderCustomerOptions) {
   if (summary) summary.textContent = `本頁顯示 ${filtered.length} 筆，共 ${state.pagination?.orders?.total ?? state.orders.length} 筆工單`;
 
   if (!filtered.length) {
-    body.innerHTML = '<tr class="orders-empty-row"><td colspan="4">目前沒有符合條件的工單。</td></tr>';
+    body.innerHTML = '<tr class="orders-empty-row"><td colspan="5">目前沒有符合條件的工單。</td></tr>';
     return;
   }
 
@@ -625,6 +625,7 @@ export function renderOrders(state, renderCustomerOptions) {
     tr.title = "點一下編輯，連點兩下複製，第二下按住拖曳排序";
     tr.style.setProperty('--row-index', String(Math.min(index, 12)));
     tr.innerHTML = `
+      <td data-label="序號" class="order-sequence">${index + 1}</td>
       <td data-label="工單單號" class="order-number-copy"><strong>${escapeHtml(order.orderNumber || '-')}</strong><div class="sub">${escapeHtml(order.billingCustomer || order.downstream || order.upstream || '-')}</div></td>
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>

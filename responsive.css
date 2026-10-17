@@ -77,14 +77,16 @@
   .orders-table .order-preview-row td {
     display: block; width: auto; min-width: 0; padding: 0; border: 0; line-height: 1.5;
   }
-  .orders-table .order-number-copy { grid-column: 1; grid-row: 1; font-size: 15px; }
+  .orders-table .order-sequence { grid-column: 1 / -1; grid-row: 1; font-size: 12px; }
+  .orders-table .order-sequence::before { content: "序號 "; }
+  .orders-table .order-number-copy { grid-column: 1; grid-row: 2; font-size: 15px; }
   .orders-table .order-number-copy .sub { margin: 4px 0 0; font-size: 13px; font-weight: 400; }
-  .orders-table .order-preview-status { grid-column: 2; grid-row: 1; align-self: start; }
-  .orders-table .order-preview-date { grid-column: 1; grid-row: 2; align-self: center; font-size: 13px; }
+  .orders-table .order-preview-status { grid-column: 2; grid-row: 2; align-self: start; }
+  .orders-table .order-preview-date { grid-column: 1; grid-row: 3; align-self: center; font-size: 13px; }
   .orders-table .order-preview-date::before {
     content: "交貨日期"; display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px;
   }
-  .orders-table .order-row-actions { grid-column: 2; grid-row: 2; min-width: 0; align-self: end; }
+  .orders-table .order-row-actions { grid-column: 2; grid-row: 3; min-width: 0; align-self: end; }
   .orders-table .order-action-group { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
   .orders-table .order-row-actions .btn { width: auto; min-height: 44px; padding: 8px 10px; font-size: 13px; }
   .orders-table .orders-empty-row { display: block; }
