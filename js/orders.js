@@ -875,8 +875,11 @@ export function bindOrderEvents(state, saveState, renderAll) {
 
   let pendingRowClick = null;
   let pendingRowId = null;
+  let armedRow = null;
   const cancelRowClick = () => {
     clearTimeout(pendingRowClick);
+    armedRow?.classList.remove('is-tap-armed');
+    armedRow = null;
     pendingRowClick = null;
     pendingRowId = null;
   };
@@ -894,6 +897,19 @@ export function bindOrderEvents(state, saveState, renderAll) {
   bindOrderDeleteHold(orderBody, id => state.orders.find(order => order.id === id), requestDeleteOrder, cancelRowClick);
   let drag = null;
   let suppressRowClickUntil = 0;
+  let touchTap = null;
+  let suppressTouchClickUntil = 0;
+  function scheduleRowEdit(row, delay) {
+    cancelRowClick();
+    pendingRowId = row.dataset.edit;
+    armedRow = row;
+    row.classList.add('is-tap-armed');
+    pendingRowClick = setTimeout(() => {
+      const id = pendingRowId;
+      cancelRowClick();
+      openOrderForEdit(state, id);
+    }, delay);
+  }
   function beginRowHold(event, point) {
     if (event.target.closest('button, input, select, textarea, a')) return;
     const row = event.target.closest('tr[data-edit]');
@@ -958,14 +974,48 @@ export function bindOrderEvents(state, saveState, renderAll) {
     }
   }
   orderBody?.addEventListener('touchstart', event => {
-    if (event.touches.length === 1) beginRowHold(event, event.touches[0]);
-    else finishRowHold(true);
+    touchTap = null;
+    if (event.touches.length !== 1) {
+      cancelRowClick();
+      finishRowHold(true);
+      return;
+    }
+    if (event.target.closest('button, input, select, textarea, a')) return;
+    const row = event.target.closest('tr[data-edit]');
+    if (!row) return;
+    const point = event.touches[0];
+    // Start the second press from the first touch release, without waiting for
+    // Safari to synthesize a click (which can be delayed or omitted).
+    beginRowHold(event, point);
+    if (!drag) {
+      cancelRowClick();
+      touchTap = { row, x: point.clientX, y: point.clientY, startedAt: Date.now() };
+    }
   }, { passive: false });
   document.addEventListener('touchmove', event => {
+    if (touchTap && (event.touches.length !== 1
+      || Math.hypot(event.touches[0].clientX - touchTap.x, event.touches[0].clientY - touchTap.y) > 12)) touchTap = null;
     if (event.touches.length === 1) moveRowHold(event, event.touches[0]);
   }, { passive: false });
-  document.addEventListener('touchend', () => finishRowHold());
-  document.addEventListener('touchcancel', () => finishRowHold(true));
+  document.addEventListener('touchend', event => {
+    if (drag) {
+      touchTap = null;
+      suppressTouchClickUntil = Date.now() + 700;
+      finishRowHold();
+      return;
+    }
+    if (!touchTap) return;
+    const tap = touchTap;
+    touchTap = null;
+    suppressTouchClickUntil = Date.now() + 700;
+    if (!event.defaultPrevented && !event.touches.length && tap.row.isConnected
+      && Date.now() - tap.startedAt < 700) scheduleRowEdit(tap.row, 500);
+  });
+  document.addEventListener('touchcancel', () => { touchTap = null; cancelRowClick(); finishRowHold(true); });
+  document.addEventListener('scroll', () => {
+    touchTap = null;
+    if (!drag) cancelRowClick();
+  }, true);
   orderBody?.addEventListener('contextmenu', event => { if (drag) event.preventDefault(); });
   orderBody?.addEventListener('pointerdown', event => {
     if (event.pointerType === 'mouse' && event.button === 0) beginRowHold(event, event);
@@ -979,8 +1029,8 @@ export function bindOrderEvents(state, saveState, renderAll) {
   document.addEventListener('pointercancel', event => {
     if (event.pointerType === 'mouse') finishRowHold(true);
   });
-  window.addEventListener('blur', () => { cancelRowClick(); finishRowHold(true); });
-  window.addEventListener('resize', () => { cancelRowClick(); finishRowHold(true); });
+  window.addEventListener('blur', () => { touchTap = null; cancelRowClick(); finishRowHold(true); });
+  window.addEventListener('resize', () => { touchTap = null; cancelRowClick(); finishRowHold(true); });
   $('ordersTbody')?.addEventListener('click', (e) => {
     if (Date.now() < suppressRowClickUntil) return;
     if (e.target.closest('button')) cancelRowClick();
@@ -1007,6 +1057,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     }
 
     if (e.target.closest('button, input, select, textarea, a')) return;
+    if (Date.now() < suppressTouchClickUntil) return;
     const row = e.target.closest('tr[data-edit]');
     if (!row) return;
     const orderId = row.dataset.edit;
@@ -1017,11 +1068,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       return;
     }
     cancelRowClick();
-    pendingRowId = orderId;
-    pendingRowClick = setTimeout(() => {
-      cancelRowClick();
-      openOrderForEdit(state, orderId);
-    }, 350);
+    scheduleRowEdit(row, 350);
   });
 
   $('clearOrderBtn')?.addEventListener('click', () => { clearOrderForm(); updateTaiInchPreview(); updateOrderSmartHint(state); });

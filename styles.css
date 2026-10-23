@@ -663,6 +663,7 @@ tbody tr:hover {
   box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.75);
   transform: translateX(2px);
 }
+.orders-table .order-preview-row.is-tap-armed { touch-action: none; }
 .orders-table .order-preview-row.is-just-completed {
   animation: orderRowComplete 0.86s ease both;
 }
