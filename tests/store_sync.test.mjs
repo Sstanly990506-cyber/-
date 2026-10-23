@@ -5,9 +5,9 @@ import test from 'node:test';
 
 async function harness(fetch, events = [], hooks = {}) {
   const context = vm.createContext({
-    fetch, console, setTimeout, clearTimeout, setInterval,
+    fetch, console, setTimeout, clearTimeout, setInterval: hooks.setInterval || setInterval,
     queueMicrotask: () => {},
-    document: { getElementById: () => null },
+    document: hooks.document || { getElementById: () => null },
     window: { dispatchEvent: event => events.push(event.type), alert: hooks.alert },
     Event: class { constructor(type) { this.type = type; } },
     localStorage: { getItem: () => '{invalid', setItem: () => {} },
@@ -22,7 +22,7 @@ async function harness(fetch, events = [], hooks = {}) {
   await module.link(() => shared);
   await module.evaluate();
   const store = module.namespace;
-  store.configureStore({ refreshFn: () => {}, syncUiFn: hooks.syncUiFn || (() => {}) });
+  store.configureStore({ refreshFn: hooks.refreshFn || (() => {}), syncUiFn: hooks.syncUiFn || (() => {}), dashboardRefreshFn: hooks.dashboardRefreshFn });
   store.setAuthToken('first-account');
   store.state.allowedViews = ['customersView'];
   store.hydrateBootstrap({ initialPages: { customers: { items: [{ id: 'c1', name: 'original' }] } } });
@@ -397,4 +397,116 @@ test('another user moving a row rebases only its sort metadata while retaining o
   store.state.orders[0].itemName='my edit';await store.pullServerState();
   assert.equal(store.state.orders[0].itemName,'my edit');assert.equal(store.state.orders[0]._updatedAt,200);
   await store.saveState();assert.equal(writes[0]._expectedVersion,200);assert.equal(writes[0].sortOrder,3);
+});
+
+test('a slow dashboard does not hold the save queue; further changes coalesce into a final fresh summary', async () => {
+  let releaseSummary, summaryCalls = 0, summaryPaints = 0, writes = 0;
+  const ui = [];
+  const store = await harness(async (url) => {
+    if (url === '/api/dashboard') {
+      summaryCalls++;
+      if (summaryCalls === 1) await new Promise(resolve => { releaseSummary = resolve; });
+      return response({ summary: { pendingOrders: summaryCalls } });
+    }
+    writes++;
+    return response({ updatedAt: 100 + writes });
+  }, [], { syncUiFn: status => ui.push(status), dashboardRefreshFn: () => { summaryPaints++; } });
+  store.state.customers[0].name = 'first';
+  await store.saveState();
+  assert.equal(typeof releaseSummary, 'function');
+  assert.equal(ui.at(-1).badgeText, '已儲存');
+  store.state.customers[0].name = 'second';
+  await store.saveState();
+  assert.equal(writes, 2);
+  assert.equal(summaryCalls, 1);
+  assert.equal(store.state.customers[0]._updatedAt, 102);
+  releaseSummary();
+  while (!summaryPaints) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(summaryCalls, 2);
+  assert.equal(summaryPaints, 1);
+  assert.equal(store.state.dashboardSummary.pendingOrders, 2);
+});
+
+test('overlapping sync triggers share one in-flight request and the next check can run normally', async () => {
+  let release, pulls = 0;
+  const store = await harness(async url => {
+    if (url === '/api/dashboard') return response({ summary: {} });
+    pulls++;
+    await new Promise(resolve => { release = resolve; });
+    return response({ changes: [], cursor: pulls });
+  });
+  store.state.dashboardSummary = {};
+  const first = store.pullServerState();
+  const pending = Array.from({ length: 20 }, () => store.pullServerState());
+  assert.ok(pending.every(promise => promise === first));
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pulls, 1);
+  release(); await Promise.all([first, ...pending]);
+  release = null;
+  const next = store.pullServerState();
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pulls, 2);
+  release(); await next;
+});
+
+test('idle incremental checks do not reread complete finance records or rerender forms', async () => {
+  let financeReads = 0, paints = 0;
+  let changes = [];
+  const store = await harness(async url => {
+    if (url === '/api/finance/data') {
+      financeReads++;
+      return response({ records: { orders: [], customers: [], receivables: [], payables: [], audits: [] } });
+    }
+    if (url === '/api/dashboard') return response({ summary: {} });
+    return response({ changes, cursor: 50 });
+  }, [], { refreshFn: () => { paints++; } });
+  await store.unlockFinanceSession('finance-unlocked', Math.floor(Date.now() / 1000) + 900);
+  store.state.dashboardSummary = {};
+  paints = 0;
+  for (let i = 0; i < 3; i++) await store.pullServerState();
+  assert.equal(financeReads, 1);
+  assert.equal(paints, 0);
+  changes = [{ entity: 'receivables', id: 'r1', data: { id: 'r1', amount: 20 }, updatedAt: 50 }];
+  await store.pullServerState();
+  assert.equal(financeReads, 2);
+  assert.equal(paints, 1);
+});
+
+test('foreground sync checks every three seconds, rests in background, and checks when returning', async () => {
+  let tick, interval, pulls = 0;
+  const listeners = {};
+  const document = { hidden: false, getElementById: () => null, addEventListener: (type, fn) => { listeners[type] = fn; } };
+  const store = await harness(async () => { pulls++; return response({ changes: [], cursor: 1 }); }, [], {
+    document, setInterval: (fn, ms) => { tick = fn; interval = ms; return 1; },
+  });
+  store.state.dashboardSummary = {};
+  store.startStoreSync();
+  assert.equal(interval, 3000);
+  document.hidden = true; tick(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pulls, 0);
+  document.hidden = false; listeners.visibilitychange();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pulls, 1);
+  tick(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pulls, 2);
+});
+
+test('a new account starts its own sync without waiting for an old account response', async () => {
+  let releaseOld;
+  const store = await harness(async (url, options) => {
+    if (options.headers.Authorization === 'Bearer first-account') {
+      await new Promise(resolve => { releaseOld = resolve; });
+      return response({ changes: [{ entity: 'customers', id: 'c1', data: { name: 'private old' }, updatedAt: 2 }], cursor: 2 });
+    }
+    return response({ changes: [], cursor: 3 });
+  });
+  store.state.dashboardSummary = {};
+  const old = store.pullServerState();
+  while (!releaseOld) await new Promise(resolve => setImmediate(resolve));
+  store.setAuthToken('new-account');
+  store.hydrateBootstrap({ dashboardSummary: {}, initialPages: { customers: { items: [{ id: 'new', name: 'new account' }] } } });
+  await store.pullServerState();
+  releaseOld(); await old;
+  assert.equal(store.state.customers.length, 1);
+  assert.equal(store.state.customers[0].name, 'new account');
 });

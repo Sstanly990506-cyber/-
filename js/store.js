@@ -85,12 +85,16 @@ export const state = {
 
 let onRefresh = () => {};
 let onSyncUi = () => {};
+let onDashboardRefresh = () => {};
 let syncTimer = null;
 let changeCursor = 0;
 let initializedRemote = false;
 let searchBound = false;
 let saveQueue = Promise.resolve();
 let sessionVersion = 0;
+let pullRequest = null;
+let dashboardRequest = null;
+let dashboardRevision = 0;
 
 const snapshots = {};
 const pageRequests = {};
@@ -302,9 +306,29 @@ export async function loadDashboardSummary() {
   }
 }
 
-export function configureStore({ refreshFn, syncUiFn }) {
+function refreshDashboardInBackground() {
+  const version = sessionVersion;
+  dashboardRevision++;
+  if (dashboardRequest?.version === version) return;
+  const entry = { version };
+  dashboardRequest = entry;
+  entry.promise = (async () => {
+    let revision;
+    do {
+      revision = dashboardRevision;
+      await loadDashboardSummary();
+      if (version !== sessionVersion) return;
+    } while (revision !== dashboardRevision);
+    onDashboardRefresh();
+  })().finally(() => {
+    if (dashboardRequest === entry) dashboardRequest = null;
+  });
+}
+
+export function configureStore({ refreshFn, syncUiFn, dashboardRefreshFn = () => {} }) {
   onRefresh = refreshFn;
   onSyncUi = syncUiFn;
+  onDashboardRefresh = dashboardRefreshFn;
 }
 
 export function initializeStore() {
@@ -590,9 +614,11 @@ async function pushChanges() {
   if (version !== sessionVersion) return;
   const failed = results.find((result) => result.status === 'rejected');
   if (failed) throw failed.reason;
-  await loadDashboardSummary();
   refresh();
   setIdleSyncUi('單筆同步');
+  // A committed write must release the save queue immediately. Recomputing
+  // dashboard totals is a separate read and must not delay saves or movement.
+  refreshDashboardInBackground();
 }
 
 export function saveOrderSortOrder(ids, expectedVersions) {
@@ -705,7 +731,20 @@ function applyChange(change) {
   return key;
 }
 
-export async function pullServerState() {
+export function pullServerState() {
+  if (!state.authToken) return Promise.resolve();
+  if (pullRequest?.version === sessionVersion) return pullRequest.promise;
+  const entry = { version: sessionVersion };
+  pullRequest = entry;
+  entry.promise = pullServerChanges().catch(error => {
+    if (entry.version === sessionVersion) setUi('同步失敗', error.message, false);
+  }).finally(() => {
+    if (pullRequest === entry) pullRequest = null;
+  });
+  return entry.promise;
+}
+
+async function pullServerChanges() {
   if (!state.authToken) return;
   const version = sessionVersion;
   await saveQueue;
@@ -726,11 +765,15 @@ export async function pullServerState() {
       const row = state[key].find((item) => item.id === change.id);
       if (row) snapshots[key].set(change.id, JSON.stringify(row));
     }
-    await loadFinanceData();
-    if (!state.financeRecords && (data.changes?.length || !state.dashboardSummary)) await loadDashboardSummary();
+    const financeChanged = (data.changes || []).some(change => ['orders', 'customers', 'receivables', 'payables', 'audits'].includes(change.entity));
+    const loadFinance = Date.now() < state.financeUntil && (!state.financeRecords || financeChanged);
+    if (loadFinance || Date.now() >= state.financeUntil) await loadFinanceData();
     if (version !== sessionVersion) return;
-    if (data.changes?.length || state.financeRecords) refresh();
+    if (data.changes?.length || loadFinance) refresh();
     setIdleSyncUi('增量同步');
+    if (!state.dashboardSummary || (data.changes || []).some(change => ['orders', 'inventory', 'receivables', 'payables', 'audits'].includes(change.entity))) {
+      refreshDashboardInBackground();
+    }
   } catch (err) {
     setUi('同步失敗', err.message, false);
   }
@@ -739,7 +782,14 @@ export async function pullServerState() {
 export function startStoreSync() {
   bindServerSearch();
   if (syncTimer) return;
-  syncTimer = setInterval(pullServerState, 10000);
+  // Foreground tabs check sooner; one in-flight pull per session prevents a
+  // slow connection from accumulating overlapping requests. Hidden tabs rest.
+  syncTimer = setInterval(() => {
+    if (!document.hidden) void pullServerState();
+  }, 3000);
+  document.addEventListener?.('visibilitychange', () => {
+    if (!document.hidden) void pullServerState();
+  });
 }
 
 export function saveState() {

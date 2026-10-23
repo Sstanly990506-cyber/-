@@ -22,6 +22,16 @@ except ImportError:  # optional unless DATABASE_URL is configured
     dict_row = None
     Jsonb = None
 
+try:
+    from psycopg_pool import ConnectionPool
+except ImportError:  # Keep local JSON-only installations usable without PostgreSQL.
+    ConnectionPool = None
+
+DB_POOL_LOCK = Lock()
+_db_pool = None
+_db_pool_url = None
+_db_pool_pid = None
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DATA_DIR = (
     Path(tempfile.gettempdir()) / 'gloss-app-data'
@@ -120,8 +130,28 @@ def ensure_psycopg_available():
 
 
 def get_db_connection():
+    global _db_pool, _db_pool_url, _db_pool_pid
     ensure_psycopg_available()
-    return connect(normalize_database_url(DATABASE_URL), row_factory=dict_row)
+    url = normalize_database_url(DATABASE_URL)
+    if ConnectionPool is None:
+        return connect(url, row_factory=dict_row)
+    # Reuse authenticated TLS connections in a warm server process. Pool context
+    # managers commit/rollback before returning a connection, keeping requests
+    # isolated. Check idle connections before use; never replay a failed write.
+    with DB_POOL_LOCK:
+        pid = os.getpid()
+        if _db_pool is None or _db_pool_url != url or _db_pool_pid != pid:
+            if _db_pool is not None and _db_pool_pid == pid:
+                _db_pool.close()
+            _db_pool = ConnectionPool(
+                conninfo=url, kwargs={'row_factory': dict_row},
+                min_size=0, max_size=4, timeout=10, open=True,
+                max_idle=60, max_lifetime=300, reconnect_timeout=8,
+                check=ConnectionPool.check_connection,
+            )
+            _db_pool_url, _db_pool_pid = url, pid
+        pool = _db_pool
+    return pool.connection()
 
 
 def normalize_username(username: str) -> str:
