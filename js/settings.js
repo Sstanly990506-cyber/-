@@ -1,4 +1,5 @@
 import { $, MODULE_DEFINITIONS, applyRuntimeBranding, getDefaultSettings, getModuleMeta, mergeSettings, isModuleEnabledInSettings } from './shared.js';
+import { createBusyAction } from './busy-action.js?v=20261023-busy-actions-1';
 
 function ensureSettings(state) {
   state.settings = mergeSettings(state.settings || {});
@@ -435,6 +436,25 @@ export function renderSettings(state) {
 }
 
 export function bindSettingsEvents(state, saveState, renderAll) {
+  // Account updates share an endpoint that writes the account list. Keep this
+  // tab's refresh/create/permission requests in one lane, without locking orders.
+  const accountAction = createBusyAction();
+  const runAccountAction = (button, task) => accountAction({
+    button,
+    controls: document.querySelectorAll('#accountPermissionsList input, #accountPermissionsList select, #accountPermissionsList button, #createAccountForm input, #createAccountForm select, #createAccountForm button, #refreshAccountsBtn'),
+    task,
+  });
+  const settingsAction = createBusyAction();
+  const runSettingsAction = (button, task) => settingsAction({
+    button,
+    controls: $('settingsForm')?.querySelectorAll('input, select, textarea, button') || [],
+    task,
+  });
+  const bindBusyClick = (id, task) => {
+    const button = $(id);
+    const action = createBusyAction();
+    button?.addEventListener('click', () => action({ button, task }));
+  };
   const adminHeaders = (json = false) => ({
     ...(json ? { 'Content-Type': 'application/json' } : {}),
     Authorization: `Bearer ${state.authToken || ''}`,
@@ -472,10 +492,14 @@ export function bindSettingsEvents(state, saveState, renderAll) {
   };
 
   renderNewAccountPermissions();
-  loadAccounts().catch((err) => console.warn('account permission list failed', err));
-  loadCapacity().catch((err) => {
+  runAccountAction($('refreshAccountsBtn'), () => loadAccounts().catch((err) => {
+    if ($('accountPermissionsList')) $('accountPermissionsList').textContent = `載入帳號失敗：${err.message}，請按「刷新帳號」重試。`;
+  }));
+  const capacityAction = createBusyAction();
+  const runCapacityAction = (task) => capacityAction({ button: $('refreshCapacityBtn'), task });
+  runCapacityAction(() => loadCapacity().catch((err) => {
     if ($('capacitySummary')) $('capacitySummary').textContent = `容量檢測失敗：${err.message}`;
-  });
+  }));
 
   $('newAccountRole')?.addEventListener('change', renderNewAccountPermissions);
   $('settingsModulesList')?.addEventListener('click', (e) => {
@@ -489,11 +513,11 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     renderModuleSettingsNavigator(collectSettings());
   });
   $('refreshAccountsBtn')?.addEventListener('click', () => {
-    loadAccounts().catch((err) => alert(`刷新帳號失敗：${err.message}`));
+    return runAccountAction($('refreshAccountsBtn'), () => loadAccounts().catch((err) => alert(`刷新帳號失敗：${err.message}`)));
   });
-  $('refreshCapacityBtn')?.addEventListener('click', () => {
-    loadCapacity().catch((err) => alert(`容量檢測失敗：${err.message}`));
-  });
+  $('refreshCapacityBtn')?.addEventListener('click', () => runCapacityAction(
+    () => loadCapacity().catch((err) => alert(`容量檢測失敗：${err.message}`)),
+  ));
   $('accountPermissionsList')?.addEventListener('change', (e) => {
     const select = e.target.closest('[data-account-role]');
     if (!select) return;
@@ -508,15 +532,18 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     if (!btn) return;
     const row = btn.closest('[data-account-permission-row]');
     if (!row) return;
-    try {
-      const role = row.querySelector('[data-account-role]')?.value || 'viewer';
-      const allowedViews = [...row.querySelectorAll('[data-account-module]:checked')].map((input) => input.value);
-      await adminAction({ action: 'update_account_permissions', id: row.dataset.accountPermissionRow, role, allowedViews });
-      alert('帳號權限已更新。下次登入會套用新權限。');
-      await loadAccounts();
-    } catch (err) {
-      alert(`更新帳號權限失敗：${err.message}`);
-    }
+    return runAccountAction(btn, async () => {
+      try {
+        const role = row.querySelector('[data-account-role]')?.value || 'viewer';
+        const allowedViews = [...row.querySelectorAll('[data-account-module]:checked')].map((input) => input.value);
+        const data = await adminAction({ action: 'update_account_permissions', id: row.dataset.accountPermissionRow, role, allowedViews });
+        // Refresh only the saved row; keep unfinished edits to other accounts.
+        row.outerHTML = accountPermissionHtml(data.account);
+        alert('帳號權限已更新。下次登入會套用新權限。');
+      } catch (err) {
+        alert(`更新帳號權限失敗：${err.message}`);
+      }
+    });
   });
 
   const downloadJson = (filename, value) => {
@@ -555,45 +582,59 @@ export function bindSettingsEvents(state, saveState, renderAll) {
   $('createAccountForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const password = $('newAccountPassword')?.value || '';
-    const confirm = $('newAccountPasswordConfirm')?.value || '';
-    if (password !== confirm) return alert('兩次輸入的帳戶密碼不同。');
-    try {
-      await adminAction({
-        action: 'create_account',
-        username: $('newAccountUsername')?.value.trim(),
-        display: $('newAccountDisplay')?.value.trim(),
-        role: $('newAccountRole')?.value,
-        allowedViews: selectedPermissionViews($('newAccountModules')),
-        password,
-      });
-      form?.reset();
-      renderNewAccountPermissions();
-      await loadAccounts();
-      alert('帳戶已新增。');
-    } catch (err) {
-      alert(`新增帳戶失敗：${err.message}`);
-    }
+    return runAccountAction(form?.querySelector('button[type="submit"]'), async () => {
+      const password = $('newAccountPassword')?.value || '';
+      const confirm = $('newAccountPasswordConfirm')?.value || '';
+      if (password !== confirm) return alert('兩次輸入的帳戶密碼不同。');
+      try {
+        const data = await adminAction({
+          action: 'create_account',
+          username: $('newAccountUsername')?.value.trim(),
+          display: $('newAccountDisplay')?.value.trim(),
+          role: $('newAccountRole')?.value,
+          allowedViews: selectedPermissionViews($('newAccountModules')),
+          password,
+        });
+        const list = $('accountPermissionsList');
+        if (list) {
+          if (!list.querySelector('[data-account-permission-row]')) list.innerHTML = '';
+          list.insertAdjacentHTML('beforeend', accountPermissionHtml(data.account));
+        }
+        form?.reset();
+        renderNewAccountPermissions();
+        alert('帳戶已新增。');
+      } catch (err) {
+        alert(`新增帳戶失敗：${err.message}`);
+      }
+    });
   });
 
+  const financePasswordAction = createBusyAction();
   $('financePasswordForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const password = $('newFinancePassword')?.value || '';
-    const confirm = $('newFinancePasswordConfirm')?.value || '';
-    if (password !== confirm) return alert('兩次輸入的財經密碼不同。');
-    try {
-      await adminAction({ action: 'change_finance_password', password });
-      form?.reset();
-      alert('財經密碼已更新。');
-    } catch (err) {
-      alert(`更改財經密碼失敗：${err.message}`);
-    }
+    return financePasswordAction({
+      button: form?.querySelector('button[type="submit"]'),
+      controls: form?.querySelectorAll('input, button') || [],
+      task: async () => {
+        const password = $('newFinancePassword')?.value || '';
+        const confirm = $('newFinancePasswordConfirm')?.value || '';
+        if (password !== confirm) return alert('兩次輸入的財經密碼不同。');
+        try {
+          await adminAction({ action: 'change_finance_password', password });
+          form?.reset();
+          alert('財經密碼已更新。');
+        } catch (err) {
+          alert(`更改財經密碼失敗：${err.message}`);
+        }
+      },
+    });
   });
 
-  $('clearTestDataBtn')?.addEventListener('click', async () => {
+  bindBusyClick('clearTestDataBtn', async () => {
     try {
       const result = await clearTestData();
+      if (!result) return;
       const total = Object.values(result.cleared || {}).reduce((sum, count) => sum + Number(count || 0), 0);
       alert(`測試資料已清空，共清除 ${total} 筆。系統會重新整理畫面。`);
       window.location.reload();
@@ -602,7 +643,7 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     }
   });
 
-  $('downloadBackupBtn')?.addEventListener('click', async () => {
+  bindBusyClick('downloadBackupBtn', async () => {
     try {
       const res = await fetch('/api/admin/backup', { headers: adminHeaders() });
       const data = await res.json().catch(() => ({}));
@@ -615,7 +656,7 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     }
   });
 
-  $('restoreBackupBtn')?.addEventListener('click', async () => {
+  bindBusyClick('restoreBackupBtn', async () => {
     try {
       const backup = await readBackupFile($('restoreBackupFile')?.files?.[0]);
       const confirmText = '還原備份';
@@ -637,28 +678,32 @@ export function bindSettingsEvents(state, saveState, renderAll) {
 
   $('settingsForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    state.settings = collectSettings();
-    state.settings.defaultLandingView = normalizeLandingView(state.settings);
-    try {
-      await adminAction({ action: 'update_settings', settings: state.settings });
-      saveState();
-      renderAll();
-      alert('設定已儲存到伺服器，所有裝置會使用最新報價規則。');
-    } catch (err) {
-      alert(`儲存設定失敗：${err.message}`);
-    }
+    return runSettingsAction(e.currentTarget.querySelector('button[type="submit"]'), async () => {
+      state.settings = collectSettings();
+      state.settings.defaultLandingView = normalizeLandingView(state.settings);
+      try {
+        await adminAction({ action: 'update_settings', settings: state.settings });
+        await saveState();
+        renderAll();
+        alert('設定已儲存到伺服器，所有裝置會使用最新報價規則。');
+      } catch (err) {
+        alert(`儲存設定失敗：${err.message}`);
+      }
+    });
   });
 
   $('resetSettingsBtn')?.addEventListener('click', async () => {
-    state.settings = getDefaultSettings();
-    try {
-      await adminAction({ action: 'update_settings', settings: state.settings });
-      saveState();
-      renderAll();
-      alert('已恢復並同步預設設定。');
-    } catch (err) {
-      alert(`恢復預設設定失敗：${err.message}`);
-    }
+    return runSettingsAction($('resetSettingsBtn'), async () => {
+      state.settings = getDefaultSettings();
+      try {
+        await adminAction({ action: 'update_settings', settings: state.settings });
+        await saveState();
+        renderAll();
+        alert('已恢復並同步預設設定。');
+      } catch (err) {
+        alert(`恢復預設設定失敗：${err.message}`);
+      }
+    });
   });
 
   $('settingsForm')?.addEventListener('input', () => {

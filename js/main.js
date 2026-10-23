@@ -1,6 +1,6 @@
 import { $, COMPANY_INFO, MODULE_DEFINITIONS, isModuleEnabledInSettings } from './shared.js?v=20260714-trip-route-text-1';
 import { initializePresence } from './presence.js?v=20261023-collaboration-1';
-import { applyUiSettings, bindSettingsEvents, renderSettings } from './settings.js?v=20261003-system-audit-1';
+import { applyUiSettings, bindSettingsEvents, renderSettings } from './settings.js?v=20261023-busy-actions-1';
 import {
   state,
   configureStore,
@@ -25,7 +25,7 @@ import { renderNotifications, bindNotificationEvents, refreshLineStatus } from '
 function proactiveNotify() {
   return buildSystemAlerts();
 }
-const APP_BUILD = '20261023-collaboration-1';
+const APP_BUILD = '20261023-busy-actions-1';
 import { initializeLocalAi } from './local-ai.js?v=20261023-collaboration-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
