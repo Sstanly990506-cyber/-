@@ -94,6 +94,7 @@ let sessionVersion = 0;
 
 const snapshots = {};
 const pageRequests = {};
+const conflictNotices = new Map();
 
 function headers(json = false) {
   return {
@@ -141,6 +142,22 @@ function snapshot(key) {
       .filter((row) => row?.id)
       .map((row) => [row.id, JSON.stringify(row)]),
   );
+}
+
+function hasUnsavedChanges() {
+  return Object.keys(ENTITY_MAP).some(key => {
+    if (['receivables', 'payables'].includes(key) && Date.now() >= state.financeUntil) return false;
+    if (state.userRole !== 'admin' && (key === 'lineDestinations'
+      || Array.isArray(state.allowedViews) && !state.allowedViews.includes(WRITE_VIEWS[key]))) return false;
+    const before = snapshots[key] || new Map();
+    const rows = (state[key] || []).filter(row => row?.id);
+    return rows.length !== before.size || rows.some(row => before.get(row.id) !== JSON.stringify(row));
+  });
+}
+
+function setIdleSyncUi(source) {
+  const pending = hasUnsavedChanges();
+  setUi(pending ? '修改尚未儲存' : '已儲存', source, !pending);
 }
 
 function normalizeMoney(value) {
@@ -217,6 +234,7 @@ export function setAuthToken(token) {
   if (state.authToken !== (token || null)) {
     sessionVersion += 1;
     initializedRemote = false;
+    conflictNotices.clear();
     changeCursor = 0;
     for (const key of Object.keys(ENTITY_MAP)) {
       state[key] = [];
@@ -518,10 +536,23 @@ async function pushChanges() {
             const saved = JSON.parse(encoded);
             if (Number.isFinite(result?.updatedAt)) {
               saved._updatedAt = result.updatedAt;
-              row._updatedAt = result.updatedAt;
+              // Normalization may replace row objects while the request is in
+              // flight. Advance the live record's version, retaining newer edits.
+              const live = (state[key] || []).find(item => item.id === row.id);
+              if (live) live._updatedAt = result.updatedAt;
             }
             snapshots[key].set(row.id, JSON.stringify(saved));
+            conflictNotices.delete(`${key}:${row.id}`);
           }
+        }).catch(error => {
+          if (error.conflict) {
+            error.recordKey = `${key}:${row.id}`;
+            error.recordLabel = row.orderNumber || row.name || row.id;
+            const fingerprint = cleanRecord(JSON.parse(encoded));
+            delete fingerprint.updatedAt;
+            error.draftFingerprint = JSON.stringify(fingerprint);
+          }
+          throw error;
         }));
       }
     }
@@ -547,7 +578,7 @@ async function pushChanges() {
   if (failed) throw failed.reason;
   await loadDashboardSummary();
   refresh();
-  setUi('已儲存', '單筆同步');
+  setIdleSyncUi('單筆同步');
 }
 
 function applyChange(change) {
@@ -557,6 +588,10 @@ function applyChange(change) {
   const rows = state[key] || [];
   const index = rows.findIndex((row) => row.id === change.id);
   const baseline = snapshots[key] || new Map();
+  const knownVersion = JSON.parse(baseline.get(change.id) || 'null')?._updatedAt || 0;
+  // A pull started before our save can finish after it. Never downgrade a
+  // snapshot or apply an older deletion from that delayed response.
+  if (Number(change.updatedAt) <= Number(knownVersion)) return;
   const local = index >= 0 ? JSON.stringify(rows[index]) : undefined;
   if (local !== baseline.get(change.id)) return;
   if (change.deleted) {
@@ -587,7 +622,7 @@ export async function pullServerState() {
     const data = await jsonRequest(`/api/changes?since=${changeCursor}&limit=5000`, { headers: headers() });
     if (version !== sessionVersion) return;
     const applied = (data.changes || []).filter((change) => applyChange(change));
-    changeCursor = Number(data.cursor || changeCursor);
+    changeCursor = Math.max(changeCursor, Number(data.cursor || 0));
     normalizeStateData();
     for (const change of applied) {
       const key = REVERSE_ENTITY[change.entity];
@@ -598,7 +633,7 @@ export async function pullServerState() {
     if (!state.financeRecords && (data.changes?.length || !state.dashboardSummary)) await loadDashboardSummary();
     if (version !== sessionVersion) return;
     if (data.changes?.length || state.financeRecords) refresh();
-    setUi('已儲存', '增量同步');
+    setIdleSyncUi('增量同步');
   } catch (err) {
     setUi('同步失敗', err.message, false);
   }
@@ -617,8 +652,16 @@ export function saveState() {
   saveQueue = saveQueue.then(() => {
     if (version === sessionVersion) return pushChanges();
   }).catch((err) => {
+    if (version !== sessionVersion) return;
     setUi(err.conflict ? '資料衝突，修改尚未儲存' : '儲存失敗', err.message, false);
-    if (err.conflict) window.alert?.(`${err.message}\n請先複製保留目前修改，再重新登入取得最新資料。`);
+    if (err.conflict) {
+      const key = err.recordKey || err.message;
+      const fingerprint = err.draftFingerprint || err.message;
+      if (conflictNotices.get(key) !== fingerprint) {
+        conflictNotices.set(key, fingerprint);
+        window.alert?.(`${err.recordLabel ? `資料「${err.recordLabel}」：\n` : ''}${err.message}\n目前頁面的修改仍保留，請先複製備份，再重新整理並核對最新資料。`);
+      }
+    }
   });
   return saveQueue;
 }

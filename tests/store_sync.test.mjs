@@ -3,12 +3,12 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-async function harness(fetch, events = []) {
+async function harness(fetch, events = [], hooks = {}) {
   const context = vm.createContext({
     fetch, console, setTimeout, clearTimeout, setInterval,
     queueMicrotask: () => {},
     document: { getElementById: () => null },
-    window: { dispatchEvent: event => events.push(event.type) },
+    window: { dispatchEvent: event => events.push(event.type), alert: hooks.alert },
     Event: class { constructor(type) { this.type = type; } },
     localStorage: { getItem: () => '{invalid', setItem: () => {} },
   });
@@ -22,7 +22,7 @@ async function harness(fetch, events = []) {
   await module.link(() => shared);
   await module.evaluate();
   const store = module.namespace;
-  store.configureStore({ refreshFn: () => {}, syncUiFn: () => {} });
+  store.configureStore({ refreshFn: () => {}, syncUiFn: hooks.syncUiFn || (() => {}) });
   store.setAuthToken('first-account');
   store.state.allowedViews = ['customersView'];
   store.hydrateBootstrap({ initialPages: { customers: { items: [{ id: 'c1', name: 'original' }] } } });
@@ -212,4 +212,75 @@ test('changing a list page leaves the complete dashboard summary unchanged', asy
   store.state.dashboardSummary = {pendingOrders:51};
   await store.loadEntityPage('customers',2);
   assert.equal(store.state.dashboardSummary.pendingOrders,51);
+});
+
+test('a late incremental response cannot roll back a completed local save', async () => {
+  let releasePull;
+  const writes=[];
+  const store=await harness(async (url,options) => {
+    if(url.startsWith('/api/changes')) {
+      await new Promise(resolve => { releasePull=resolve; });
+      return response({cursor:100,changes:[{entity:'customers',id:'c1',data:{id:'c1',name:'original',taxId:''},updatedAt:100}]});
+    }
+    if(url==='/api/dashboard') return response({summary:{}});
+    writes.push(JSON.parse(options.body));return response({updatedAt:101});
+  });
+  store.hydrateBootstrap({syncTick:100,initialPages:{customers:{items:[{id:'c1',name:'original',taxId:'',_updatedAt:100}]}}});
+  const pull=store.pullServerState();while(!releasePull) await new Promise(resolve=>setImmediate(resolve));
+  store.state.customers[0].name='saved edit';await store.saveState();
+  releasePull();await pull;
+  assert.equal(store.state.customers[0].name,'saved edit');
+  assert.equal(store.state.customers[0]._updatedAt,101);
+});
+
+test('normalizing during a pending write does not trigger an extra write or leave an obsolete version', async () => {
+  let release;
+  const writes=[];
+  const store=await harness(async(url,options)=>{
+    if(url==='/api/dashboard')return response({summary:{}});
+    writes.push(JSON.parse(options.body));
+    if(writes.length===1)await new Promise(resolve=>{release=resolve;});
+    return response({updatedAt:100+writes.length});
+  });
+  store.state.customers[0].name='edit';const first=store.saveState();
+  while(!release)await new Promise(resolve=>setImmediate(resolve));
+  const second=store.saveState();release();await Promise.all([first,second]);
+  assert.equal(writes.length,1);assert.equal(store.state.customers[0]._updatedAt,101);
+});
+
+test('repeated identical conflicts alert once, preserve the draft, and never show saved', async () => {
+  const alerts=[],ui=[];
+  const store=await harness(async(url)=>{
+    if(url.startsWith('/api/changes'))return response({cursor:200,changes:[]});
+    if(url==='/api/dashboard')return response({summary:{}});
+    return {ok:false,status:409,json:async()=>({error:'資料已由其他人更新',conflict:true})};
+  },[],{alert:message=>alerts.push(message),syncUiFn:status=>ui.push(status)});
+  store.state.customers[0].name='draft';
+  await store.saveState();store.state.customers[0].updatedAt='new display time';await store.saveState();
+  assert.equal(alerts.length,1);assert.match(alerts[0],/draft/);
+  await store.pullServerState();
+  assert.equal(store.state.customers[0].name,'draft');
+  assert.equal(ui.at(-1).ok,false);assert.equal(ui.at(-1).badgeText,'修改尚未儲存');
+  store.state.customers[0].name='revised draft';await store.saveState();assert.equal(alerts.length,2);
+});
+
+test('a stale deletion cannot remove a newer saved record', async () => {
+  const store=await harness(async(url)=>{
+    if(url.startsWith('/api/changes'))return response({cursor:150,changes:[{entity:'customers',id:'c1',deleted:true,updatedAt:100}]});
+    return response({summary:{}});
+  });
+  store.hydrateBootstrap({syncTick:150,initialPages:{customers:{items:[{id:'c1',name:'newer',taxId:'',_updatedAt:150}]}}});
+  await store.pullServerState();assert.equal(store.state.customers[0].name,'newer');
+});
+
+test('conflict from a previous account cannot alert or change the new account sync badge', async () => {
+  let release;const alerts=[],ui=[];
+  const store=await harness(async()=>{
+    await new Promise(resolve=>{release=resolve;});
+    return {ok:false,status:409,json:async()=>({error:'conflict',conflict:true})};
+  },[],{alert:message=>alerts.push(message),syncUiFn:status=>ui.push(status)});
+  store.state.customers[0].name='private draft';const save=store.saveState();
+  while(!release)await new Promise(resolve=>setImmediate(resolve));
+  store.setAuthToken('second-account');const notices=ui.length;release();await save;
+  assert.equal(alerts.length,0);assert.equal(ui.length,notices);
 });

@@ -1,7 +1,7 @@
 import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview-1';
 import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-mobile-delete-1';
 import { $, downloadCsv, getTodayText } from './shared.js';
-import { syncOrderToReceivables } from './store.js?v=20261015-audit-fixes-1';
+import { syncOrderToReceivables } from './store.js?v=20261023-sync-conflict-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js?v=20261016-concise-ui-1';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
