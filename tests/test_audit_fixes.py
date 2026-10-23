@@ -142,5 +142,110 @@ class AuditFixTests(unittest.TestCase):
         self.assertEqual(records.all_records('receivables')[0]['orderId'],'o1')
         self.assertEqual(records.all_records('audits')[0]['after'],'已送出')
 
+    def test_stale_delete_cannot_remove_recent_order_or_receivable(self):
+        self.save(self.order())
+        first=records.get_record('orders','o1')
+        self.save({**first,'totalPrice':1800})
+        with self.assertRaises(service.ApiError) as caught:
+            service.delete_entity_payload('fixture','orders','o1',first['_updatedAt'],True)
+        self.assertEqual(caught.exception.status,409)
+        self.assertEqual(records.get_record('orders','o1')['totalPrice'],1800)
+        self.assertEqual(records.all_records('receivables')[0]['amount'],1800)
+
+    def test_http_delete_requires_version_and_current_delete_removes_linked_records(self):
+        self.save(self.order())
+        with self.assertRaises(service.ApiError) as caught:
+            service.delete_entity_payload('fixture','orders','o1',None,True)
+        self.assertEqual(caught.exception.status,409)
+        latest=records.get_record('orders','o1')
+        service.delete_entity_payload('fixture','orders','o1',latest['_updatedAt'],True)
+        self.assertIsNone(records.get_record('orders','o1'))
+        self.assertEqual(records.all_records('receivables'),[])
+
+    def test_sort_batch_preserves_business_data_and_rejects_stale_batch_without_partial_writes(self):
+        for i in range(3):self.save(self.order(f'o{i}',f'WO-{i}',1000+i,sortOrder=i))
+        original={row['id']:row for row in records.all_records('orders')}
+        payload={'orders':[{'id':f'o{i}','_expectedVersion':original[f'o{i}']['_updatedAt']} for i in [2,0,1]]}
+        result=service.reorder_orders_payload('fixture',payload)
+        self.assertEqual([row['id'] for row in result['orders']],['o2','o0','o1'])
+        saved={row['id']:row for row in records.all_records('orders')}
+        self.assertEqual([saved[f'o{i}']['sortOrder'] for i in range(3)],[1,2,0])
+        for rid,row in saved.items():self.assertEqual(row['totalPrice'],original[rid]['totalPrice'])
+        with self.assertRaises(service.ApiError) as caught:service.reorder_orders_payload('fixture',payload)
+        self.assertEqual(caught.exception.status,409)
+        self.assertEqual({row['id']:row for row in records.all_records('orders')},saved)
+
+    def test_sort_race_after_reads_is_rejected_atomically(self):
+        for i in range(2):self.save(self.order(f'o{i}',f'WO-{i}',sortOrder=i))
+        original={row['id']:row for row in records.all_records('orders')}
+        payload={'orders':[{'id':f'o{i}','_expectedVersion':original[f'o{i}']['_updatedAt']} for i in [1,0]]}
+        batch=records.write_record_batch
+        def racing_write(writes,**kwargs):
+            changed={k:v for k,v in original['o0'].items() if k!='_updatedAt'}
+            changed['note']='other operator'
+            batch([('orders','o0',changed)],expected_versions={('orders','o0'):original['o0']['_updatedAt']})
+            return batch(writes,**kwargs)
+        with patch.object(service,'write_record_batch',side_effect=racing_write):
+            with self.assertRaises(service.ApiError) as caught:service.reorder_orders_payload('fixture',payload)
+        self.assertEqual(caught.exception.status,409)
+        self.assertEqual(records.get_record('orders','o0')['note'],'other operator')
+        self.assertEqual(records.get_record('orders','o1'),original['o1'])
+        self.assertEqual(records.get_record('orders','o0')['sortOrder'],0)
+
+    def test_sort_rejects_duplicate_rows_and_unauthorized_accounts(self):
+        with self.assertRaises(service.ApiError) as caught:
+            service.reorder_orders_payload('fixture',{'orders':[{'id':'x','_expectedVersion':0}]*2})
+        self.assertEqual(caught.exception.status,400)
+        with patch.object(service,'verify_session_token',return_value={'role':'viewer'}):
+            with self.assertRaises(service.ApiError) as caught:service.reorder_orders_payload('fixture',{})
+        self.assertEqual(caught.exception.status,403)
+
+
+    def test_old_per_row_sort_api_cannot_partially_reorder(self):
+        self.save(self.order(sortOrder=0))
+        first=records.get_record('orders','o1')
+        with self.assertRaises(service.ApiError) as caught:self.save({**first,'sortOrder':1})
+        self.assertEqual(caught.exception.status,409)
+        self.assertEqual(records.get_record('orders','o1')['sortOrder'],0)
+
+
+    def test_http_routes_enforce_delete_version_and_support_atomic_sort(self):
+        from api_server import app
+        if app is None:self.skipTest('Flask unavailable')
+        for i in range(2):self.save(self.order(f'o{i}',f'WO-{i}',sortOrder=i))
+        client=app.test_client();headers={'Authorization':'Bearer fixture'}
+        self.assertEqual(client.delete('/api/data/orders/o0',headers=headers).status_code,409)
+        rows={row['id']:row for row in records.all_records('orders')}
+        payload={'orders':[{'id':f'o{i}','_expectedVersion':rows[f'o{i}']['_updatedAt']} for i in [1,0]]}
+        self.assertEqual(client.post('/api/orders/reorder',json=payload,headers=headers).status_code,200)
+        stale=client.delete('/api/data/orders/o0?expectedVersion='+str(rows['o0']['_updatedAt']),headers=headers)
+        self.assertEqual(stale.status_code,409)
+        self.assertIsNotNone(records.get_record('orders','o0'))
+
+
+    def test_two_operators_cannot_both_commit_sort_from_the_same_snapshot(self):
+        for i in range(3):self.save(self.order(f'o{i}',f'WO-{i}',sortOrder=i))
+        rows={row['id']:row for row in records.all_records('orders')}
+        def sort(ids):
+            try:
+                service.reorder_orders_payload('fixture',{'orders':[{'id':rid,'_expectedVersion':rows[rid]['_updatedAt']} for rid in ids]})
+                return ids
+            except service.ApiError as err:return err.status
+        permutations=[['o2','o0','o1'],['o1','o2','o0']]
+        with ThreadPoolExecutor(max_workers=2) as pool:results=list(pool.map(sort,permutations))
+        self.assertEqual(results.count(409),1)
+        accepted=next(result for result in results if isinstance(result,list))
+        actual=sorted(records.all_records('orders'),key=lambda row:row['sortOrder'])
+        self.assertEqual([row['id'] for row in actual],accepted)
+
+
+    def test_sort_preserves_page_rank_slots(self):
+        for i in range(3):self.save(self.order(f'o{i}',f'WO-{i}',sortOrder=100+i))
+        rows={row['id']:row for row in records.all_records('orders')}
+        service.reorder_orders_payload('fixture',{'orders':[{'id':rid,'_expectedVersion':rows[rid]['_updatedAt']} for rid in ['o2','o1']]})
+        self.assertEqual(records.get_record('orders','o2')['sortOrder'],101)
+        self.assertEqual(records.get_record('orders','o1')['sortOrder'],102)
+        self.assertEqual(records.get_record('orders','o0'),rows['o0'])
+
 
 if __name__ == '__main__':unittest.main()

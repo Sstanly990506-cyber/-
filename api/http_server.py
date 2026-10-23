@@ -83,7 +83,7 @@ class AppRequestHandler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         if not self.local_ai_guard():return
         parts=urlparse(self.path).path.split('/');token=get_bearer_token(self)
-        if len(parts)>=5 and parts[1:3]==['api','data']:self.send_service_response(delete_entity_payload,token,parts[3],unquote('/'.join(parts[4:])))
+        if len(parts)>=5 and parts[1:3]==['api','data']:self.send_service_response(delete_entity_payload,token,parts[3],unquote('/'.join(parts[4:])),parse_qs(urlparse(self.path).query).get('expectedVersion',[None])[0],True)
         else:self.send_error(404)
     def serve_file(self,rel):
         f=resolve_public_file(rel)

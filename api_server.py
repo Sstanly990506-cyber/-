@@ -129,7 +129,7 @@ if app is not None:
 
     @app.delete('/api/data/<entity>/<record_id>')
     def remove_entity(entity, record_id):
-        return service_response(delete_entity_payload, bearer_token(), entity, record_id)
+        return service_response(delete_entity_payload, bearer_token(), entity, record_id, request.args.get('expectedVersion'), True)
 
     @app.get('/')
     def index():

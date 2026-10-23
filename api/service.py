@@ -164,6 +164,8 @@ def save_entity_record(account,entity,record_id,payload,require_version=False):
         except (ValueError,TypeError):raise ApiError('invalid record version',400)
         if expected != int((previous or {}).get('_updatedAt') or 0):
             raise ApiError('資料已由其他人更新；你的修改已保留，請核對最新資料後再儲存。',409,conflict=True)
+    if require_version and entity == 'orders' and previous and 'sortOrder' in payload and payload['sortOrder'] != previous.get('sortOrder'):
+        raise ApiError('排序必須整批儲存，請重新整理網站後再拖移排序。',409,conflict=True)
     if entity == 'orders' and previous:
         payload={**previous,**payload}
     if entity == 'orders' and 'orderNumber' in payload:
@@ -228,10 +230,49 @@ def order_receivable_changes(order, record_id, previous=None):
     }
     return [('receivables',row_id,row)], []
 
-def delete_entity_payload(token,entity,record_id):
+def reorder_orders_payload(token, payload):
+    require_entity_access(token, 'orders')
+    items = payload.get('orders') if isinstance(payload, dict) else None
+    if not isinstance(items, list) or not 2 <= len(items) <= 500:
+        raise ApiError('invalid order list', 400)
+    ids = [item.get('id') if isinstance(item, dict) else None for item in items]
+    if any(not isinstance(value, str) or not value for value in ids) or len(set(ids)) != len(ids):
+        raise ApiError('invalid or duplicate order id', 400)
+    writes, guards, rows = [], {}, []
+    for position, item in enumerate(items):
+        expected = item.get('_expectedVersion')
+        if not isinstance(expected, int) or isinstance(expected, bool) or expected < 0:
+            raise ApiError('排序資料缺少版本，請重新整理後再試。', 409, conflict=True)
+        row = get_record('orders', item['id'])
+        if not row or int(row.get('_updatedAt') or 0) != expected:
+            raise ApiError('工單已被更新或重新排序，本次排序未儲存，請核對後再試。', 409, conflict=True)
+        guards[('orders', item['id'])] = expected
+        rows.append(row)
+    # Keep this page's existing rank slots instead of assigning page two the
+    # same 0..N ranks as page one. Legacy missing ranks retain the old fallback.
+    import math
+    slots = [row.get('sortOrder') for row in rows]
+    valid_slots = all(isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) for value in slots)
+    slots = sorted(slots) if valid_slots and len(set(slots)) == len(slots) else list(range(len(rows)))
+    for position,row in enumerate(rows):
+        writes.append(('orders', row['id'], {**{k:v for k,v in row.items() if k != '_updatedAt'}, 'sortOrder':slots[position]}))
+    try:
+        result = write_record_batch(writes, expected_versions=guards)
+    except RecordConflict as err:
+        raise ApiError('工單已被更新或重新排序，本次排序未儲存，請核對後再試。', 409, conflict=True) from err
+    return {**result, 'orders':[{'id':item['id'], 'sortOrder':slots[position]} for position,item in enumerate(items)]}
+
+def delete_entity_payload(token,entity,record_id,expected_version=None,require_version=False):
     require_entity_access(token,entity)
     if entity=='orders':
         order=next((row for row in _all_records('orders') if str(row.get('id') or '')==str(record_id or '')),None)
+        if require_version and expected_version is None:
+            raise ApiError('刪除前必須核對工單版本，請重新整理後再試。',409,conflict=True)
+        if expected_version is not None:
+            try: expected_version=int(expected_version)
+            except (ValueError,TypeError):raise ApiError('invalid record version',400)
+            if expected_version != int((order or {}).get('_updatedAt') or 0):
+                raise ApiError('這張工單已被其他人更新，已取消刪除，請先核對最新資料。',409,conflict=True)
         order_number=str((order or {}).get('orderNumber') or '').strip()
         ambiguous=any(row.get('id')!=record_id and str(row.get('orderNumber') or '').strip()==order_number for row in _all_records('orders'))
         linked=[row for row in _all_records('receivables') if row.get('source')=='auto-order' and

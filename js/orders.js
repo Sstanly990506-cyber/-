@@ -1,7 +1,7 @@
 import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview-1';
 import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-mobile-delete-1';
 import { $, downloadCsv, getTodayText } from './shared.js';
-import { syncOrderToReceivables } from './store.js?v=20261023-sync-conflict-1';
+import { syncOrderToReceivables, saveOrderSortOrder } from './store.js?v=20261023-multiuser-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js?v=20261016-concise-ui-1';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
@@ -917,6 +917,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     cancelRowClick();
     event.preventDefault();
     drag = { row, id: row.dataset.edit, x: point.clientX, y: point.clientY, held: false, targetId: null, after: false };
+    drag.orderVersions = Object.fromEntries(state.orders.map(order => [order.id, order._updatedAt || 0]));
     drag.point = { clientX: point.clientX, clientY: point.clientY };
     drag.timer = setTimeout(() => {
       if (!drag) return;
@@ -949,9 +950,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     clearTimeout(finished.timer);
     drag = null;
     suppressRowClickUntil = Date.now() + 500;
-    let reordered = false;
     const restoreList = () => {
-      if (reordered) saveState();
       renderAll();
     };
     if (!cancelled && finished.held && finished.targetId) {
@@ -960,8 +959,10 @@ export function bindOrderEvents(state, saveState, renderAll) {
       const index = ordered.findIndex(order => order.id === finished.targetId);
       if (moved && index >= 0) {
         ordered.splice(index + (finished.after ? 1 : 0), 0, moved);
-        ordered.forEach((order, position) => { order.sortOrder = position; });
-        reordered = true;
+        // Commit the entire permutation together; keep local data unchanged if
+        // another user edits or reorders any participating order meanwhile.
+        saveOrderSortOrder(ordered.map(order => order.id), finished.orderVersions)
+          .catch(error => window.alert(`排序未儲存：${error.message}`));
       }
       finished.preview.drop(restoreList);
     } else if (!cancelled && !finished.held) {

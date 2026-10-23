@@ -560,10 +560,20 @@ async function pushChanges() {
     for (const id of before.keys()) {
       if (!current.has(id)) {
         jobs.push(jsonRequest(
-          `/api/data/${entity}/${encodeURIComponent(id)}`,
+          `/api/data/${entity}/${encodeURIComponent(id)}${key === 'orders' ? `?expectedVersion=${JSON.parse(before.get(id))._updatedAt || 0}` : ''}`,
           { method: 'DELETE', headers: headers() },
         ).then(() => {
           if (version === sessionVersion) snapshots[key]?.delete(id);
+        }).catch(error => {
+          if (version === sessionVersion && key === 'orders' && error.conflict) {
+            const original = JSON.parse(before.get(id));
+            if (!state.orders.some(row => row.id === id)) state.orders.push(original);
+            error.recordKey = `orders:${id}`;
+            error.recordLabel = original.orderNumber || id;
+            error.draftFingerprint = `delete:${original._updatedAt || 0}`;
+            refresh();
+          }
+          throw error;
         }));
       }
     }
@@ -579,6 +589,37 @@ async function pushChanges() {
   await loadDashboardSummary();
   refresh();
   setIdleSyncUi('單筆同步');
+}
+
+export function saveOrderSortOrder(ids, expectedVersions) {
+  const version = sessionVersion;
+  const operation = saveQueue.then(async () => {
+    if (version !== sessionVersion) throw new Error('登入已變更，排序未儲存。');
+    const orders = ids.map(id => {
+      const row = state.orders.find(item => item.id === id);
+      if (!row || isRecordDirty('orders', row)) throw new Error('工單仍有未儲存的修改，請先完成儲存再排序。');
+      return { id, _expectedVersion: expectedVersions[id] ?? 0 };
+    });
+    setUi('排序儲存中', '整批同步', false);
+    const result = await jsonRequest('/api/orders/reorder', {
+      method:'POST', headers:headers(true), body:JSON.stringify({orders}),
+    });
+    if (version !== sessionVersion) return;
+    for (const item of result.orders) {
+      const row = state.orders.find(row => row.id === item.id);
+      const baseline = JSON.parse(snapshots.orders.get(item.id));
+      baseline.sortOrder = item.sortOrder;
+      baseline._updatedAt = result.updatedAt;
+      snapshots.orders.set(item.id, JSON.stringify(baseline));
+      if (row) { row.sortOrder = item.sortOrder; row._updatedAt = result.updatedAt; }
+    }
+    refresh();
+    setIdleSyncUi('整批排序');
+  });
+  saveQueue = operation.catch(error => {
+    if (version === sessionVersion) setUi('排序未儲存', error.message, false);
+  });
+  return operation;
 }
 
 function applyChange(change) {

@@ -39,6 +39,11 @@ function harness() {
     setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, at: now + delay }); return nextTimer; },
     clearTimeout: id => timers.delete(id),
     saveState: () => saved.push(state.orders.map(o => ({ ...o }))), renderAll() {},
+    saveOrderSortOrder: ids => {
+      ids.forEach((id, position) => { state.orders.find(row => row.id === id).sortOrder = position; });
+      saved.push(state.orders.map(o => ({ ...o })));
+      return Promise.resolve();
+    },
     sortedOrders: state => [...state.orders].sort((a,b) => a.sortOrder - b.sortOrder),
     openOrderForEdit: (_,id) => edited.push(id), copyOrderAsNew: (_,id) => copied.push(id),
     createOrderDragPreview: (_,row,point,onReorder) => {

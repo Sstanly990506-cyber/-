@@ -23,6 +23,7 @@ from api.service import (
     report_payload,
     finance_data_payload,
     restore_backup_payload,
+    reorder_orders_payload,
     send_line_payload,
     update_state_payload,
     user_action_payload,
@@ -62,6 +63,7 @@ GET_ROUTES = {
 
 
 POST_ROUTES = {
+    '/api/orders/reorder': lambda token, payload: (reorder_orders_payload, (token, payload)),
     '/api/local-ai/ticket': lambda token, payload: (ticket_payload, (token, payload)),
     '/api/local-ai/stop': lambda token, payload: (stop_payload, (token, payload)),
     '/api/local-ai/demo-session': lambda token, payload: (demo_session, (token, payload)),

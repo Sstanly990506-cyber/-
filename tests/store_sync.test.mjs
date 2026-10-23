@@ -284,3 +284,66 @@ test('conflict from a previous account cannot alert or change the new account sy
   store.setAuthToken('second-account');const notices=ui.length;release();await save;
   assert.equal(alerts.length,0);assert.equal(ui.length,notices);
 });
+
+async function orderHarness(fetch) {
+  const store=await harness(fetch);
+  store.state.allowedViews=['ordersView'];
+  store.hydrateBootstrap({initialPages:{customers:{items:[]},priceRules:{items:[]},orders:{items:[{id:'o1',orderNumber:'A',sortOrder:0,_updatedAt:100},{id:'o2',orderNumber:'B',sortOrder:1,_updatedAt:101}]}}});
+  return store;
+}
+
+test('sorting sends one guarded batch and commits both row versions without extra writes', async()=>{
+  const calls=[];
+  const store=await orderHarness(async(url,options)=>{
+    calls.push({url,options});
+    return response({ok:true,updatedAt:200,orders:[{id:'o2',sortOrder:0},{id:'o1',sortOrder:1}]});
+  });
+  await store.saveOrderSortOrder(['o2','o1'],{o1:100,o2:101});
+  assert.equal(calls.length,1);assert.equal(calls[0].url,'/api/orders/reorder');
+  assert.deepEqual(JSON.parse(calls[0].options.body).orders,[{id:'o2',_expectedVersion:101},{id:'o1',_expectedVersion:100}]);
+  assert.equal(store.state.orders[0].sortOrder,1);assert.equal(store.state.orders[1].sortOrder,0);
+  assert.equal(store.state.orders[0]._updatedAt,200);await store.saveState();assert.equal(calls.length,1);
+});
+
+test('a rejected sorting batch leaves all local positions and versions unchanged',async()=>{
+  const store=await orderHarness(async()=>({ok:false,status:409,json:async()=>({error:'changed by another operator',conflict:true})}));
+  await assert.rejects(store.saveOrderSortOrder(['o2','o1'],{o1:100,o2:101}),/another operator/);
+  assert.equal(store.state.orders[0].sortOrder,0);assert.equal(store.state.orders[1].sortOrder,1);
+  assert.equal(store.state.orders[0]._updatedAt,100);
+});
+
+test('dirty orders block sorting rather than overwrite unsaved edits',async()=>{
+  let calls=0;const store=await orderHarness(async()=>{calls++;return response();});
+  store.state.orders[0].itemName='unsaved';
+  await assert.rejects(store.saveOrderSortOrder(['o2','o1'],{o1:100,o2:101}),/未儲存/);
+  assert.equal(calls,0);assert.equal(store.state.orders[0].itemName,'unsaved');
+});
+
+test('order deletion sends the viewed version and restores the row on stale-delete rejection',async()=>{
+  const calls=[];
+  const store=await orderHarness(async(url,options)=>{
+    calls.push({url,options});return {ok:false,status:409,json:async()=>({error:'delete cancelled',conflict:true})};
+  });
+  store.state.orders.splice(0,1);await store.saveState();
+  assert.equal(calls[0].url,'/api/data/orders/o1?expectedVersion=100');
+  assert.equal(calls[0].options.method,'DELETE');
+  assert(store.state.orders.some(row=>row.id==='o1'));
+});
+
+test('edits made while a sorting request is pending survive and use the committed batch version',async()=>{
+  let release;const writes=[];
+  const store=await orderHarness(async(url,options)=>{
+    if(url==='/api/orders/reorder'){
+      await new Promise(resolve=>{release=resolve;});
+      return response({ok:true,updatedAt:200,orders:[{id:'o2',sortOrder:0},{id:'o1',sortOrder:1}]});
+    }
+    if(url==='/api/dashboard')return response({summary:{}});
+    writes.push(JSON.parse(options.body));return response({updatedAt:201});
+  });
+  const sorting=store.saveOrderSortOrder(['o2','o1'],{o1:100,o2:101});
+  while(!release)await new Promise(resolve=>setImmediate(resolve));
+  store.state.orders[0].itemName='new edit';const save=store.saveState();release();
+  await Promise.all([sorting,save]);
+  assert.equal(writes.length,1);assert.equal(writes[0]._expectedVersion,200);
+  assert.equal(writes[0].sortOrder,1);assert.equal(store.state.orders[0].itemName,'new edit');
+});
