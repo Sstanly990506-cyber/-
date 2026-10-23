@@ -347,3 +347,54 @@ test('edits made while a sorting request is pending survive and use the committe
   assert.equal(writes.length,1);assert.equal(writes[0]._expectedVersion,200);
   assert.equal(writes[0].sortOrder,1);assert.equal(store.state.orders[0].itemName,'new edit');
 });
+
+test('relative movement is not blocked by unrelated unsaved orders and uses no stale list versions',async()=>{
+  const calls=[];
+  const store=await orderHarness(async(url,options)=>{
+    calls.push({url,body:JSON.parse(options.body)});
+    return response({ok:true,orders:[{id:'o1',orderNumber:'A',sortOrder:2,_updatedAt:200}]});
+  });
+  store.state.orders[1].itemName='unsaved different order';
+  await store.moveOrder('o1','o2',true);
+  assert.equal(calls.length,1);assert.equal(calls[0].url,'/api/orders/move');
+  assert.deepEqual(calls[0].body,{id:'o1',targetId:'o2',after:true});
+  assert.equal(store.state.orders[0].sortOrder,2);
+  assert.equal(store.state.orders[1].itemName,'unsaved different order');
+});
+
+test('relative move merges latest server content into clean rows and creates no extra writes',async()=>{
+  const calls=[];const store=await orderHarness(async(url)=>{
+    calls.push(url);return response({ok:true,orders:[{id:'o1',orderNumber:'A',itemName:'other user edit',sortOrder:2,totalPrice:200,_updatedAt:200}]});
+  });
+  await store.moveOrder('o1','o2',true);await store.saveState();
+  assert.equal(store.state.orders[0].itemName,'other user edit');assert.equal(store.state.orders[0]._updatedAt,200);
+  assert.equal(calls.length,1);
+});
+
+test('moving a locally edited row retains the draft and advances its version only when business data agrees',async()=>{
+  const store=await orderHarness(async()=>response({ok:true,orders:[{id:'o1',orderNumber:'A',sortOrder:2,_updatedAt:200}]}));
+  store.state.orders[0].itemName='local draft';await store.moveOrder('o1','o2',true);
+  assert.equal(store.state.orders[0].itemName,'local draft');assert.equal(store.state.orders[0]._updatedAt,200);
+  assert.equal(store.state.orders[0].sortOrder,2);
+});
+
+test('a move never silently resolves a conflicting business edit by granting a newer save version',async()=>{
+  const writes=[];const store=await orderHarness(async(url,options)=>{
+    if(url==='/api/orders/move')return response({ok:true,orders:[{id:'o1',orderNumber:'A',itemName:'remote conflicting edit',sortOrder:2,_updatedAt:200}]});
+    writes.push(JSON.parse(options.body));return {ok:false,status:409,json:async()=>({error:'conflict',conflict:true})};
+  });
+  store.state.orders[0].itemName='local draft';await store.moveOrder('o1','o2',true);await store.saveState();
+  assert.equal(store.state.orders[0].itemName,'local draft');assert.equal(store.state.orders[0]._updatedAt,100);
+  assert.equal(writes[0]._expectedVersion,100);assert.equal(writes[0].sortOrder,2);
+});
+
+test('another user moving a row rebases only its sort metadata while retaining our pending edit',async()=>{
+  const writes=[];const store=await orderHarness(async(url,options)=>{
+    if(url.startsWith('/api/changes'))return response({cursor:200,changes:[{entity:'orders',id:'o1',data:{id:'o1',orderNumber:'A',sortOrder:3},updatedAt:200}]});
+    if(url==='/api/dashboard')return response({summary:{}});
+    writes.push(JSON.parse(options.body));return response({updatedAt:201});
+  });
+  store.state.orders[0].itemName='my edit';await store.pullServerState();
+  assert.equal(store.state.orders[0].itemName,'my edit');assert.equal(store.state.orders[0]._updatedAt,200);
+  await store.saveState();assert.equal(writes[0]._expectedVersion,200);assert.equal(writes[0].sortOrder,3);
+});

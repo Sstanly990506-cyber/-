@@ -1,7 +1,7 @@
 import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview-1';
 import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-mobile-delete-1';
 import { $, downloadCsv, getTodayText } from './shared.js';
-import { syncOrderToReceivables, saveOrderSortOrder } from './store.js?v=20261023-multiuser-1';
+import { syncOrderToReceivables, moveOrder } from './store.js?v=20261023-collaboration-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js?v=20261016-concise-ui-1';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
@@ -575,6 +575,7 @@ function renderGlossOptions(state) {
 }
 
 export function renderOrders(state, renderCustomerOptions) {
+  if (document.documentElement?.classList.contains('is-order-dragging')) return;
   renderGlossOptions(state);
   renderCustomerOptions(state);
   renderOrderStatusOptions(state);
@@ -629,7 +630,7 @@ export function renderOrders(state, renderCustomerOptions) {
       <td data-label="交貨日期" class="order-preview-date"><strong>${escapeHtml(order.orderDate || '-')}</strong></td>
       <td data-label="狀態" class="order-preview-status"><span class="order-status-badge" data-status="${escapeHtml(status)}">${escapeHtml(status)}</span></td>
       <td data-label="操作" class="order-row-actions">
-        <div class="order-action-group">${quickActions}<button class="btn small ghost" type="button" data-order-menu="${escapeHtml(order.id)}" aria-label="工單選項">更多</button></div>
+        <div class="order-action-group">${quickActions}<button class="btn small ghost order-drag-handle" type="button" data-drag-order="${escapeHtml(order.id)}" aria-label="按住拖移工單">移動</button><button class="btn small ghost" type="button" data-order-menu="${escapeHtml(order.id)}" aria-label="工單選項">更多</button></div>
       </td>`;
     body.append(tr);
   });
@@ -911,13 +912,13 @@ export function bindOrderEvents(state, saveState, renderAll) {
     }, delay);
   }
   function beginRowHold(event, point) {
-    if (event.target.closest('button, input, select, textarea, a')) return;
+    const fromHandle = !!event.target.closest('button[data-drag-order]');
+    if (!fromHandle && event.target.closest('button, input, select, textarea, a')) return;
     const row = event.target.closest('tr[data-edit]');
-    if (!row || !pendingRowClick || pendingRowId !== row.dataset.edit) return;
+    if (!row || !fromHandle && (!pendingRowClick || pendingRowId !== row.dataset.edit)) return;
     cancelRowClick();
     event.preventDefault();
-    drag = { row, id: row.dataset.edit, x: point.clientX, y: point.clientY, held: false, targetId: null, after: false };
-    drag.orderVersions = Object.fromEntries(state.orders.map(order => [order.id, order._updatedAt || 0]));
+    drag = { row, id: row.dataset.edit, fromHandle, x: point.clientX, y: point.clientY, held: false, targetId: null, after: false };
     drag.point = { clientX: point.clientX, clientY: point.clientY };
     drag.timer = setTimeout(() => {
       if (!drag) return;
@@ -959,14 +960,15 @@ export function bindOrderEvents(state, saveState, renderAll) {
       const index = ordered.findIndex(order => order.id === finished.targetId);
       if (moved && index >= 0) {
         ordered.splice(index + (finished.after ? 1 : 0), 0, moved);
-        // Commit the entire permutation together; keep local data unchanged if
-        // another user edits or reorders any participating order meanwhile.
-        saveOrderSortOrder(ordered.map(order => order.id), finished.orderVersions)
+        // Send only movement intent; the server uses the latest list and never
+        // writes business fields from a stale browser snapshot.
+        moveOrder(finished.id, finished.targetId, finished.after)
           .catch(error => window.alert(`排序未儲存：${error.message}`));
       }
       finished.preview.drop(restoreList);
     } else if (!cancelled && !finished.held) {
-      copyOrderAsNew(state, finished.id);
+      if (finished.fromHandle) restoreList();
+      else copyOrderAsNew(state, finished.id);
     } else if (finished.preview) {
       if (cancelled) finished.preview.cancel(restoreList);
       else finished.preview.drop(restoreList);
@@ -981,7 +983,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
       finishRowHold(true);
       return;
     }
-    if (event.target.closest('button, input, select, textarea, a')) return;
+    if (event.target.closest('button, input, select, textarea, a') && !event.target.closest('button[data-drag-order]')) return;
     const row = event.target.closest('tr[data-edit]');
     if (!row) return;
     const point = event.touches[0];

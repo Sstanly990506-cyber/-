@@ -1,5 +1,6 @@
 """Normalized record storage used by paginated CRUD and incremental sync APIs."""
 import json
+import math
 import time
 from pathlib import Path
 from threading import Lock
@@ -321,6 +322,60 @@ def write_record_batch(writes, deletes=(), expected_versions=None, unique_orders
                 row.update({'updatedAt':tick,'deleted':True})
             _write_local(records)
     return {'ok':True,'updatedAt':tick}
+
+
+def _move_order_changes(rows, record_id, target_id, after):
+    by_id = {row['id']:row for row in rows}
+    if record_id == target_id or record_id not in by_id or target_id not in by_id:
+        raise RecordConflict('要移動或對照的工單已不存在，請更新列表後再試。')
+    def rank(row, fallback):
+        value = row.get('sortOrder')
+        return value if isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) else fallback
+    ordered = [row for _,row in sorted(enumerate(rows),key=lambda pair:(rank(pair[1],pair[0]),pair[0]))]
+    moved = by_id[record_id]
+    ordered.remove(moved)
+    index = next(i for i,row in enumerate(ordered) if row['id']==target_id) + int(after)
+    ordered.insert(index,moved)
+    ranks = [row.get('sortOrder') for row in rows]
+    valid = all(isinstance(value,(int,float)) and not isinstance(value,bool) and math.isfinite(value) for value in ranks)
+    if valid and len(set(ranks)) == len(ranks):
+        left = ordered[index-1]['sortOrder'] if index else None
+        right = ordered[index+1]['sortOrder'] if index+1<len(ordered) else None
+        value = right-1 if left is None else left+1 if right is None else left/2+right/2
+        if math.isfinite(value) and (left is None or value>left) and (right is None or value<right):
+            return [{**moved,'sortOrder':value}]
+    # Normalize legacy/missing ranks or exhausted fractional gaps atomically.
+    return [{**row,'sortOrder':i} for i,row in enumerate(ordered) if row.get('sortOrder')!=i or row['id']==record_id]
+
+
+def move_order_record(record_id, target_id, after=False):
+    """Apply a relative move to the latest list under the same lock as edits.
+
+    No stale client copy of a business field is ever written by this operation.
+    """
+    ensure_record_storage()
+    tick = _now()
+    if storage.DATABASE_URL:
+        with storage.get_db_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute('LOCK TABLE app_records IN SHARE ROW EXCLUSIVE MODE')
+                    cur.execute('SELECT MAX(updated_at) AS latest FROM app_records')
+                    tick=max(tick,int((cur.fetchone() or {}).get('latest') or 0)+1)
+                    cur.execute("SELECT record_id,data_json FROM app_records WHERE entity='orders' AND deleted=FALSE ORDER BY updated_at DESC,record_id")
+                    rows=[{**row['data_json'],'id':row['record_id']} for row in cur.fetchall()]
+                    changed=_move_order_changes(rows,record_id,target_id,after)
+                    for row in changed:
+                        cur.execute("UPDATE app_records SET data_json=%s,updated_at=%s WHERE entity='orders' AND record_id=%s",(storage.Jsonb(row),tick,row['id']))
+    else:
+        with RECORDS_LOCK:
+            records=_load_local()
+            tick=max([tick,*(int(row.get('updatedAt') or 0)+1 for entity in records.values() for row in entity.values())])
+            rows=[{**row['data'],'id':rid} for rid,row in sorted(records.get('orders',{}).items(),key=lambda pair:(-int(pair[1].get('updatedAt') or 0),pair[0])) if not row.get('deleted')]
+            changed=_move_order_changes(rows,record_id,target_id,after)
+            for row in changed:records['orders'][row['id']]={'data':row,'updatedAt':tick,'deleted':False}
+            _write_local(records)
+    return {'ok':True,'orders':[{**row,'_updatedAt':tick} for row in changed]}
 
 
 def upsert_record(entity, record_id, data):

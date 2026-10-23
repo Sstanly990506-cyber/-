@@ -262,6 +262,14 @@ def reorder_orders_payload(token, payload):
         raise ApiError('工單已被更新或重新排序，本次排序未儲存，請核對後再試。', 409, conflict=True) from err
     return {**result, 'orders':[{'id':item['id'], 'sortOrder':slots[position]} for position,item in enumerate(items)]}
 
+def move_order_payload(token, payload):
+    require_entity_access(token,'orders')
+    if not isinstance(payload,dict) or not all(isinstance(payload.get(key),str) and 0<len(payload[key])<=128 for key in ['id','targetId']) or not isinstance(payload.get('after',False),bool):
+        raise ApiError('invalid move',400)
+    from api.records import move_order_record
+    try:return move_order_record(payload['id'],payload['targetId'],payload.get('after',False))
+    except RecordConflict as err:raise ApiError(str(err),409,conflict=True) from err
+
 def delete_entity_payload(token,entity,record_id,expected_version=None,require_version=False):
     require_entity_access(token,entity)
     if entity=='orders':

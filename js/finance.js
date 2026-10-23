@@ -1,5 +1,5 @@
 import { $, COMPANY_INFO, money, downloadCsv, getTodayText, escapeHtml } from './shared.js';
-import { getOrderReceivableKey, isRecordDirty } from './store.js?v=20261023-multiuser-1';
+import { getOrderReceivableKey, isRecordDirty } from './store.js?v=20261023-collaboration-1';
 import { toTaiInch } from './pricing.js';
 import { buildMonthlyStatement, fetchStatementRecords, statementTableHtml, statementPrintHtml } from './monthly-statement.js';
 

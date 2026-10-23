@@ -39,9 +39,12 @@ function harness() {
     setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, at: now + delay }); return nextTimer; },
     clearTimeout: id => timers.delete(id),
     saveState: () => saved.push(state.orders.map(o => ({ ...o }))), renderAll() {},
-    saveOrderSortOrder: ids => {
-      ids.forEach((id, position) => { state.orders.find(row => row.id === id).sortOrder = position; });
-      saved.push(state.orders.map(o => ({ ...o })));
+    moveOrder: (id,targetId,after) => {
+      const ordered=[...state.orders].sort((a,b)=>a.sortOrder-b.sortOrder).filter(row=>row.id!==id);
+      const moved=state.orders.find(row=>row.id===id);
+      ordered.splice(ordered.findIndex(row=>row.id===targetId)+Number(after),0,moved);
+      ordered.forEach((row,position)=>{row.sortOrder=position;});
+      saved.push(state.orders.map(o=>({...o})));
       return Promise.resolve();
     },
     sortedOrders: state => [...state.orders].sort((a,b) => a.sortOrder - b.sortOrder),
@@ -61,7 +64,7 @@ function harness() {
   const start = source.indexOf('  let pendingRowClick = null;');
   const end = source.indexOf("  $('clearOrderBtn')", start);
   vm.runInContext(source.slice(start,end),context);
-  const target = row => ({ closest: selector => selector === 'tr[data-edit]' ? row : null });
+  const target = (row,handle=false) => ({ closest: selector => selector === 'tr[data-edit]' ? row : handle && ['button[data-drag-order]','button, input, select, textarea, a','button'].includes(selector) ? {dataset:{dragOrder:row.dataset.edit}} : null });
   function advance(ms) {
     const end = now + ms;
     while (true) {
@@ -72,7 +75,7 @@ function harness() {
     now = end;
   }
   return { rows, state, edited, copied, saved, document, advance,
-    down: (i=0) => body.emit('touchstart', { target: target(rows[i]), touches: [{identifier:1,clientX:10,clientY:10}], cancelable: true }),
+    down: (i=0,handle=false) => body.emit('touchstart', { target: target(rows[i],handle), touches: [{identifier:1,clientX:10,clientY:10}], cancelable: true }),
     up: () => document.emit('touchend', { touches: [], cancelable: true }),
     move: y => document.emit('touchmove', { touches: [{identifier:1,clientX:10,clientY:y}], cancelable: true }),
     cancel: () => document.emit('touchcancel', {}),
@@ -118,4 +121,12 @@ test('stationary three-second hold opens delete menu without edit or sorting', (
 test('mouse double-click hold still reorders', () => {
   const h=harness();h.click();h.advance(60);h.mouseDown();h.advance(310);h.mouseMove(120);h.mouseUp();h.advance(4000);
   assert.equal(h.saved.length,1);assert.equal(h.edited.length,0);assert.equal(h.copied.length,0);
+});
+
+
+test('explicit Move handle works on the first hold and a short tap never copies',()=>{
+  const h=harness();h.down(0,true);h.advance(310);h.move(120);h.up();h.advance(1000);
+  assert.equal(h.saved.length,1);assert.equal(h.copied.length,0);
+  const tap=harness();tap.down(0,true);tap.advance(40);tap.up();tap.advance(1000);
+  assert.equal(tap.saved.length,0);assert.equal(tap.copied.length,0);assert.equal(tap.edited.length,0);
 });

@@ -248,4 +248,48 @@ class AuditFixTests(unittest.TestCase):
         self.assertEqual(records.get_record('orders','o0'),rows['o0'])
 
 
+    def test_relative_move_uses_latest_business_fields_and_only_changes_order_position(self):
+        for i in range(3):self.save(self.order(f'o{i}',f'WO-{i}',sortOrder=i))
+        old=records.get_record('orders','o0')
+        self.save({**old,'totalPrice':1900,'note':'other operator'})
+        receivables=records.all_records('receivables')
+        result=service.move_order_payload('fixture',{'id':'o0','targetId':'o2','after':True,'totalPrice':1})
+        self.assertEqual(result['orders'][0]['totalPrice'],1900)
+        self.assertEqual(records.get_record('orders','o0')['note'],'other operator')
+        self.assertEqual(records.all_records('receivables'),receivables)
+        actual=sorted(records.all_records('orders'),key=lambda row:row['sortOrder'])
+        self.assertEqual([row['id'] for row in actual],['o1','o2','o0'])
+
+    def test_relative_move_normalizes_legacy_ranks_and_rejects_deleted_targets(self):
+        for i in range(3):self.save(self.order(f'o{i}',f'WO-{i}',sortOrder=None))
+        service.move_order_payload('fixture',{'id':'o0','targetId':'o2','after':False})
+        rows=records.all_records('orders');self.assertEqual(len(set(row['sortOrder'] for row in rows)),3)
+        ordered=sorted(rows,key=lambda row:row['sortOrder'])
+        self.assertEqual(ordered.index(next(row for row in ordered if row['id']=='o2')),ordered.index(next(row for row in ordered if row['id']=='o0'))+1)
+        version=records.get_record('orders','o2')['_updatedAt']
+        service.delete_entity_payload('fixture','orders','o2',version,True)
+        before=records.all_records('orders')
+        with self.assertRaises(service.ApiError) as caught:service.move_order_payload('fixture',{'id':'o0','targetId':'o2'})
+        self.assertEqual(caught.exception.status,409);self.assertEqual(records.all_records('orders'),before)
+
+    def test_relative_moves_from_two_users_both_complete_without_losing_orders(self):
+        for i in range(4):self.save(self.order(f'o{i}',f'WO-{i}',sortOrder=i))
+        def move(spec):return service.move_order_payload('fixture',spec)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            result=list(pool.map(move,[{'id':'o0','targetId':'o2','after':True},{'id':'o1','targetId':'o3','after':True}]))
+        self.assertTrue(all(row['ok'] for row in result))
+        rows=records.all_records('orders');self.assertEqual(len(rows),4);self.assertEqual(len(set(row['sortOrder'] for row in rows)),4)
+        self.assertTrue(all(row['totalPrice']==1000 for row in rows))
+
+    def test_relative_move_route_and_permissions(self):
+        from api_server import app
+        for i in range(2):self.save(self.order(f'o{i}',f'WO-{i}',sortOrder=i))
+        if app is not None:
+            result=app.test_client().post('/api/orders/move',json={'id':'o0','targetId':'o1','after':True},headers={'Authorization':'Bearer fixture'})
+            self.assertEqual(result.status_code,200)
+        with patch.object(service,'verify_session_token',return_value={'role':'viewer'}):
+            with self.assertRaises(service.ApiError) as caught:service.move_order_payload('fixture',{'id':'o0','targetId':'o1'})
+        self.assertEqual(caught.exception.status,403)
+
+
 if __name__ == '__main__':unittest.main()

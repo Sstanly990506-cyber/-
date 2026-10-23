@@ -664,6 +664,17 @@ tbody tr:hover {
   transform: translateX(2px);
 }
 .orders-table .order-preview-row.is-tap-armed { touch-action: none; }
+.order-drag-handle { touch-action: none; cursor: grab; -webkit-touch-callout: none; }
+.order-presence { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; max-width: 100%; font-size: 12px; line-height: 1.6; }
+#ordersView > .topbar > .topbar-heading { flex: 1; min-width: 0; }
+.order-presence[hidden] { display: none; }
+.presence-summary { color: var(--muted); }
+.presence-person { color: var(--presence-color); overflow-wrap: anywhere; }
+.presence-active-target { outline: 2px solid var(--presence-color) !important; outline-offset: -2px; }
+.presence-cursor-layer { pointer-events: none; position: fixed; inset: 0; z-index: 10000; overflow: hidden; }
+.presence-cursor { position: absolute; display: flex; align-items: flex-start; gap: 3px; pointer-events: none; }
+.presence-arrow { width: 16px; height: 23px; flex: 0 0 auto; background: var(--presence-color); clip-path: polygon(0 0, 100% 65%, 56% 69%, 35% 100%); }
+.presence-cursor-name { margin-top: 16px; padding: 3px 7px; border-radius: 5px; background: var(--presence-color); color: #0b1120; white-space: nowrap; font-size: 11px; font-weight: 600; }
 .orders-table .order-preview-row.is-just-completed {
   animation: orderRowComplete 0.86s ease both;
 }

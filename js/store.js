@@ -177,24 +177,28 @@ function unique(rows) {
   ];
 }
 
+function normalizeOrder(o) {
+  return {
+    ...o, billingCustomer:String(o.billingCustomer??''), upstream:String(o.upstream??''),
+    machineType:['BIG','REGULAR','SMALL'].includes(o.machineType)?o.machineType:'BIG',
+    sortOrder:normalizeSortOrder(o.sortOrder), totalPrice:normalizeMoney(o.totalPrice),
+    sheetCount:normalizeMoney(o.sheetCount), sheetCountText:String(o.sheetCountText??o.sheetCount??''),
+  };
+}
+
+function sameOrderBusiness(a,b) {
+  const keys = new Set([...Object.keys(a),...Object.keys(b)]);
+  for (const key of ['_updatedAt','sortOrder','updatedAt']) keys.delete(key);
+  return [...keys].every(key=>JSON.stringify(a[key])===JSON.stringify(b[key]));
+}
+
 function normalizeStateData() {
   state.customers = unique(state.customers).map((c) => ({
     ...c,
     taxId:String(c.taxId??''),
   }));
 
-  state.orders = unique(state.orders).map((o) => ({
-    ...o,
-    billingCustomer:String(o.billingCustomer??''),
-    upstream: String(o.upstream ?? ''),
-    machineType: ['BIG', 'REGULAR', 'SMALL'].includes(o.machineType) ? o.machineType : 'BIG',
-    sortOrder:o.sortOrder===null || o.sortOrder === undefined || o.sortOrder === ''
-      ? null
-      : normalizeSortOrder(o.sortOrder),
-    totalPrice: normalizeMoney(o.totalPrice),
-    sheetCount: normalizeMoney(o.sheetCount),
-    sheetCountText:String(o.sheetCountText??o.sheetCount??''),
-  }));
+  state.orders = unique(state.orders).map(normalizeOrder);
 
   state.receivables = unique(state.receivables);
   state.payables = unique(state.payables);
@@ -622,6 +626,48 @@ export function saveOrderSortOrder(ids, expectedVersions) {
   return operation;
 }
 
+export function moveOrder(id, targetId, after = false) {
+  const version = sessionVersion;
+  const operation = saveQueue.then(async () => {
+    if (version !== sessionVersion) throw new Error('登入已變更，移動未儲存。');
+    setUi('移動儲存中', '同步位置', false);
+    const result = await jsonRequest('/api/orders/move', {
+      method:'POST', headers:headers(true), body:JSON.stringify({id,targetId,after}),
+    });
+    if (version !== sessionVersion) return;
+    for (const incoming of result.orders || []) {
+      const index = state.orders.findIndex(row => row.id === incoming.id);
+      if (index < 0) continue;
+      const row = state.orders[index];
+      const baseline = JSON.parse(snapshots.orders.get(row.id) || 'null');
+      const remote = normalizeOrder(incoming);
+      const equal = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+      const unchanged = baseline && sameOrderBusiness(baseline,remote);
+      if (equal(row,baseline) || unchanged) {
+        const merged = {...remote};
+        if (baseline) for (const key of Object.keys({...baseline,...row})) {
+          if (['_updatedAt','sortOrder'].includes(key) || equal(row[key],baseline[key])) continue;
+          if (key in row) merged[key]=row[key]; else delete merged[key];
+        }
+        state.orders[index]=merged;
+        snapshots.orders.set(row.id,JSON.stringify(remote));
+      } else if (baseline) {
+        // Keep the old business version for an unresolved edit. A move must
+        // never silently grant permission to overwrite somebody else's fields.
+        row.sortOrder=remote.sortOrder;
+        baseline.sortOrder=remote.sortOrder;
+        snapshots.orders.set(row.id,JSON.stringify(baseline));
+      }
+    }
+    refresh();
+    setIdleSyncUi('位置已同步');
+  });
+  saveQueue = operation.catch(error => {
+    if (version === sessionVersion) setUi('移動未儲存',error.message,false);
+  });
+  return operation;
+}
+
 function applyChange(change) {
   const key = REVERSE_ENTITY[change.entity];
   if (!key) return;
@@ -634,7 +680,17 @@ function applyChange(change) {
   // snapshot or apply an older deletion from that delayed response.
   if (Number(change.updatedAt) <= Number(knownVersion)) return;
   const local = index >= 0 ? JSON.stringify(rows[index]) : undefined;
-  if (local !== baseline.get(change.id)) return;
+  if (local !== baseline.get(change.id)) {
+    if (key==='orders' && index>=0 && !change.deleted && baseline.has(change.id)) {
+      const remote=normalizeOrder({...change.data,id:change.id,_updatedAt:change.updatedAt});
+      if (sameOrderBusiness(JSON.parse(baseline.get(change.id)),remote)) {
+        rows[index].sortOrder=remote.sortOrder;
+        rows[index]._updatedAt=remote._updatedAt;
+        baseline.set(change.id,JSON.stringify(remote));
+      }
+    }
+    return;
+  }
   if (change.deleted) {
     if (index >= 0) rows.splice(index, 1);
     baseline.delete(change.id);

@@ -74,3 +74,7 @@ GitHub Actions 會在推送與 Pull Request 時執行同一組測試。
 ## 營運功能更新
 
 道路服務、實際成本、完整報表、財務解鎖及登入撤銷設定請見 [修正說明](docs/OPERATIONS_FIXES.md)。
+
+## 工單多人協作
+
+拖移排序、在線人員與共享游標的操作及同步方式請見 [協作說明](docs/COLLABORATION.md)。
