@@ -105,67 +105,82 @@
             </section>
             <form id="orderForm" class="form-grid order-grid">
               <input id="orderId" type="hidden" />
-              <label>工單編號<input id="orderNumber" autocomplete="off" /></label>
-              <label>交貨日期<input id="orderDate" type="date" /></label>
-              <div class="customer-price-row span-2">
-                <label>客人
-                  <input id="billingCustomerInput" autocomplete="off" placeholder="客戶名稱" />
-                  <datalist id="billingCustomerOptions"></datalist>
-                </label>
-                <button id="openPriceRulesFromOrderBtn" class="btn" type="button" data-order-screen="pricing">設定客人價格</button>
-              </div>
-
-              <label>上游客戶（可搜尋）
-                <input id="upstreamInput" autocomplete="off" placeholder="廠商／印刷廠" />
-                <datalist id="upstreamOptions"></datalist>
-              </label>
-
-              <label>下游客戶（可搜尋）
-                <input id="downstreamInput" autocomplete="off" placeholder="下一站廠商" />
-                <datalist id="downstreamOptions"></datalist>
-              </label>
-              <div id="orderMissingCustomerPrompt" class="order-missing-customer span-2 hidden" aria-live="polite">
-                <p id="orderMissingCustomerText"></p>
-                <div class="order-missing-customer-actions">
-                  <button id="addMissingCustomerBtn" class="btn primary" type="button">新增公司</button>
-                  <button id="dismissMissingCustomerBtn" class="btn" type="button">暫不新增</button>
+              <fieldset class="order-form-section">
+                <legend>基本資料</legend>
+                <label>工單編號<input id="orderNumber" autocomplete="off" /></label>
+                <label>交貨日期<input id="orderDate" type="date" /></label>
+              </fieldset>
+              <fieldset class="order-form-section">
+                <legend>客戶與送貨</legend>
+                <div class="customer-price-row span-2">
+                  <label>客人
+                    <input id="billingCustomerInput" autocomplete="off" placeholder="客戶名稱" />
+                    <datalist id="billingCustomerOptions"></datalist>
+                  </label>
+                  <button id="openPriceRulesFromOrderBtn" class="btn" type="button" data-order-screen="pricing">設定客人價格</button>
                 </div>
-              </div>
-              <label>送貨地址（下游）<input id="orderAddress" placeholder="送貨地址" /></label>
 
-              <label>品名<input id="orderItemName" placeholder="產品／印件名稱" /></label>
-              <label>數量說明<input id="sheetCountText" type="text" maxlength="120" placeholder="例如：3箱×20張＋散裝5張" /></label>
-              <label>計算張數<input id="sheetCount" type="number" min="0" step="0.01" placeholder="張數" /></label>
-              <label class="span-2">尺寸寫法（可選）<input id="sizeNotation" type="text" maxlength="60" placeholder="例：25×35台吋、4K" /></label>
-              <label>天<input id="sizeLength" type="number" step="0.01" min="0" /></label>
-              <label>地<input id="sizeWidth" type="number" step="0.01" min="0" /></label>
-              <label>單位
-                <select id="sizeUnit">
-                  <option value="tai-inch" selected>台吋</option>
-                  <option value="mm">mm</option>
-                  <option value="cm">cm</option>
-                  <option value="inch">inch</option>
-                </select>
-              </label>
-              <p id="sizeNotationHint" class="sub span-2"></p>
-              <label>尺寸級距
-                <select id="machineType">
-                  <option value="" selected>依天／地自動判斷</option>
-                  <option value="BIG">大台</option>
-                  <option value="REGULAR">常規</option>
-                  <option value="SMALL">小台</option>
-                </select>
-              </label>
-              <label>換算台吋<input id="sizeTaiInch" readonly /></label>
-              <label class="span-2">上光種類<select id="glossType"></select></label>
-              <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
-              <label>實際總成本<input id="actualCost" type="number" step="0.01" min="0" placeholder="未知可留白" /></label>
-              <label>帳單單價（元／令；小台元／張）<input id="orderUnitPrice" type="number" step="0.0001" min="0" placeholder="單價" /></label>
-              <p id="orderSmartHint" class="sub span-2"></p>
-              <label>狀態
-                <select id="orderStatus"></select>
-              </label>
-              <div class="actions span-2">
+                <label>上游客戶（可搜尋）
+                  <input id="upstreamInput" autocomplete="off" placeholder="廠商／印刷廠" />
+                  <datalist id="upstreamOptions"></datalist>
+                </label>
+
+                <label>下游客戶（可搜尋）
+                  <input id="downstreamInput" autocomplete="off" placeholder="下一站廠商" />
+                  <datalist id="downstreamOptions"></datalist>
+                </label>
+                <div id="orderMissingCustomerPrompt" class="order-missing-customer span-2 hidden" aria-live="polite">
+                  <p id="orderMissingCustomerText"></p>
+                  <div class="order-missing-customer-actions">
+                    <button id="addMissingCustomerBtn" class="btn primary" type="button">新增公司</button>
+                    <button id="dismissMissingCustomerBtn" class="btn" type="button">暫不新增</button>
+                  </div>
+                </div>
+                <label class="order-field-wide">送貨地址（下游）<input id="orderAddress" placeholder="送貨地址" /></label>
+
+              </fieldset>
+              <fieldset class="order-form-section">
+                <legend>印件與數量</legend>
+                <label class="order-field-wide">品名<input id="orderItemName" placeholder="產品／印件名稱" /></label>
+                <label>數量說明<input id="sheetCountText" type="text" maxlength="120" placeholder="例如：3箱×20張＋散裝5張" /></label>
+                <label>計算張數<input id="sheetCount" type="number" min="0" step="0.01" placeholder="張數" /></label>
+              </fieldset>
+              <fieldset class="order-form-section">
+                <legend>尺寸</legend>
+                <label class="order-field-wide">尺寸寫法（可選）<input id="sizeNotation" type="text" maxlength="60" placeholder="例：25×35台吋、4K" /></label>
+                <label>天<input id="sizeLength" type="number" step="0.01" min="0" /></label>
+                <label>地<input id="sizeWidth" type="number" step="0.01" min="0" /></label>
+                <label>單位
+                  <select id="sizeUnit">
+                    <option value="tai-inch" selected>台吋</option>
+                    <option value="mm">mm</option>
+                    <option value="cm">cm</option>
+                    <option value="inch">inch</option>
+                  </select>
+                </label>
+                <label>尺寸級距
+                  <select id="machineType">
+                    <option value="" selected>依天／地自動判斷</option>
+                    <option value="BIG">大台</option>
+                    <option value="REGULAR">常規</option>
+                    <option value="SMALL">小台</option>
+                  </select>
+                </label>
+                <label class="order-field-wide">換算台吋<input id="sizeTaiInch" readonly /></label>
+                <p id="sizeNotationHint" class="sub order-field-wide"></p>
+              </fieldset>
+              <fieldset class="order-form-section">
+                <legend>加工與金額</legend>
+                <label>上光種類<select id="glossType"></select></label>
+                <label>狀態
+                  <select id="orderStatus"></select>
+                </label>
+                <label>帳單單價<input id="orderUnitPrice" type="number" step="0.0001" min="0" placeholder="單價" /><span class="order-field-note">元／令；小台元／張</span></label>
+                <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
+                <label class="order-field-wide">實際總成本<input id="actualCost" type="number" step="0.01" min="0" placeholder="未知可留白" /></label>
+                <p id="orderSmartHint" class="sub order-field-wide"></p>
+              </fieldset>
+              <div class="actions order-form-actions">
                 <button id="saveOrderBtn" class="btn primary" type="submit">儲存工單</button>
                 <button class="btn" type="button" id="clearOrderBtn">清空</button>
                 <button class="btn" type="button" id="exportOrderBtn">匯出工單</button>

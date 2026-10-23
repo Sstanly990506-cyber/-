@@ -12,6 +12,59 @@
 .usage-details summary { cursor: pointer; padding: 8px 0; }
 .usage-details p { margin: 8px 0; }
 
+/* Keep the order form aligned independently of other module grids. */
+#orderForm { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.order-form-section {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.order-form-section legend { padding: 0 8px; font-size: 15px; font-weight: 600; }
+.order-form-section label { min-width: 0; align-content: start; line-height: 1.5; }
+.order-form-section input:not([type="hidden"]), .order-form-section select {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 16px;
+}
+.order-form-section .order-field-wide,
+.order-form-section .customer-price-row,
+.order-form-section .order-missing-customer { grid-column: 1 / -1; }
+.order-form-section .customer-price-row { grid-template-columns: minmax(0, 1fr) auto; }
+.order-form-section .sub { margin: 0; }
+.order-field-note { color: var(--muted); font-size: 12px; }
+#orderForm .order-form-actions { grid-column: 1 / -1; margin: 0; }
+#orderDate {
+  -webkit-appearance: none;
+  appearance: none;
+  min-inline-size: 0;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  text-align: left;
+}
+#orderDate::-webkit-date-and-time-value { min-width: 0; min-height: 1.5em; text-align: left; }
+#orderDate::-webkit-datetime-edit { min-width: 0; padding: 0; }
+
+@media (min-width: 768px) and (max-width: 1366px) {
+  .orders-layout { grid-template-columns: minmax(0, 1fr); }
+  .orders-layout > .side-menu { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; }
+  .orders-layout > .side-menu .side-btn { text-align: center; }
+  .ai-order-recognizer { grid-template-columns: minmax(0, 1fr) auto; }
+  .ai-order-recognizer > div:first-child { grid-column: 1 / -1; }
+  .ai-order-recognizer input[type="file"] { min-width: 0; }
+}
+
 @media (max-width: 767px) {
   .app-shell {
     padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
@@ -22,6 +75,9 @@
   .login-grid, .order-grid, .settings-form-grid, .ai-order-recognizer { grid-template-columns: minmax(0, 1fr); }
   .form-grid.compact { max-width: none; }
   .span-2 { grid-column: auto; }
+  .order-form-section { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 14px; }
+  .order-form-section .customer-price-row { grid-template-columns: minmax(0, 1fr); }
+  .order-form-section .customer-price-row .btn { width: 100%; }
   input, select, textarea { min-width: 0; max-width: 100%; font-size: 16px; }
   /* Safari's native date editor otherwise contributes an intrinsic field width. */
   input[type="date"] {
