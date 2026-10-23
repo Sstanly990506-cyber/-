@@ -29,8 +29,6 @@ const ORDER_ENTRY_FIELD_IDS = [
   'sizeWidth', 'sizeUnit', 'machineType',
   'glossType',
   'totalPrice',
-  'actualCost',
-  'orderUnitPrice',
   'orderStatus',
 ];
 

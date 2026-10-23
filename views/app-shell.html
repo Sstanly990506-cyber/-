@@ -105,6 +105,8 @@
             </section>
             <form id="orderForm" class="form-grid order-grid">
               <input id="orderId" type="hidden" />
+              <input id="actualCost" type="hidden" />
+              <input id="orderUnitPrice" type="hidden" />
               <fieldset class="order-form-section">
                 <legend>基本資料</legend>
                 <label>工單編號<input id="orderNumber" autocomplete="off" /></label>
@@ -175,9 +177,7 @@
                 <label>狀態
                   <select id="orderStatus"></select>
                 </label>
-                <label>帳單單價<input id="orderUnitPrice" type="number" step="0.0001" min="0" placeholder="單價" /><span class="order-field-note">元／令；小台元／張</span></label>
-                <label>總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
-                <label class="order-field-wide">實際總成本<input id="actualCost" type="number" step="0.01" min="0" placeholder="未知可留白" /></label>
+                <label class="order-field-wide">總價<input id="totalPrice" type="number" step="0.01" min="0" /></label>
                 <p id="orderSmartHint" class="sub order-field-wide"></p>
               </fieldset>
               <div class="actions order-form-actions">

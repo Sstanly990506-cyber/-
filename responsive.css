@@ -43,7 +43,6 @@
 .order-form-section .order-missing-customer { grid-column: 1 / -1; }
 .order-form-section .customer-price-row { grid-template-columns: minmax(0, 1fr) auto; }
 .order-form-section .sub { margin: 0; }
-.order-field-note { color: var(--muted); font-size: 12px; }
 #orderForm .order-form-actions { grid-column: 1 / -1; margin: 0; }
 #orderDate {
   -webkit-appearance: none;
