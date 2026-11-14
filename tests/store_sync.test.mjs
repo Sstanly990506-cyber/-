@@ -510,3 +510,21 @@ test('a new account starts its own sync without waiting for an old account respo
   assert.equal(store.state.customers.length, 1);
   assert.equal(store.state.customers[0].name, 'new account');
 });
+
+test('a lost move response reports an uncertain outcome without replaying the request', async () => {
+  const ui = []; let calls = 0;
+  const store = await harness(async url => {
+    if (url === '/api/orders/move') { calls++; throw new TypeError('response lost'); }
+    return response({ summary: {} });
+  }, [], { syncUiFn: value => ui.push(value) });
+  await assert.rejects(store.moveOrder('o1', 'o2', true), error => error.uncertainMove === true);
+  assert.equal(calls, 1);
+  assert.equal(ui.at(-1).badgeText, '移動結果待核對');
+});
+
+test('a move rejected by the server remains a definite failure', async () => {
+  const ui = [];
+  const store = await harness(async () => ({ ok: false, status: 409, json: async () => ({ error: '工單已更新', conflict: true }) }), [], { syncUiFn: value => ui.push(value) });
+  await assert.rejects(store.moveOrder('o1', 'o2'), error => error.conflict && !error.uncertainMove);
+  assert.equal(ui.at(-1).badgeText, '移動未儲存');
+});

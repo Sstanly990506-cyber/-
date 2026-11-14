@@ -5,8 +5,10 @@ from datetime import datetime, timedelta, timezone
 from api.records import RecordConflict, dashboard_counts, get_record, write_record_batch, changes_since, clear_records, count_records_by_entity, delete_record, export_records, first_pages_for_entities, list_records, restore_records, upsert_record
 from api.ai_orders import OrderRecognitionError, add_recognition_review, get_order_recognition_result, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
+from api.storage import AccountConflict, account_for_permissions, update_user_permissions
 from api.trip_optimizer import optimize_trip
 from api.pricing import calculate_quote, classify_pricing_tier_with_bounds, normalize_coating_type, normalize_pricing_tier
+from api.settings_store import settings_version, update_settings_if_version
 REQUIRED_STATE_KEYS=('glossOptions','customers','orders','audits','receivables','payables')
 ENTITY_VIEW={'orders':'ordersView','customers':'customersView','inventory':'inventoryView','events':'notificationsView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','aiCorrections':'ordersView','lineDestinations':'notificationsView'}
 STATE_FIELD_VIEW={'glossOptions':'ordersView','customers':'customersView','orders':'ordersView','audits':'auditView','receivables':'financeView','payables':'financeView','priceRules':'ordersView','systemEvents':'notificationsView','inventoryItems':'inventoryView','lineDestinations':'notificationsView'}
@@ -123,7 +125,7 @@ def dashboard_summary(account):
         for key,source in fields[entity].items():summary[key]=counts.get(entity,{}).get(source,0)
     return summary
 def build_bootstrap_payload(account,include_pages=True):
-    source=filter_state_for_account(read_state(),account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True
+    source=filter_state_for_account(read_state(),account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['settingsVersion']=settings_version(source.get('settings'));payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True
     if include_pages:
         try:
             payload['initialPages']=first_pages_for_entities(bootstrap_entities_for_account(account),100)
@@ -451,21 +453,16 @@ def user_action_payload(token,payload):
     if action=='list_accounts':
         account=require_account(token)
         if account.get('role')!='admin':raise ApiError('admin role required',403)
-        return {'ok':True,'accounts':[sanitize_account_public(user) for user in read_users()]}
+        return {'ok':True,'accounts':[account_for_permissions(user) for user in read_users()]}
     if action=='update_account_permissions':
         account=require_account(token)
         if account.get('role')!='admin':raise ApiError('admin role required',403)
         user_id=str(payload.get('id') or '').strip();username=str(payload.get('username') or '').strip().lower();role=str(payload.get('role') or '').strip()
         if role and role not in VALID_ROLES:raise ApiError('invalid role',400)
-        users=read_users();target=None
-        for user in users:
-            if (user_id and str(user.get('id') or '')==user_id) or (username and str(user.get('usernameKey') or '').lower()==username):
-                target=user;break
+        try:target=update_user_permissions(user_id,username,role,payload.get('allowedViews'),payload.get('expectedVersion'))
+        except AccountConflict as err:raise ApiError(str(err),409,conflict=True) from err
         if not target:raise ApiError('account not found',404)
-        if role:target['role']=role
-        target['allowedViews']=normalize_allowed_views(payload.get('allowedViews'),target.get('role') or 'viewer')
-        write_users(users)
-        return {'ok':True,'account':sanitize_account_public(target)}
+        return {'ok':True,'account':target}
     if action=='change_finance_password':
         account=require_account(token)
         if account.get('role')!='admin':raise ApiError('admin role required',403)
@@ -478,10 +475,9 @@ def user_action_payload(token,payload):
         if account.get('role')!='admin':raise ApiError('admin role required',403)
         settings=payload.get('settings')
         if not isinstance(settings,dict):raise ApiError('invalid settings',400)
-        current=read_state();current['settings']=settings
-        ok,tick=write_state(current)
-        if not ok:raise ApiError('settings changed on another device; retry',409,serverSyncTick=tick)
-        return {'ok':True,'syncTick':tick}
+        tick=update_settings_if_version(settings,payload.get('expectedVersion'))
+        if tick is None:raise ApiError('設定已由其他人更新；你的修改仍保留，請先複製備份，再重新整理核對。',409,conflict=True)
+        return {'ok':True,'syncTick':tick,'settingsVersion':settings_version(settings)}
     raise ApiError('unsupported action',400)
 def optimize_trip_payload(token,payload):
     account=require_account(token)

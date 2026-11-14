@@ -208,6 +208,49 @@ def sanitize_account_public(user: dict) -> dict:
         'createdAt': user.get('createdAt') or '',
     }
 
+def account_for_permissions(user):
+    return {**sanitize_account_public(user), 'accountVersion': _session_revision(user)}
+
+class AccountConflict(ValueError):
+    pass
+
+def _user_from_db(row):
+    return {'id':row['id'], 'username':row['username'], 'usernameKey':row['username_key'],
+            'password':row['password_hash'], 'display':row['display_name'], 'role':row['role'],
+            'allowedViews':row['allowed_views'], 'createdAt':row['created_at'], 'source':row['source'],
+            'sessionVersion':row['session_version'] or ''}
+
+def update_user_permissions(user_id, username, role, allowed_views, expected):
+    ensure_storage()
+    if not isinstance(expected, str) or len(expected) != 64 or not expected.isascii():
+        raise AccountConflict('畫面版本已過期，請先刷新帳號後再儲存。')
+    def change(user):
+        if not hmac.compare_digest(expected, _session_revision(user)):
+            raise AccountConflict('帳號權限已被更新，請先刷新帳號並核對後再儲存。')
+        new_role = role or user['role']
+        new_views = normalize_allowed_views(allowed_views, new_role)
+        if new_role != user['role'] or new_views != user['allowedViews']:
+            user['role'], user['allowedViews'] = new_role, new_views
+            user['sessionVersion'] = str(uuid.uuid4())
+        return user
+    if DATABASE_URL:
+        with get_db_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute('SELECT id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views, session_version FROM app_users WHERE (%s<>\'\' AND id=%s) OR (%s=\'\' AND username_key=%s) FOR UPDATE', (user_id, user_id, user_id, username))
+                    row = cur.fetchone()
+                    if not row: return None
+                    user = change(_user_from_db(row))
+                    cur.execute('UPDATE app_users SET role=%s, allowed_views=%s, session_version=%s WHERE id=%s', (user['role'], Jsonb(user['allowedViews']), user['sessionVersion'], user['id']))
+        return account_for_permissions(user)
+    with USERS_FILE_LOCK:
+        users = load_users_local_file()
+        user = next((u for u in users if (u['id']==user_id if user_id else bool(username) and u['usernameKey']==username)), None)
+        if not user: return None
+        change(user)
+        write_users_local_file(users)
+        return account_for_permissions(user)
+
 
 def normalize_user_record(user: dict, source: str = 'legacy-import') -> dict | None:
     username = str((user or {}).get('username') or '').strip()
@@ -659,12 +702,11 @@ def get_bootstrap_password(account: dict) -> str:
 def ensure_builtin_users():
     existing = read_users()
     existing_keys = {u['usernameKey'] for u in existing}
-    changed = False
     for builtin in BUILTIN_ACCOUNTS:
         key = normalize_username(builtin['username'])
         if key in existing_keys:
             continue
-        existing.append(normalize_user_record({
+        candidate = normalize_user_record({
             'id': str(uuid.uuid4()),
             'username': builtin['username'],
             'password': get_bootstrap_password(builtin),
@@ -672,11 +714,9 @@ def ensure_builtin_users():
             'role': builtin['role'],
             'createdAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'source': 'builtin',
-        }, source='builtin'))
+        }, source='builtin')
+        insert_user(candidate, ignore_existing=True)
         existing_keys.add(key)
-        changed = True
-    if changed:
-        write_users(existing)
 
 
 def migrate_legacy_users_once():
@@ -746,6 +786,28 @@ def migrate_legacy_users_once():
             write_local_state_file(local_state)
 
 
+def insert_user(user, ignore_existing=False):
+    ensure_storage()
+    user['sessionVersion'] = str(uuid.uuid4())
+    if DATABASE_URL:
+        with get_db_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute('''INSERT INTO app_users (id,username,username_key,password_hash,display_name,role,created_at,source,allowed_views,session_version)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (username_key) DO NOTHING RETURNING id''',
+                        (user['id'],user['username'],user['usernameKey'],user['password'],user['display'],user['role'],user['createdAt'],user['source'],Jsonb(user['allowedViews']),user['sessionVersion']))
+                    inserted = cur.fetchone() is not None
+    else:
+        with USERS_FILE_LOCK:
+            users = load_users_local_file()
+            inserted = not any(u['usernameKey'] == user['usernameKey'] for u in users)
+            if inserted:
+                users.append(user)
+                write_users_local_file(users)
+    if not inserted and not ignore_existing:
+        raise ValueError('username already exists')
+    return inserted
+
 def register_user(username: str, password: str, display: str, role: str = 'viewer', source: str = 'register', allowed_views=None):
     normalized = normalize_user_record(
         {
@@ -763,12 +825,8 @@ def register_user(username: str, password: str, display: str, role: str = 'viewe
     if not normalized:
         raise ValueError('invalid user payload')
 
-    users = read_users()
-    if any(u['usernameKey'] == normalized['usernameKey'] for u in users):
-        raise ValueError('username already exists')
-    users.append(normalized)
-    write_users(users)
-    return sanitize_account_public(normalized)
+    insert_user(normalized)
+    return account_for_permissions(normalized)
 
 
 def authenticate_user(username: str, password: str):

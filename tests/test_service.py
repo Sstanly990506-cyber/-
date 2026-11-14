@@ -594,12 +594,11 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(register.call_args.kwargs['allowed_views'], ['tripsView'])
 
     def test_admin_can_update_shared_settings(self):
-        current = {'settings': None, 'syncTick': 4}
         settings = {'moduleInternals': {'orders': {'pricingRules': {'divisor': 4680}}}}
-        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_state', return_value=current), patch('api.service.write_state', return_value=(True, 5)) as write:
-            result = user_action_payload('token', {'action': 'update_settings', 'settings': settings})
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.update_settings_if_version', return_value=5) as write:
+            result = user_action_payload('token', {'action': 'update_settings', 'settings': settings, 'expectedVersion': 'version'})
         self.assertEqual(result['syncTick'], 5)
-        self.assertEqual(write.call_args.args[0]['settings'], settings)
+        self.assertEqual(write.call_args.args, (settings, 'version'))
 
     def test_non_admin_cannot_update_shared_settings(self):
         with patch('api.service.verify_session_token', return_value={'role': 'ops'}):
@@ -609,9 +608,10 @@ class ServiceTests(unittest.TestCase):
 
     def test_admin_can_list_and_update_account_permissions(self):
         users = [{'id': 'u1', 'username': 'driver1', 'usernameKey': 'driver1', 'display': 'Driver', 'role': 'viewer', 'allowedViews': []}]
-        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_users', return_value=users), patch('api.service.write_users') as write:
+        changed = {**users[0], 'role': 'driver', 'allowedViews': ['tripsView'], 'accountVersion':'new'}
+        with patch('api.service.verify_session_token', return_value={'role': 'admin'}), patch('api.service.read_users', return_value=users), patch('api.service.update_user_permissions', return_value=changed) as write:
             listed = user_action_payload('token', {'action': 'list_accounts'})
-            updated = user_action_payload('token', {'action': 'update_account_permissions', 'id': 'u1', 'role': 'driver', 'allowedViews': ['tripsView']})
+            updated = user_action_payload('token', {'action': 'update_account_permissions', 'id': 'u1', 'role': 'driver', 'allowedViews': ['tripsView'], 'expectedVersion':listed['accounts'][0]['accountVersion']})
         self.assertEqual(listed['accounts'][0]['username'], 'driver1')
         self.assertEqual(updated['account']['role'], 'driver')
         self.assertEqual(updated['account']['allowedViews'], ['tripsView'])

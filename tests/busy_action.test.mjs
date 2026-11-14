@@ -88,17 +88,18 @@ test('synchronous failures and canceled tasks also release the latch', async () 
   assert.equal(button.textContent, '還原');
 });
 
-async function settingsHarness(request) {
+async function settingsHarness(request, initialState = { userRole: 'admin', authToken: 'token' }) {
   const elements = new Map();
   const add = (id, text) => { const element = new Element(text); elements.set(id, element); return element; };
   const list = add('accountPermissionsList');
+  const settingsButton = add('settingsBtn', '設定');
   const refresh = add('refreshAccountsBtn', '刷新帳號');
   const permissionButton = new Element('儲存權限'), role = new Element();
   role.value = 'ops';
   const checked = new Element(); checked.value = 'ordersView'; checked.checked = true;
   const otherDraft = new Element(); otherDraft.checked = false;
   const row = {
-    dataset: { accountPermissionRow: 'user-1' },
+    dataset: { accountPermissionRow: 'user-1', accountVersion: 'version-1' },
     outerHTML: '',
     querySelector: () => role,
     querySelectorAll: () => [checked],
@@ -132,10 +133,23 @@ async function settingsHarness(request) {
   const settings = new vm.SourceTextModule(settingsSource, { context });
   await settings.link(specifier => specifier.includes('busy-action') ? busy : shared);
   await settings.evaluate();
-  settings.namespace.bindSettingsEvents({ userRole: 'admin', authToken: 'token' }, () => {}, () => {});
+  settings.namespace.bindSettingsEvents(initialState, () => {}, () => {});
   await settle(); // Finish the initial account list request before user interaction.
-  return { elements, list, refresh, permissionButton, row, role, checked, otherDraft, form, financeForm, clear, requests, alerts };
+  return { elements, list, refresh, settingsButton, permissionButton, row, role, checked, otherDraft, form, financeForm, clear, requests, alerts };
 }
+
+test('first opening settings after login loads accounts once, preserving drafts on later visits', async () => {
+  const state = { userRole: 'viewer', authToken: null };
+  const h = await settingsHarness(() => { throw new Error('unexpected request'); }, state);
+  assert.equal(h.requests.length, 0);
+  state.userRole = 'admin'; state.authToken = 'logged-in';
+  await h.settingsButton.emit('click');
+  assert.equal(h.requests.filter(row => row.action === 'list_accounts').length, 1);
+  h.otherDraft.checked = true;
+  await h.settingsButton.emit('click');
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.otherDraft.checked, true);
+});
 
 test('permission save sends once while slow, blocks refresh races, and preserves other account drafts', async () => {
   const gate = deferred();
@@ -148,10 +162,12 @@ test('permission save sends once while slow, blocks refresh races, and preserves
   await h.form.emit('submit'); // Enter/submit events cannot bypass the shared guard.
   assert.equal(h.requests.length, 2); // initial load + one save
   assert.equal(h.requests[1].action, 'update_account_permissions');
+  assert.equal(h.requests[1].expectedVersion, 'version-1');
   assert.deepEqual([...h.requests[1].allowedViews], ['ordersView']);
-  gate.resolve({ ok: true, json: async () => ({ ok: true, account: { id: 'user-1', username: 'user', role: 'ops', allowedViews: ['ordersView'] } }) });
+  gate.resolve({ ok: true, json: async () => ({ ok: true, account: { id: 'user-1', username: 'user', role: 'ops', allowedViews: ['ordersView'], accountVersion: 'version-2' } }) });
   await pending;
   assert.match(h.row.outerHTML, /data-account-permission-row="user-1"/);
+  assert.match(h.row.outerHTML, /data-account-version="version-2"/);
   assert.equal(h.otherDraft.checked, false);
   assert.equal(h.otherDraft.disabled, false);
   assert.equal(h.requests.length, 2); // saving does not reload unrelated account rows

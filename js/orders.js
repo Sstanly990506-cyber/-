@@ -1,7 +1,8 @@
 import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview-1';
 import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-mobile-delete-1';
-import { $, downloadCsv, getTodayText } from './shared.js';
-import { syncOrderToReceivables, moveOrder } from './store.js?v=20261023-fast-sync-1';
+import { $, getTodayText } from './shared.js';
+import { renderAiCorrectionCenter, loadAiCorrections, exportAiCorrections } from './orders-ai-corrections.js?v=20261114-ai-corrections-1';
+import { syncOrderToReceivables, moveOrder } from './store.js?v=20261114-integrity-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js?v=20261016-concise-ui-1';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
@@ -10,7 +11,6 @@ import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, ren
 import { requestOrderRecognition } from './orders-ai-request.js';
 import { bindMissingCustomerEvents, hideMissingCustomerPrompt } from './orders-customers.js?v=20260715-mobile-company-suggestions-1';
 let lastRecognizedOrder = null;
-let aiCorrectionsCache = [];
 let lastAutoPrice = 0;
 let highlightedOrderId = null;
 let pendingOrderMove = null;
@@ -463,79 +463,6 @@ function renderOrderFilters(state) {
   wrap.innerHTML = items.map((status) => `<button class="btn filter-btn ${state.orderStatusFilter === status ? 'active' : ''}" data-status-filter="${status}" type="button">${status}</button>`).join('');
 }
 
-const AI_FIELD_LABELS = {
-  orderNumber: '工單編號',
-  orderDate: '交貨日期',
-  billingCustomer: '客人',
-  upstream: '上游客戶',
-  downstream: '下游客戶',
-  address: '送貨地址',
-  sheetCountText: '數量說明',
-  sheetCount: '計算張數',
-  sizeLength: '天',
-  sizeWidth: '地',
-  sizeUnit: '單位',
-  glossType: '上光種類',
-  totalPrice: '總價',
-};
-
-function correctionRows(correction) {
-  return Object.entries(correction?.changes || {}).map(([field, value]) => ({
-    id: correction.id,
-    field,
-    fieldLabel: AI_FIELD_LABELS[field] || field,
-    wrong: value?.wrong ?? '',
-    correct: value?.correct ?? '',
-    confidence: correction.confidence,
-    reportedAt: correction.reportedAt,
-    reportedBy: correction.reportedBy || '-',
-  }));
-}
-
-function renderAiCorrectionCenter(rows = aiCorrectionsCache) {
-  const body = $('aiCorrectionsTbody');
-  const summary = $('aiCorrectionsSummary');
-  if (!body) return;
-  const flatRows = rows.flatMap(correctionRows);
-  if (summary) summary.textContent = `已記錄 ${rows.length} 筆修正案例，${flatRows.length} 個欄位。`;
-  body.innerHTML = flatRows.length ? flatRows.map((row) => `
-    <tr>
-      <td>${escapeHtml(row.fieldLabel)}</td>
-      <td>${escapeHtml(row.wrong || '-')}</td>
-      <td>${escapeHtml(row.correct || '-')}</td>
-      <td>${row.confidence ? `${Math.round(Number(row.confidence) * 100)}%` : '-'}</td>
-      <td>${row.reportedAt ? new Date(Number(row.reportedAt)).toLocaleString() : '-'}</td>
-      <td>${escapeHtml(row.reportedBy)}</td>
-      <td><button class="btn small ghost" type="button" data-delete-ai-correction="${escapeHtml(row.id)}">刪除</button></td>
-    </tr>`).join('') : '<tr><td colspan="7">目前還沒有 AI 修正紀錄。</td></tr>';
-}
-
-async function loadAiCorrections(state) {
-  if (getOrderModuleSettings(state).showAiTools === false) return;
-  const body = $('aiCorrectionsTbody');
-  if (body) body.innerHTML = '<tr><td colspan="7">正在載入修正紀錄…</td></tr>';
-  const res = await fetch('/api/data/aiCorrections?page=1&pageSize=100', {
-    headers: { Authorization: `Bearer ${state.authToken || ''}` },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  aiCorrectionsCache = data.items || [];
-  renderAiCorrectionCenter();
-}
-
-function exportAiCorrections() {
-  const rows = [['欄位', 'AI 原本辨識', '修正後', '信心度', '回報時間', '回報人']];
-  aiCorrectionsCache.flatMap(correctionRows).forEach((row) => rows.push([
-    row.fieldLabel,
-    row.wrong,
-    row.correct,
-    row.confidence ? `${Math.round(Number(row.confidence) * 100)}%` : '',
-    row.reportedAt ? new Date(Number(row.reportedAt)).toLocaleString() : '',
-    row.reportedBy,
-  ]));
-  downloadCsv('AI-修正中心.csv', rows);
-}
-
 function getOrderSearchKeyword() {
   return ($('orderSearch')?.value || '').trim().toLowerCase();
 }
@@ -963,7 +890,9 @@ export function bindOrderEvents(state, saveState, renderAll) {
         // Send only movement intent; the server uses the latest list and never
         // writes business fields from a stale browser snapshot.
         moveOrder(finished.id, finished.targetId, finished.after)
-          .catch(error => window.alert(`排序未儲存：${error.message}`));
+          .catch(error => window.alert(error.uncertainMove
+            ? '無法確認排序是否已儲存。請先保留其他未儲存的資料，再重新整理並核對順序。'
+            : `排序未儲存：${error.message}`));
       }
       finished.preview.drop(restoreList);
     } else if (!cancelled && !finished.held) {

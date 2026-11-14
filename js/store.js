@@ -69,6 +69,7 @@ export const state = {
   systemEvents: [],
   lineDestinations: [],
   settings: getDefaultSettings(),
+  settingsVersion: null,
   inventoryItems: [],
   pagination: {},
   serverReport: null,
@@ -121,6 +122,7 @@ async function jsonRequest(url, options = {}) {
     if (data?.financeLocked && requestVersion === sessionVersion) { state.financeUntil = 0; window.dispatchEvent(new Event('app:finance-locked')); }
     const error = new Error(data?.error || `HTTP ${res.status}`);
     error.conflict = !!data?.conflict;
+    error.httpStatus = res.status;
     throw error;
   }
   return data;
@@ -480,6 +482,7 @@ function dataKeysForAccount() {
 }
 
 export function hydrateBootstrap(base = {}, source = '登入預載') {
+  state.settingsVersion = base.settingsVersion ?? null;
   state.dashboardSummary = base.dashboardSummary || null;
   state.glossOptions = base.glossOptions || ['PVA光', 'PVB光/油', '耐磨', '壓光', '其他'];
   state.settings = mergeSettings(base.settings || state.settings);
@@ -657,9 +660,17 @@ export function moveOrder(id, targetId, after = false) {
   const operation = saveQueue.then(async () => {
     if (version !== sessionVersion) throw new Error('登入已變更，移動未儲存。');
     setUi('移動儲存中', '同步位置', false);
-    const result = await jsonRequest('/api/orders/move', {
-      method:'POST', headers:headers(true), body:JSON.stringify({id,targetId,after}),
-    });
+    let result;
+    try {
+      result = await jsonRequest('/api/orders/move', {
+        method:'POST', headers:headers(true), body:JSON.stringify({id,targetId,after}),
+      });
+      if (!result || !Array.isArray(result.orders)) throw new Error('回應不完整');
+    } catch (error) {
+      // The server may have committed before a connection or server error.
+      if (!error.httpStatus || error.httpStatus >= 500) error.uncertainMove = true;
+      throw error;
+    }
     if (version !== sessionVersion) return;
     for (const incoming of result.orders || []) {
       const index = state.orders.findIndex(row => row.id === incoming.id);
@@ -689,7 +700,7 @@ export function moveOrder(id, targetId, after = false) {
     setIdleSyncUi('位置已同步');
   });
   saveQueue = operation.catch(error => {
-    if (version === sessionVersion) setUi('移動未儲存',error.message,false);
+    if (version === sessionVersion) setUi(error.uncertainMove ? '移動結果待核對' : '移動未儲存',error.message,false);
   });
   return operation;
 }

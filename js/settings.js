@@ -8,6 +8,7 @@ function ensureSettings(state) {
 
 let activeSettingsModuleId = null;
 let settingsDraft = null;
+let settingsDirty = false;
 const MODULES_WITH_INTERNAL_SETTINGS = ['ordersView', 'customersView', 'tripsView', 'financeView', 'inventoryView'];
 
 function moduleSettingsHtml(settings) {
@@ -132,7 +133,7 @@ function accountPermissionHtml(account) {
     `<label class="permission-chip"><input data-account-module type="checkbox" value="${module.id}" ${allowed.has(module.id) ? 'checked' : ''} /> ${escapeHtml(module.label)}</label>`
   )).join('');
   return `
-    <div class="account-permission-card" data-account-permission-row="${escapeHtml(account.id || account.username)}">
+    <div class="account-permission-card" data-account-permission-row="${escapeHtml(account.id || account.username)}" data-account-version="${escapeHtml(account.accountVersion || '')}">
       <div>
         <strong>${escapeHtml(account.display || account.username)}</strong>
         <p class="sub">${escapeHtml(account.username)}｜${escapeHtml(account.role || 'viewer')}</p>
@@ -431,11 +432,25 @@ export function applyUiSettings(state) {
 
 export function renderSettings(state) {
   const settings = ensureSettings(state);
-  activeSettingsModuleId = null;
+  if (settingsDirty) {
+    // A background refresh must not replace typed values or close the module editor.
+    if (settingsDraft) {
+      applyRuntimeBranding(settingsDraft);
+      updateSettingsPreview(settingsDraft);
+    }
+    return;
+  }
   fillForm(settings);
 }
 
 export function bindSettingsEvents(state, saveState, renderAll) {
+  window.addEventListener?.('app:auth-changed', () => {
+    if (!state.authToken) {
+      settingsDirty = false;
+      settingsDraft = null;
+      activeSettingsModuleId = null;
+    }
+  });
   // Account updates share an endpoint that writes the account list. Keep this
   // tab's refresh/create/permission requests in one lane, without locking orders.
   const accountAction = createBusyAction();
@@ -478,7 +493,9 @@ export function bindSettingsEvents(state, saveState, renderAll) {
 
   const loadAccounts = async () => {
     if (state.userRole !== 'admin' || !$('accountPermissionsList')) return;
+    const token = state.authToken;
     const data = await adminAction({ action: 'list_accounts' });
+    if (!token || state.authToken !== token || state.userRole !== 'admin') return;
     $('accountPermissionsList').innerHTML = (data.accounts || []).map(accountPermissionHtml).join('') || '<p class="sub">目前沒有帳號資料。</p>';
   };
 
@@ -500,6 +517,23 @@ export function bindSettingsEvents(state, saveState, renderAll) {
   runCapacityAction(() => loadCapacity().catch((err) => {
     if ($('capacitySummary')) $('capacitySummary').textContent = `容量檢測失敗：${err.message}`;
   }));
+
+  // The event bindings are installed before login. Load once when an admin
+  // first opens settings, without replacing other accounts' unsaved edits on
+  // subsequent visits or background refreshes.
+  let loadedAccountsToken = null;
+  $('settingsBtn')?.addEventListener('click', () => {
+    const token = state.authToken;
+    if (!token || state.userRole !== 'admin' || token === loadedAccountsToken) return;
+    return runAccountAction($('refreshAccountsBtn'), async () => {
+      try {
+        await loadAccounts();
+        if (state.authToken === token) loadedAccountsToken = token;
+      } catch (err) {
+        if (state.authToken === token && $('accountPermissionsList')) $('accountPermissionsList').textContent = `載入帳號失敗：${err.message}，請按「刷新帳號」重試。`;
+      }
+    });
+  });
 
   $('newAccountRole')?.addEventListener('change', renderNewAccountPermissions);
   $('settingsModulesList')?.addEventListener('click', (e) => {
@@ -536,7 +570,7 @@ export function bindSettingsEvents(state, saveState, renderAll) {
       try {
         const role = row.querySelector('[data-account-role]')?.value || 'viewer';
         const allowedViews = [...row.querySelectorAll('[data-account-module]:checked')].map((input) => input.value);
-        const data = await adminAction({ action: 'update_account_permissions', id: row.dataset.accountPermissionRow, role, allowedViews });
+        const data = await adminAction({ action: 'update_account_permissions', id: row.dataset.accountPermissionRow, expectedVersion: row.dataset.accountVersion || '', role, allowedViews });
         // Refresh only the saved row; keep unfinished edits to other accounts.
         row.outerHTML = accountPermissionHtml(data.account);
         alert('帳號權限已更新。下次登入會套用新權限。');
@@ -679,10 +713,13 @@ export function bindSettingsEvents(state, saveState, renderAll) {
   $('settingsForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     return runSettingsAction(e.currentTarget.querySelector('button[type="submit"]'), async () => {
-      state.settings = collectSettings();
-      state.settings.defaultLandingView = normalizeLandingView(state.settings);
+      const next = collectSettings();
+      next.defaultLandingView = normalizeLandingView(next);
       try {
-        await adminAction({ action: 'update_settings', settings: state.settings });
+        const result = await adminAction({ action: 'update_settings', settings: next, expectedVersion: state.settingsVersion });
+        state.settingsVersion = result.settingsVersion;
+        state.settings = next;
+        settingsDirty = false;
         await saveState();
         renderAll();
         alert('設定已儲存到伺服器，所有裝置會使用最新報價規則。');
@@ -694,9 +731,12 @@ export function bindSettingsEvents(state, saveState, renderAll) {
 
   $('resetSettingsBtn')?.addEventListener('click', async () => {
     return runSettingsAction($('resetSettingsBtn'), async () => {
-      state.settings = getDefaultSettings();
+      const next = getDefaultSettings();
       try {
-        await adminAction({ action: 'update_settings', settings: state.settings });
+        const result = await adminAction({ action: 'update_settings', settings: next, expectedVersion: state.settingsVersion });
+        state.settingsVersion = result.settingsVersion;
+        state.settings = next;
+        settingsDirty = false;
         await saveState();
         renderAll();
         alert('已恢復並同步預設設定。');
@@ -707,12 +747,14 @@ export function bindSettingsEvents(state, saveState, renderAll) {
   });
 
   $('settingsForm')?.addEventListener('input', () => {
+    settingsDirty = true;
     const preview = collectSettings();
     applyRuntimeBranding(preview);
     updateSettingsPreview(preview);
   });
 
   $('settingsForm')?.addEventListener('change', () => {
+    settingsDirty = true;
     const preview = collectSettings();
     updateSettingsPreview(preview);
     if (!activeSettingsModuleId) renderModuleSettingsNavigator(preview);

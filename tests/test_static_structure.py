@@ -482,7 +482,8 @@ class StaticStructureTests(unittest.TestCase):
         self.assertIn('showAiTools: true', shared)
         self.assertIn("showAiTools: !!$('settingsOrderShowAiTools')?.checked", settings)
         self.assertIn("orderSettings.showAiTools === false", orders)
-        self.assertIn("getOrderModuleSettings(state).showAiTools === false", orders)
+        corrections = (ROOT / 'js' / 'orders-ai-corrections.js').read_text(encoding='utf-8')
+        self.assertIn("state.settings?.moduleInternals?.orders?.showAiTools === false", corrections)
 
     def test_order_list_has_compact_responsive_layout(self):
         view = (ROOT / 'views' / 'app-shell.html').read_text(encoding='utf-8')
