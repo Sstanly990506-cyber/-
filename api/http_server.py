@@ -9,6 +9,8 @@ from api.routes import resolve_get_route,resolve_post_route
 from api.service import ApiError,delete_entity_payload,list_entity_payload,upsert_entity_payload
 from api.storage import BASE_DIR
 from api import local_ai
+from api import remember_session
+import json
 SENSITIVE_SUFFIXES={'.db','.sqlite','.sqlite3','.py','.bat','.ps1','.sh','.cmd','.pem','.key'};BLOCKED_PATH_PARTS={'data'};PUBLIC_ROOT=Path(BASE_DIR).resolve()
 def is_sensitive_path(path):return any(path.split('?',1)[0].lower().endswith(s) for s in SENSITIVE_SUFFIXES)
 def is_blocked_static_path(path):
@@ -48,9 +50,20 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         try:json_response(self,200,op(*args))
         except ApiError as err:json_response(self,err.status,err.payload)
         except Exception as err:json_response(self,500,{'ok':False,'error':str(err)})
+    def session_response(self,status,payload,cookie=None):
+        body=json.dumps(payload,ensure_ascii=False).encode('utf-8')
+        self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8')
+        self.send_header('Content-Length',str(len(body)))
+        if cookie:self.send_header('Set-Cookie',cookie)
+        self.end_headers();self.wfile.write(body)
     def do_GET(self):
         if not self.local_ai_guard():return
         p=urlparse(self.path);path=p.path or '/';q=parse_qs(p.query);token=get_bearer_token(self)
+        if path=='/api/session/restore':
+            try:self.session_response(200,remember_session.restore(remember_session.read_cookie(self.headers.get('Cookie'))))
+            except ApiError as err:self.session_response(err.status,err.payload,remember_session.clear_cookie_header())
+            except Exception as err:self.session_response(500,{'ok':False,'error':str(err)})
+            return
         route=resolve_get_route(path,token,q)
         if route:
             op,args=route;self.send_service_response(op,*args)
@@ -65,6 +78,15 @@ class AppRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.local_ai_guard():return
         path=urlparse(self.path).path or '/';token=get_bearer_token(self)
+        if path in ('/api/session/remember','/api/session/logout'):
+            read_json_body(self)
+            try:
+                remember_session.validate_same_origin(self.headers)
+                cookie=remember_session.remember(token) if path.endswith('/remember') else remember_session.clear_cookie_header()
+                self.session_response(200,{'ok':True},cookie)
+            except ApiError as err:self.session_response(err.status,err.payload)
+            except Exception as err:self.session_response(500,{'ok':False,'error':str(err)})
+            return
         if path=='/api/line/webhook':
             length=int(self.headers.get('Content-Length') or 0);body=self.rfile.read(length) if length else b''
             try:json_response(self,200,handle_line_webhook(body,self.headers.get('X-Line-Signature','')))

@@ -25,7 +25,7 @@ import { renderNotifications, bindNotificationEvents, refreshLineStatus } from '
 function proactiveNotify() {
   return buildSystemAlerts();
 }
-const APP_BUILD = '20261114-login-speed-1';
+const APP_BUILD = '20261114-login-speed-2';
 import { initializeLocalAi } from './local-ai.js?v=20261114-integrity-1';
 const views = ['loginView', 'dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView', 'settingsView'];
 let internalViewsFragment = null;
@@ -35,6 +35,31 @@ let financeUnlockedUntil = 0;
 let activeViewId = 'loginView';
 let loginInFlight = false;
 let loginAttemptId = 0;
+const REMEMBER_MARKER_KEY = 'sanqingRememberEnabled';
+function rememberMarker() {
+  try { return localStorage.getItem(REMEMBER_MARKER_KEY) === '1'; } catch { return null; }
+}
+function setRememberMarker(value) {
+  try {
+    if (value) localStorage.setItem(REMEMBER_MARKER_KEY, '1');
+    else localStorage.removeItem(REMEMBER_MARKER_KEY);
+    return true;
+  } catch { return false; }
+}
+// Non-sensitive marker only; credentials are never placed in JS storage.
+let rememberedCookiePossible = rememberMarker() !== false;
+let logoutInFlight = false;
+const LOGOUT_PENDING_KEY = 'sanqingLogoutPending';
+function logoutPending() {
+  try { return localStorage.getItem(LOGOUT_PENDING_KEY) === '1'; } catch { return false; }
+}
+function setLogoutPending(value) {
+  try {
+    if (value) localStorage.setItem(LOGOUT_PENDING_KEY, '1');
+    else localStorage.removeItem(LOGOUT_PENDING_KEY);
+    return true;
+  } catch { return false; }
+}
 
 const ROLE_PERMS = {
   admin: ['dashboardView', 'ordersView', 'customersView', 'tripsView', 'opsCenterView', 'inventoryView', 'notificationsView', 'financeView', 'auditView'],
@@ -111,6 +136,64 @@ async function callUserApi(payload) {
     throw err;
   }
   return { account: data.account, token: data.token || '', bootstrap: data.bootstrap || null };
+}
+
+async function rememberedSessionRequest(action, token = '') {
+  const isRestore = action === 'restore';
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(`/api/session/${action}`, {
+      method: isRestore ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store',
+      headers: isRestore ? {} : { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      ...(isRestore ? {} : { body: '{}' }), signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok) {
+      const error = new Error(data.error || `HTTP ${response.status}`); error.status = response.status; throw error;
+    }
+    return data;
+  } finally { window.clearTimeout(timer); }
+}
+
+function enterAuthenticatedSession(account, token, bootstrap) {
+  resetAuthenticatedSync();
+  setAuthToken(token);
+  state.user = account.display || account.username;
+  state.userRole = account.role || 'viewer';
+  state.allowedViews = Array.isArray(account.allowedViews) ? account.allowedViews : null;
+  if (bootstrap) hydrateBootstrap(bootstrap, '登入預載');
+  mountInternalViews();
+  const prefix = state.settings?.welcomePrefix || '你好';
+  $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
+  const landing = state.settings?.defaultLandingView || 'dashboardView';
+  showView(hasViewPermission(landing) ? landing : 'dashboardView');
+}
+
+async function restoreRememberedSession() {
+  if (!logoutPending() && rememberMarker() !== true) return;
+  const attemptId = ++loginAttemptId;
+  loginInFlight = true;
+  setLoginBusy(true);
+  try {
+    if (logoutPending()) {
+      // A reload or network loss interrupted logout. Clear the cookie first;
+      // never restore it, even when it is still valid on the server.
+      await rememberedSessionRequest('logout');
+      if (attemptId === loginAttemptId) { rememberedCookiePossible = false; setLogoutPending(false); setRememberMarker(false); }
+      return;
+    }
+    const session = await rememberedSessionRequest('restore');
+    if (attemptId !== loginAttemptId) return;
+    rememberedCookiePossible = true;
+    enterAuthenticatedSession(session.account, session.token, session.bootstrap);
+    startAuthenticatedSync().catch(err => applySyncUi({ badgeText: '同步失敗', detailText: err?.message || '背景載入失敗', ok: false }));
+  } catch (error) {
+    if (attemptId !== loginAttemptId) return;
+    if (error.status === 401 || error.status === 403) { rememberedCookiePossible = false; setRememberMarker(false); }
+  } finally {
+    if (attemptId === loginAttemptId) { loginInFlight = false; setLoginBusy(false); }
+  }
 }
 
 function renderDashboardNavCards() {
@@ -469,6 +552,7 @@ function bindCoreEvents() {
     if (loginInFlight) return;
     const username = $('username').value.trim();
     const password = $('password').value;
+    const remember = !!$('rememberLogin')?.checked;
     if (!username || !password) return alert('請輸入帳號與密碼');
 
     let account = null;
@@ -482,6 +566,24 @@ function bindCoreEvents() {
       account = session.account;
       token = session.token;
       bootstrap = session.bootstrap;
+      if (remember) {
+        // Mark cleanup before touching the cookie. If the request is lost or a
+        // different account's old cookie survives, reload must not restore it.
+        if (!setLogoutPending(true)) throw new Error('瀏覽器未允許儲存裝置設定，無法記住登入；請取消勾選後重新登入。');
+        if (!setRememberMarker(true)) throw new Error('瀏覽器未允許儲存裝置設定，無法記住登入；請取消勾選後重新登入。');
+        await rememberedSessionRequest('remember', token);
+        const verified = await rememberedSessionRequest('restore');
+        if (verified.token !== token) throw new Error('瀏覽器未接受這次的記住登入，請檢查瀏覽器設定後重試。');
+        rememberedCookiePossible = true;
+        setLogoutPending(false);
+      } else if (rememberedCookiePossible || logoutPending()) {
+        // An old or unreachable cookie must never silently restore a different
+        // account after a later login that did not select remember.
+        await rememberedSessionRequest('logout');
+        rememberedCookiePossible = false;
+        setLogoutPending(false);
+        setRememberMarker(false);
+      }
     } catch (err) {
       if (attemptId === loginAttemptId) {
         loginInFlight = false;
@@ -492,17 +594,7 @@ function bindCoreEvents() {
     }
 
     if (attemptId !== loginAttemptId) return;
-    resetAuthenticatedSync();
-    setAuthToken(token);
-    state.user = account.display || account.username;
-    state.userRole = account.role || 'viewer';
-    state.allowedViews = Array.isArray(account.allowedViews) ? account.allowedViews : null;
-    if (bootstrap) hydrateBootstrap(bootstrap, '登入預載');
-    mountInternalViews();
-    const prefix = state.settings?.welcomePrefix || '你好';
-    $('welcomeText').textContent = `${prefix}，${state.user}（${state.userRole}）`;
-    const landing = state.settings?.defaultLandingView || 'dashboardView';
-    showView(hasViewPermission(landing) ? landing : 'dashboardView');
+    enterAuthenticatedSession(account, token, bootstrap);
     loginInFlight = false;
     setLoginBusy(false);
     startAuthenticatedSync().then(() => {
@@ -522,7 +614,18 @@ function bindCoreEvents() {
     button.addEventListener('click', () => showView(button.dataset.openView));
   });
 
-  $('logoutBtn')?.addEventListener('click', () => {
+  $('logoutBtn')?.addEventListener('click', async () => {
+    if (logoutInFlight) return;
+    logoutInFlight = true;
+    let pendingCleanup = false;
+    if (rememberedCookiePossible || logoutPending()) {
+      const marked = setLogoutPending(true);
+      try { await rememberedSessionRequest('logout'); rememberedCookiePossible = false; setLogoutPending(false); setRememberMarker(false); }
+      catch {
+        if (!marked) { logoutInFlight = false; return alert('無法清除這台裝置的記住登入，請確認網路後再按登出。'); }
+        pendingCleanup = true;
+      }
+    }
     appendSystemEvent(`使用者登出：${state.user || 'unknown'}`, 'info', { role: state.userRole || 'viewer' });
     saveState();
     loginAttemptId += 1;
@@ -536,6 +639,8 @@ function bindCoreEvents() {
     setAuthToken(null);
     showView('loginView');
     unmountInternalViews();
+    logoutInFlight = false;
+    if (pendingCleanup) alert('已在此頁登出。網路恢復後會清除記住登入；完成前不會自動登入。');
   });
 
   document.querySelectorAll('[data-back]').forEach((btn) => btn.addEventListener('click', () => showView('dashboardView')));
@@ -609,6 +714,7 @@ try {
   window.__appBootstrapped = true;
   unmountInternalViews();
   showView('loginView');
+  restoreRememberedSession();
 
   setInterval(() => {
     if (!$('dashboardView')?.classList.contains('hidden')) renderDashboard();

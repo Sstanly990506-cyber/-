@@ -125,8 +125,8 @@ def dashboard_summary(account):
     for entity in entities:
         for key,source in fields[entity].items():summary[key]=counts.get(entity,{}).get(source,0)
     return summary
-def build_bootstrap_payload(account,include_pages=True):
-    source=filter_state_for_account(read_state(),account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['settingsVersion']=settings_version(source.get('settings'));payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True
+def build_bootstrap_payload(account,include_pages=True,source_state=None):
+    source=filter_state_for_account(read_state() if source_state is None else source_state,account);payload={key:([] if isinstance(value,list) else value) for key,value in DEFAULT_APP_STATE.items()};payload['glossOptions']=source.get('glossOptions') or DEFAULT_APP_STATE['glossOptions'];payload['settings']=source.get('settings');payload['settingsVersion']=settings_version(source.get('settings'));payload['syncTick']=source.get('syncTick') or 0;payload['scalableDataApi']=True
     if include_pages:
         try:
             payload['initialPages']=first_pages_for_entities(bootstrap_entities_for_account(account),100)
@@ -432,10 +432,10 @@ def user_action_payload(token,payload):
     if action=='login':
         username=str(payload.get('username') or '').strip();password=str(payload.get('password') or '')
         if not username or not password:raise ApiError('missing login fields',400)
-        result=authenticate_user_with_session(username,password)
+        result=authenticate_user_with_session(username,password,include_state=True)
         if not result:raise ApiError('invalid credentials',401)
-        account,session=result
-        return {'ok':True,'account':account,'token':session,'bootstrap':build_bootstrap_payload(account,include_pages=False)}
+        account,session,source_state=result
+        return {'ok':True,'account':account,'token':session,'bootstrap':build_bootstrap_payload(account,include_pages=False,source_state=source_state)}
     if action=='verify_finance_password':
         account=require_account(token)
         if not account_can_view(account,'financeView'):raise ApiError('finance role required',403)

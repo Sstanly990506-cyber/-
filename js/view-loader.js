@@ -1,6 +1,6 @@
 window.__appBootstrapped = false;
 
-const APP_ASSET_VERSION = '20261114-login-speed-1';
+const APP_ASSET_VERSION = '20261114-login-speed-2';
 const mount = document.getElementById('appMount');
 const apiWarmup = fetch('/api/health', { cache: 'no-store' }).catch(() => null);
 

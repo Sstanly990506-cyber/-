@@ -9,6 +9,7 @@ from api.line_bot import LineBotError, handle_line_webhook
 from api.service import ApiError, delete_entity_payload, list_entity_payload, upsert_entity_payload
 from api.storage import BASE_DIR, DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
 from api import local_ai
+from api import remember_session
 
 if os.environ.get('VERCEL') == '1':
     local_ai.configure_production()
@@ -63,6 +64,42 @@ if app is not None:
             return jsonify(err.payload), err.status
         except Exception as err:
             return jsonify({'ok': False, 'error': str(err)}), 500
+
+    @app.post('/api/session/remember')
+    def remember_browser_session():
+        try:
+            remember_session.validate_same_origin(request.headers)
+            cookie = remember_session.remember(bearer_token())
+            response = jsonify({'ok': True})
+            response.headers.add('Set-Cookie', cookie)
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except ApiError as err:
+            return jsonify(err.payload), err.status
+
+    @app.get('/api/session/restore')
+    def restore_browser_session():
+        try:
+            token = request.cookies.get(remember_session.COOKIE_NAME, '')
+            response = jsonify(remember_session.restore(token))
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except ApiError as err:
+            response = jsonify(err.payload)
+            response.headers['Cache-Control'] = 'no-store'
+            response.headers.add('Set-Cookie', remember_session.clear_cookie_header())
+            return response, err.status
+
+    @app.post('/api/session/logout')
+    def clear_browser_session():
+        try:
+            remember_session.validate_same_origin(request.headers)
+            response = jsonify({'ok': True})
+            response.headers.add('Set-Cookie', remember_session.clear_cookie_header())
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except ApiError as err:
+            return jsonify(err.payload), err.status
 
     @app.post('/api/line/webhook')
     def line_webhook():

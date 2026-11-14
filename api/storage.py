@@ -8,7 +8,7 @@ import hmac
 import secrets
 import base64
 from pathlib import Path
-from threading import Lock
+from threading import Lock, RLock
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 try:
@@ -90,6 +90,7 @@ DB_INIT_LOCK = Lock()
 DB_INITIALIZED = False
 STORAGE_READY = False
 STORAGE_INITIALIZING = False
+STORAGE_INIT_LOCK = RLock()
 LOCAL_FILE_LOCK = Lock()
 USERS_FILE_LOCK = Lock()
 RUNTIME_BOOTSTRAP_PASSWORDS = {}
@@ -283,17 +284,15 @@ def ensure_postgres_storage():
             return
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    '''
+                # These schema statements have no parameters and belong to the
+                # same transaction. Sending them together avoids four extra
+                # database round trips whenever a server process starts cold.
+                cur.execute('''
                     CREATE TABLE IF NOT EXISTS app_state (
                         id SMALLINT PRIMARY KEY CHECK (id = 1),
                         state_json JSONB NOT NULL,
                         updated_at BIGINT NOT NULL
-                    )
-                    '''
-                )
-                cur.execute(
-                    '''
+                    );
                     CREATE TABLE IF NOT EXISTS app_users (
                         id TEXT PRIMARY KEY,
                         username TEXT NOT NULL UNIQUE,
@@ -303,20 +302,15 @@ def ensure_postgres_storage():
                         role TEXT NOT NULL,
                         created_at TEXT NOT NULL,
                         source TEXT NOT NULL
-                    )
-                    '''
-                )
-                cur.execute('ALTER TABLE app_users ADD COLUMN IF NOT EXISTS allowed_views JSONB')
-                cur.execute("ALTER TABLE app_users ADD COLUMN IF NOT EXISTS session_version TEXT NOT NULL DEFAULT ''")
-                cur.execute(
-                    '''
+                    );
+                    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS allowed_views JSONB;
+                    ALTER TABLE app_users ADD COLUMN IF NOT EXISTS session_version TEXT NOT NULL DEFAULT '';
                     CREATE TABLE IF NOT EXISTS app_secrets (
                         secret_key TEXT PRIMARY KEY,
                         secret_hash TEXT NOT NULL,
                         updated_at BIGINT NOT NULL
-                    )
-                    '''
-                )
+                    );
+                ''')
                 cur.execute(
                     '''
                     INSERT INTO app_state (id, state_json, updated_at)
@@ -834,7 +828,7 @@ def register_user(username: str, password: str, display: str, role: str = 'viewe
     return account_for_permissions(normalized)
 
 
-def _authenticate_user_record(username: str, password: str):
+def _authenticate_user_record(username: str, password: str, *, include_state=False):
     key = normalize_username(username)
     if not key:
         return None
@@ -842,25 +836,39 @@ def _authenticate_user_record(username: str, password: str):
         ensure_storage()
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    '''
-                    SELECT id, username, username_key, password_hash, display_name, role, created_at, source, allowed_views, session_version
-                    FROM app_users
-                    WHERE username_key = %s
-                    LIMIT 1
-                    ''',
-                    (key,),
-                )
+                if include_state:
+                    # Read credentials and login configuration in one database
+                    # round trip, from the same PostgreSQL snapshot. The state
+                    # is never exposed until after password verification.
+                    cur.execute('''SELECT u.id, u.username, u.username_key, u.password_hash,
+                        u.display_name, u.role, u.created_at, u.source, u.allowed_views,
+                        u.session_version, s.state_json AS login_state_json,
+                        s.updated_at AS login_state_updated_at
+                        FROM app_users AS u LEFT JOIN app_state AS s ON s.id = 1
+                        WHERE u.username_key = %s LIMIT 1''', (key,))
+                else:
+                    cur.execute('''SELECT id, username, username_key, password_hash, display_name,
+                        role, created_at, source, allowed_views, session_version
+                        FROM app_users WHERE username_key = %s LIMIT 1''', (key,))
                 row = cur.fetchone()
         if not row or not verify_password(password, row.get('password_hash') or ''):
             return None
-        return _user_from_db(row)
+        user = _user_from_db(row)
+        if not include_state:
+            return user
+        raw_state = row.get('login_state_json')
+        if raw_state is None:
+            raise RuntimeError('設定資料不存在')
+        state = dict(raw_state) if isinstance(raw_state, dict) else json.loads(raw_state)
+        state.pop('users', None)
+        state['serverUpdatedAt'] = int(row.get('login_state_updated_at') or 0)
+        return user, state
     users = read_users()
     for user in users:
         if user['usernameKey'] != key:
             continue
         if verify_password(password, user['password']):
-            return user
+            return (user, read_state()) if include_state else user
         return None
     return None
 
@@ -870,33 +878,38 @@ def authenticate_user(username: str, password: str):
     return sanitize_account_public(user) if user else None
 
 
-def authenticate_user_with_session(username: str, password: str):
-    user = _authenticate_user_record(username, password)
-    if not user:
+def authenticate_user_with_session(username: str, password: str, *, include_state=False):
+    result = _authenticate_user_record(username, password, include_state=include_state)
+    if not result:
         return None
+    user, state = result if include_state else (result, None)
     # If credentials change after verification, this snapshot produces an old
     # revision; verification of subsequent requests will reject the token.
-    return sanitize_account_public(user), _create_session_token_for_user(user)
+    authenticated = (sanitize_account_public(user), _create_session_token_for_user(user))
+    return (*authenticated, state) if include_state else authenticated
 
 
 def ensure_storage():
     global STORAGE_READY, STORAGE_INITIALIZING
     if STORAGE_READY:
         return
-    if STORAGE_INITIALIZING:
-        return
-
-    STORAGE_INITIALIZING = True
-    try:
-        if DATABASE_URL:
-            ensure_postgres_storage()
-        else:
-            ensure_local_storage()
-        migrate_legacy_users_once()
-        ensure_builtin_users()
-        STORAGE_READY = True
-    finally:
-        STORAGE_INITIALIZING = False
+    # Initialization calls storage helpers recursively in the same thread.
+    # Other requests must wait until initialization has finished, rather
+    # than treating an in-progress startup as ready.
+    with STORAGE_INIT_LOCK:
+        if STORAGE_READY or STORAGE_INITIALIZING:
+            return
+        STORAGE_INITIALIZING = True
+        try:
+            if DATABASE_URL:
+                ensure_postgres_storage()
+            else:
+                ensure_local_storage()
+            migrate_legacy_users_once()
+            ensure_builtin_users()
+            STORAGE_READY = True
+        finally:
+            STORAGE_INITIALIZING = False
 
 
 def read_state():
