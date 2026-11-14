@@ -6,6 +6,7 @@ from api.records import RecordConflict, dashboard_counts, get_record, write_reco
 from api.ai_orders import OrderRecognitionError, add_recognition_review, get_order_recognition_result, get_order_recognition_status, normalize_recognized_order, recognize_order_image
 from api.storage import DEFAULT_APP_STATE, VALID_ROLES, authenticate_user, change_finance_module_password, create_session_token, ensure_storage, get_storage_mode, normalize_allowed_views, read_state, read_users, register_user, sanitize_account_public, verify_finance_module_password, verify_session_token, write_state, write_users
 from api.storage import AccountConflict, account_for_permissions, update_user_permissions
+from api.storage import authenticate_user_with_session
 from api.trip_optimizer import optimize_trip
 from api.pricing import calculate_quote, classify_pricing_tier_with_bounds, normalize_coating_type, normalize_pricing_tier
 from api.settings_store import settings_version, update_settings_if_version
@@ -431,9 +432,10 @@ def user_action_payload(token,payload):
     if action=='login':
         username=str(payload.get('username') or '').strip();password=str(payload.get('password') or '')
         if not username or not password:raise ApiError('missing login fields',400)
-        account=authenticate_user(username,password)
-        if not account:raise ApiError('invalid credentials',401)
-        return {'ok':True,'account':account,'token':create_session_token(account),'bootstrap':build_bootstrap_payload(account,include_pages=False)}
+        result=authenticate_user_with_session(username,password)
+        if not result:raise ApiError('invalid credentials',401)
+        account,session=result
+        return {'ok':True,'account':account,'token':session,'bootstrap':build_bootstrap_payload(account,include_pages=False)}
     if action=='verify_finance_password':
         account=require_account(token)
         if not account_can_view(account,'financeView'):raise ApiError('finance role required',403)

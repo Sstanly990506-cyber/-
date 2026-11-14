@@ -549,7 +549,7 @@ class ServiceTests(unittest.TestCase):
     def test_login_returns_session(self):
         account = {'username': 'ops', 'display': 'Ops', 'role': 'ops'}
         bootstrap = {'scalableDataApi': True}
-        with patch('api.service.authenticate_user', return_value=account), patch('api.service.create_session_token', return_value='token'), patch('api.service.build_bootstrap_payload', return_value=bootstrap) as build_bootstrap:
+        with patch('api.service.authenticate_user_with_session', return_value=(account, 'token')), patch('api.service.build_bootstrap_payload', return_value=bootstrap) as build_bootstrap:
             result = user_action_payload('', {'action': 'login', 'username': 'ops', 'password': 'secret'})
         self.assertEqual(result['token'], 'token')
         self.assertEqual(result['account'], account)

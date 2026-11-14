@@ -506,12 +506,17 @@ def _session_user(username):
 
 
 def create_session_token(account: dict, *, finance_unlocked=False) -> str:
-    now = int(time.time())
     user = _session_user(account.get('username'))
     if not user:
         raise ValueError('account no longer exists')
+    return _create_session_token_for_user(user, finance_unlocked=finance_unlocked)
+
+
+def _create_session_token_for_user(user: dict, *, finance_unlocked=False) -> str:
+    """Issue a token using an internally obtained, authenticated user snapshot."""
+    now = int(time.time())
     payload = {
-        'sub': account.get('username') or '',
+        'sub': user.get('username') or '',
         'revision': _session_revision(user),
         'financeUntil': now + 15 * 60 if finance_unlocked else 0,
         'financeRevision': _finance_revision() if finance_unlocked else '',
@@ -829,7 +834,7 @@ def register_user(username: str, password: str, display: str, role: str = 'viewe
     return account_for_permissions(normalized)
 
 
-def authenticate_user(username: str, password: str):
+def _authenticate_user_record(username: str, password: str):
     key = normalize_username(username)
     if not key:
         return None
@@ -849,23 +854,29 @@ def authenticate_user(username: str, password: str):
                 row = cur.fetchone()
         if not row or not verify_password(password, row.get('password_hash') or ''):
             return None
-        return sanitize_account_public({
-            'id': row.get('id'),
-            'username': row.get('username'),
-            'display': row.get('display_name'),
-            'role': row.get('role'),
-            'allowedViews': row.get('allowed_views'),
-            'sessionVersion': row.get('session_version') or '',
-            'createdAt': row.get('created_at'),
-        })
+        return _user_from_db(row)
     users = read_users()
     for user in users:
         if user['usernameKey'] != key:
             continue
         if verify_password(password, user['password']):
-            return sanitize_account_public(user)
+            return user
         return None
     return None
+
+
+def authenticate_user(username: str, password: str):
+    user = _authenticate_user_record(username, password)
+    return sanitize_account_public(user) if user else None
+
+
+def authenticate_user_with_session(username: str, password: str):
+    user = _authenticate_user_record(username, password)
+    if not user:
+        return None
+    # If credentials change after verification, this snapshot produces an old
+    # revision; verification of subsequent requests will reject the token.
+    return sanitize_account_public(user), _create_session_token_for_user(user)
 
 
 def ensure_storage():
