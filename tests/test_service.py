@@ -517,17 +517,18 @@ class ServiceTests(unittest.TestCase):
         from api import line_bot
         with patch('api.line_bot._active_destinations', return_value=[]):
             payload = line_bot.line_status_payload()
-        self.assertEqual(payload['assistantVersion'], '20260717-customer-portal-1')
+        self.assertEqual(payload['assistantVersion'], line_bot.LINE_ASSISTANT_VERSION)
         self.assertNotIn('accessToken', payload)
         self.assertNotIn('channelSecret', payload)
 
     def test_admin_can_configure_customer_line_destination(self):
         destination = {'id': 'G1', 'destinationId': 'G1', 'type': 'group', 'active': True}
-        with patch('api.service.verify_session_token', return_value={'username': 'admin', 'role': 'admin'}), patch('api.service.list_records', return_value={'items': [destination]}), patch('api.service.upsert_record', return_value={'ok': True, 'id': 'G1'}) as upsert:
+        with patch('api.service.verify_session_token', return_value={'username': 'admin', 'role': 'admin'}), patch('api.service.get_record', return_value={**destination, '_updatedAt': 17}), patch('api.service.write_record_batch', return_value={'ok': True}) as upsert:
             result = configure_line_destination_payload('token', {'id': 'G1', 'accessMode': 'customer', 'customerName': '富盛印刷'})
         self.assertTrue(result['ok'])
         self.assertEqual(result['destination']['customerName'], '富盛印刷')
-        self.assertEqual(upsert.call_args.args[2]['accessMode'], 'customer')
+        self.assertEqual(upsert.call_args.args[0][0][2]['accessMode'], 'customer')
+        self.assertEqual(upsert.call_args.kwargs['expected_versions'], {('lineDestinations', 'G1'): 17})
 
     def test_non_admin_cannot_configure_line_destination(self):
         with patch('api.service.verify_session_token', return_value={'username': 'ops', 'role': 'ops'}):

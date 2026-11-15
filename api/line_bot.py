@@ -33,7 +33,7 @@ LINE_REPLY_URL = 'https://api.line.me/v2/bot/message/reply'
 LINE_PUSH_URL = 'https://api.line.me/v2/bot/message/push'
 OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
 LINE_DESTINATION_ENTITY = 'lineDestinations'
-LINE_ASSISTANT_VERSION = '20260717-customer-portal-1'
+LINE_ASSISTANT_VERSION = '20261115-customer-portal-2'
 DONE_STATUS = '已完成'
 INTERNAL_ACCESS_MODE = 'internal'
 CUSTOMER_ACCESS_MODE = 'customer'
@@ -78,7 +78,7 @@ def line_status_payload():
                 'customerName': str(row.get('customerName') or '').strip(),
                 'lastSeenAt': row.get('lastSeenAt') or '',
             }
-            for row in destinations[:20]
+            for row in destinations
         ],
     }
 

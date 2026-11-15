@@ -384,12 +384,14 @@ def configure_line_destination_payload(token,payload):
     if not destination_id:raise ApiError('missing destination id',400)
     if access_mode not in {'internal','customer'}:raise ApiError('invalid LINE access mode',400)
     if access_mode=='customer' and not customer_name:raise ApiError('customer group requires customer name',400)
-    rows=list_records('lineDestinations',1,100).get('items') or []
-    current=next((row for row in rows if str(row.get('destinationId') or row.get('id') or '')==destination_id),None)
+    current=get_record('lineDestinations',destination_id)
     if not current:raise ApiError('LINE destination not found',404)
-    updated={**current,'accessMode':access_mode,'customerName':customer_name if access_mode=='customer' else ''}
-    result=upsert_record('lineDestinations',str(current.get('id') or destination_id),updated)
-    return {'ok':True,'destination':{'id':result.get('id'),'accessMode':access_mode,'customerName':updated.get('customerName') or ''}}
+    version=int(current.get('_updatedAt') or 0)
+    updated={key:value for key,value in current.items() if key != '_updatedAt'}
+    updated.update(accessMode=access_mode,customerName=customer_name if access_mode=='customer' else '')
+    try:write_record_batch([('lineDestinations',destination_id,updated)],expected_versions={('lineDestinations',destination_id):version})
+    except RecordConflict as err:raise ApiError('群組設定已更新，請重新檢查後再儲存。',409,conflict=True) from err
+    return {'ok':True,'destination':{'id':destination_id,'accessMode':access_mode,'customerName':updated.get('customerName') or ''}}
 def send_line_payload(token,payload):
     account=require_account(token)
     if not account_can_view(account,'notificationsView'):raise ApiError('permission denied',403)

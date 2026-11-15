@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api import line_bot, records, storage
+from api import line_bot, records, service, storage
 
 
 class CustomerWebhookIntegrationTests(unittest.TestCase):
@@ -60,3 +60,22 @@ class CustomerWebhookIntegrationTests(unittest.TestCase):
         self.assertIn('尚未綁定', self.posts[-1]['messages'][0]['text'])
         self.assertEqual(records.get_record('lineDestinations', 'G2')['customerName'], '')
         self.assertEqual(len(records.all_records('events')), 2)
+
+    def test_all_groups_are_visible_and_an_older_group_can_be_bound(self):
+        for index in range(105):
+            group = f'G{index + 1000}'
+            records.upsert_record('lineDestinations', group, {'id':group, 'destinationId':group, 'type':'group', 'active':True})
+        status = line_bot.line_status_payload()
+        self.assertEqual(status['destinationCount'], 106)
+        self.assertEqual(len(status['destinations']), 106)
+        with patch.object(service, 'verify_session_token', return_value={'role':'admin'}):
+            service.configure_line_destination_payload('token', {'id':'G1', 'accessMode':'customer', 'customerName':'重新指定公司'})
+        self.assertEqual(records.get_record('lineDestinations', 'G1')['customerName'], '重新指定公司')
+
+    def test_conflicting_group_binding_is_rejected(self):
+        with patch.object(service, 'verify_session_token', return_value={'role':'admin'}), \
+                patch.object(service, 'write_record_batch', side_effect=records.RecordConflict('conflict')):
+            with self.assertRaises(service.ApiError) as raised:
+                service.configure_line_destination_payload('token', {'id':'G1', 'accessMode':'customer', 'customerName':'另一家公司'})
+        self.assertEqual(raised.exception.status, 409)
+        self.assertEqual(records.get_record('lineDestinations', 'G1')['customerName'], '測試-公司')
