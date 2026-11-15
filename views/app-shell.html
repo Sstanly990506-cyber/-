@@ -494,10 +494,17 @@
           <div class="section-head">
             <div>
               <h4>聊天室資料權限</h4>
-              <p class="sub">客戶群組只能查看指定客戶自己的工單編號、交貨日期與狀態；內部資料與主動提醒不會送到客戶群。</p>
+              <p class="sub">客戶群組只能查看指定客戶自己的工單編號、品名與狀態；內部資料與主動提醒不會送到客戶群。</p>
             </div>
           </div>
           <div id="lineDestinationSettings" class="stack-list"><p class="sub">重新檢查後顯示已綁定聊天室。</p></div>
+        </article>
+        <article class="card">
+          <div class="section-head">
+            <div><h3>LINE 客戶查詢待辦</h3><p class="sub">請員工在 LINE 群組回覆，完成後標記已處理。</p></div>
+            <label>顯示<select id="lineTaskFilter"><option value="pending">待處理</option><option value="done">已處理</option></select></label>
+          </div>
+          <div id="lineTaskList" class="stack-list" aria-live="polite">載入中…</div>
         </article>
         <article class="card">
           <h3>最新通知與系統事件</h3>

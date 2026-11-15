@@ -36,7 +36,7 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(line_post.call_args.args[0], 'https://api.line.me/v2/bot/message/reply')
         message = line_post.call_args.args[1]['messages'][0]
         self.assertIn('quickReply', message)
-        self.assertIn('工單排程', [item['action']['label'] for item in message['quickReply']['items']])
+        self.assertIn('未完成工單', [item['action']['label'] for item in message['quickReply']['items']])
         self.assertIn('預設鎖定為客戶查詢', message['text'])
 
     def test_line_query_requires_bound_destination(self):
@@ -251,7 +251,7 @@ class ServiceTests(unittest.TestCase):
         self.assertNotIn('秘密廠商', message['text'])
         self.assertNotIn('秘密地址', message['text'])
         labels = [item['action']['label'] for item in message['quickReply']['items']]
-        self.assertEqual(labels, ['工單排程', '查工單', '今天交貨', '明天交貨', '使用說明'])
+        self.assertEqual(labels, ['WO-FS', '未完成工單', '已完成工單', '已送出工單'])
 
     def test_line_customer_group_shows_buttons_when_message_is_only_mention(self):
         payload = {
@@ -281,7 +281,7 @@ class ServiceTests(unittest.TestCase):
         destination = {'type': 'group', 'accessMode': 'customer', 'customerName': '富盛印刷'}
         with patch('api.line_bot._is_active_destination', return_value=True), patch('api.line_bot._interpret_query_with_ai') as ai_query:
             reply = line_bot._build_reply_text('應收欠款多少', 'GCUSTOMER', 'group', destination)
-        self.assertIn('只能查看貴公司的工單編號、交貨日期與狀態', reply)
+        self.assertIn('只能查看貴公司的工單編號、品名與狀態', reply)
         ai_query.assert_not_called()
 
     def test_internal_push_notifications_are_never_sent_to_customer_groups(self):

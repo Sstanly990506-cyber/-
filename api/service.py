@@ -171,6 +171,14 @@ def save_entity_record(account,entity,record_id,payload,require_version=False):
         raise ApiError('排序必須整批儲存，請重新整理網站後再拖移排序。',409,conflict=True)
     if entity == 'orders' and previous:
         payload={**previous,**payload}
+    if entity == 'orders':
+        # Existing legacy orders may have no trustworthy creation date. Never
+        # invent one during an edit, and never allow a client to change it.
+        payload.pop('createdAt',None)
+        if previous:
+            if 'createdAt' in previous:payload['createdAt']=previous['createdAt']
+        else:
+            payload['createdAt']=datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00','Z')
     if entity == 'orders' and 'orderNumber' in payload:
         payload['orderNumber']=str(payload['orderNumber'] or '').strip()
     if entity == 'orders' and payload.get('actualCost') is not None:
@@ -205,7 +213,7 @@ def save_entity_record(account,entity,record_id,payload,require_version=False):
                         'user':account.get('display') or account.get('username'),'device':'工單 API',
                     }))
         result=write_record_batch(writes,linked_deletes,expected_versions=guards,unique_orders=True)
-        return {**result,'id':record_id}
+        return {**result,'id':record_id,**({'createdAt':payload['createdAt']} if 'createdAt' in payload else {})}
     except RecordConflict as err:raise ApiError(str(err),409,conflict=True) from err
     except ValueError as err:raise ApiError(str(err),400) from err
 

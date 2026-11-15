@@ -572,6 +572,13 @@ async function pushChanges() {
               const live = (state[key] || []).find(item => item.id === row.id);
               if (live) live._updatedAt = result.updatedAt;
             }
+            // The server owns creation time; include it in both snapshots even
+            // if later business edits were made while this write was in flight.
+            if (key === 'orders' && Object.prototype.hasOwnProperty.call(result || {}, 'createdAt')) {
+              saved.createdAt = result.createdAt;
+              const live = (state[key] || []).find(item => item.id === row.id);
+              if (live) live.createdAt = result.createdAt;
+            }
             snapshots[key].set(row.id, JSON.stringify(saved));
             conflictNotices.delete(`${key}:${row.id}`);
           }

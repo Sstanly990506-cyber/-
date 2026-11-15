@@ -57,6 +57,21 @@ Any group member can use `@三青 ...`, for example `@三青 未完成工單`,
 `@三青 工單 115060162`, or `@三青 客戶 佳德`. Plain chat messages and
 plain command text stay quiet.
 
+Customer groups must be bound to one customer by an administrator in the website's
+notification center. An unbound group that mentions the bot to ask about an order
+is registered for binding and creates a staff task. Customer replies show only the
+bound customer's order number, product name and status. The default list is pending
+orders; buttons provide completed/sent lists and pagination. No delivery or estimated
+completion date is sent, and no automatic order-status push is enabled. Orders with
+known creation times appear newest first; legacy orders without one are identified
+as having an unknown creation time and appear afterward.
+
+Missing orders create a LINE customer-query task in the notification center.
+Repeated questions for the same group and order are counted in one pending task;
+repeated deliveries of the same LINE event are not counted twice. Staff with
+notification access can mark the task handled and reply to the customer manually.
+A later new question reopens it while retaining prior handling history.
+
 ## 營運與授權更新
 
 請參閱 [OPERATIONS_FIXES.md](OPERATIONS_FIXES.md)：道路服務、實際成本、完整報表、後端財務解鎖與登入撤銷。

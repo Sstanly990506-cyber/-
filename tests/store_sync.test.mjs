@@ -528,3 +528,45 @@ test('a move rejected by the server remains a definite failure', async () => {
   await assert.rejects(store.moveOrder('o1', 'o2'), error => error.conflict && !error.uncertainMove);
   assert.equal(ui.at(-1).badgeText, '移動未儲存');
 });
+
+test('server creation time is retained while newer order edits remain pending', async () => {
+  let release;
+  const writes = [];
+  const createdAt = '2026-11-15T10:00:00.123Z';
+  const store = await harness(async (url, options) => {
+    if (url === '/api/dashboard') return response({ summary: {} });
+    if (url.startsWith('/api/data/orders/')) {
+      writes.push(JSON.parse(options.body));
+      if (writes.length === 1) await new Promise(resolve => { release = resolve; });
+      return response({ updatedAt: 100 + writes.length, createdAt });
+    }
+    throw new Error(`unexpected request ${url}`);
+  });
+  store.state.allowedViews = ['ordersView'];
+  store.state.orders.push({ id: 'order-1', orderNumber: 'WO-1', itemName: 'initial', status: '未完成' });
+  const first = store.saveState();
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  store.state.orders[0].itemName = 'edited while saving';
+  const second = store.saveState();
+  release(); await Promise.all([first, second]);
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1].itemName, 'edited while saving');
+  assert.equal(writes[1].createdAt, createdAt);
+  assert.equal(writes[1]._expectedVersion, 101);
+  assert.equal(store.state.orders[0].createdAt, createdAt);
+  assert.equal(store.state.orders[0].itemName, 'edited while saving');
+  await store.saveState();
+  assert.equal(writes.length, 2);
+});
+
+test('legacy orders do not gain an invented creation time after an edit', async () => {
+  const store = await harness(async url => {
+    if (url === '/api/dashboard') return response({ summary: {} });
+    return response({ updatedAt: 21 });
+  });
+  store.state.allowedViews = ['ordersView'];
+  store.hydrateBootstrap({ initialPages: { orders: { items: [{ id: 'legacy', orderNumber: 'OLD', status: '未完成', _updatedAt: 20 }] }, customers: { items: [] }, priceRules: { items: [] } } });
+  store.state.orders[0].note = 'edited';
+  await store.saveState();
+  assert.equal(Object.prototype.hasOwnProperty.call(store.state.orders[0], 'createdAt'), false);
+});

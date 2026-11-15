@@ -14,7 +14,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from api.records import list_records, upsert_record
+from api.records import RecordConflict, get_record, list_records, upsert_record, write_record_batch
 
 def all_records(entity, query=""):
     try:
@@ -179,7 +179,10 @@ def _handle_event(event):
     reply_token = event.get('replyToken')
     event_type = event.get('type')
 
-    if event_type in {'follow', 'join'} and reply_token:
+    if event_type == 'join' and destination_type in {'group', 'room'}:
+        # Customer groups only receive a reply after explicitly mentioning us.
+        return
+    if event_type == 'follow' and reply_token:
         _reply(reply_token, '已連線到三青系統。輸入「綁定」後，就能接收通知並用 LINE 查詢工單、客戶、應收與庫存。')
         return
     if event_type != 'message' or (event.get('message') or {}).get('type') != 'text':
@@ -194,7 +197,7 @@ def _handle_event(event):
             return
         text = _strip_shared_chat_mention(text, message)
     destination = _destination_config(destination_id, destination_type)
-    response = _build_reply_text(text, destination_id, destination_type, destination)
+    response = _build_reply_text(text, destination_id, destination_type, destination, event.get('webhookEventId') or '')
     if reply_token and response:
         _reply(
             reply_token,
@@ -233,6 +236,25 @@ def _save_destination(destination_id, destination_type, event=None):
     })
 
 
+def _register_unseen_customer_group(destination_id, destination_type):
+    # Conditional insert protects a binding created concurrently in the web
+    # interface. A disabled or already configured destination is never changed.
+    if get_record(LINE_DESTINATION_ENTITY, destination_id) is not None:
+        return
+    now = int(time.time() * 1000)
+    destination = {
+        'id': destination_id, 'destinationId': destination_id, 'type': destination_type,
+        'label': _mask_destination(destination_id), 'active': True,
+        'accessMode': CUSTOMER_ACCESS_MODE, 'customerName': '',
+        'lastEventType': 'message', 'lastSeenAt': now, 'createdAt': now,
+    }
+    try:
+        write_record_batch([(LINE_DESTINATION_ENTITY, destination_id, destination)],
+                           expected_versions={(LINE_DESTINATION_ENTITY, destination_id): 0})
+    except RecordConflict:
+        pass  # Another request registered or bound it; leave that record alone.
+
+
 def _active_destinations():
     rows = all_records(LINE_DESTINATION_ENTITY)
     return [row for row in rows if row.get('active') is not False and (row.get('destinationId') or row.get('id'))]
@@ -269,19 +291,18 @@ def _reply(reply_token, text, quick_reply=True, access_mode=INTERNAL_ACCESS_MODE
 def _line_text_message(text, quick_reply=True, access_mode=INTERNAL_ACCESS_MODE, shared=False):
     message = {'type': 'text', 'text': _trim_text(text)}
     if quick_reply:
-        message['quickReply'] = {'items': _quick_reply_items(access_mode, shared)}
+        message['quickReply'] = {'items': _quick_reply_items(access_mode, shared, text)}
     return message
 
 
-def _quick_reply_items(access_mode=INTERNAL_ACCESS_MODE, shared=False):
+def _quick_reply_items(access_mode=INTERNAL_ACCESS_MODE, shared=False, reply=None):
     if access_mode == CUSTOMER_ACCESS_MODE:
-        labels = [
-            ('工單排程', '工單排程'),
-            ('查工單', '查工單'),
-            ('今天交貨', '今天交貨'),
-            ('明天交貨', '明天交貨'),
-            ('使用說明', '說明'),
-        ]
+        labels = [(str(number)[:20], f'工單 {number}') for number in getattr(reply, 'order_numbers', [])]
+        labels.extend([('未完成工單', '未完成工單'), ('已完成工單', '已完成工單'), ('已送出工單', '已送出工單')])
+        if getattr(reply, 'page', 1) > 1:
+            labels.append(('上一頁', f'{reply.status}工單 第{reply.page - 1}頁'))
+        if getattr(reply, 'page', 1) < getattr(reply, 'pages', 1):
+            labels.append(('下一頁', f'{reply.status}工單 第{reply.page + 1}頁'))
     else:
         labels = [
             ('待送工單', '有哪些要送'),
@@ -305,13 +326,13 @@ def _quick_reply_items(access_mode=INTERNAL_ACCESS_MODE, shared=False):
     ]
 
 
-def _build_reply_text(text, destination_id='', destination_type='user', destination=None):
+def _build_reply_text(text, destination_id='', destination_type='user', destination=None, event_id=''):
     try:
-        return _build_reply_text_unchecked(text, destination_id, destination_type, destination)
+        return _build_reply_text_unchecked(text, destination_id, destination_type, destination, event_id)
     except LineBotError as error:
         return str(error)
 
-def _build_reply_text_unchecked(text, destination_id='', destination_type='user', destination=None):
+def _build_reply_text_unchecked(text, destination_id='', destination_type='user', destination=None, event_id=''):
     text = _strip_bot_prefix(text)
     normalized = _normalize_command(text)
     if normalized in {'綁定', 'bind', '加入通知'}:
@@ -322,11 +343,21 @@ def _build_reply_text_unchecked(text, destination_id='', destination_type='user'
         return f'已綁定此 LINE {destination_type or "user"}：{label}\n之後系統可主動推送提醒到這裡，也可以直接問我資料。'
 
     if not _is_active_destination(destination_id):
+        if destination_type in {'group', 'room'} and destination_id:
+            # Register previously unseen groups so staff can bind them on the
+            # website, but never reactivate a group explicitly disabled there.
+            _register_unseen_customer_group(destination_id, destination_type)
+            reminder = ''
+            if _is_order_question(normalized, _extract_customer_order_keyword(text)):
+                from api.line_tasks import record_group_issue
+                saved = record_group_issue(destination_id, 'unbound', event_id=event_id)
+                reminder = '已在網站通知中心留下提醒。' if saved else '網站提醒未建立，請群組內員工手動處理。'
+            return f'此群組（{_mask_destination(destination_id)}）尚未綁定客戶，請三青員工到網站通知中心設定。{reminder}'
         return '請先輸入「綁定」，確認這個 LINE 聊天室可以查詢三青系統資料。'
 
     destination = destination or _destination_config(destination_id, destination_type)
     if _destination_access_mode(destination, destination_type) == CUSTOMER_ACCESS_MODE:
-        return _build_customer_portal_reply(text, str(destination.get('customerName') or '').strip())
+        return _build_customer_portal_reply(text, str(destination.get('customerName') or '').strip(), destination_id, destination_type, event_id)
 
     if normalized in {'狀態', 'status', '系統狀態'}:
         return _build_status_summary()
@@ -339,20 +370,27 @@ def _build_reply_text_unchecked(text, destination_id='', destination_type='user'
     return answer or _build_help_text()
 
 
-def _build_customer_portal_reply(text, customer_name):
+def _build_customer_portal_reply(text, customer_name, destination_id='', destination_type='', event_id=''):
     if not customer_name:
-        return '此群組尚未指定客戶，為了保護資料目前無法查詢。請聯絡三青管理員到網站「通知中心」完成設定。'
+        reminder = ''
+        if destination_type in {'group', 'room'} and destination_id and _is_order_question(_normalize_command(text), _extract_customer_order_keyword(text)):
+            from api.line_tasks import record_group_issue
+            saved = record_group_issue(destination_id, 'unbound', event_id=event_id)
+            reminder = '已在網站通知中心留下提醒。' if saved else '網站提醒未建立，請群組內員工手動處理。'
+        label = f'（{_mask_destination(destination_id)}）' if destination_id else ''
+        return f'此群組{label}尚未指定客戶，為了保護資料目前無法查詢。請聯絡三青管理員到網站「通知中心」完成設定。{reminder}'
     normalized = _normalize_command(_strip_bot_prefix(text))
-    if normalized in {'說明', 'help', '幫助', '?', '選單', '功能', '查工單'}:
+    if normalized in {'說明', 'help', '幫助', '?', '選單', '功能'}:
         return _build_customer_help_text(customer_name)
     if _has_any(normalized, ('應收', '應付', '欠款', '金額', '價格', '報價', '庫存', '其他客戶', '廠商', '系統狀態', '提醒')):
-        return '這是客戶查詢窗口，只能查看貴公司的工單編號、交貨日期與狀態。財務、價格、庫存、廠商及其他客戶資料不會顯示。'
-    order_keyword = _extract_order_keyword(text)
+        return '這是客戶查詢窗口，只能查看貴公司的工單編號、品名與狀態。財務、價格、庫存、廠商及其他客戶資料不會顯示。'
+    order_keyword = _extract_customer_order_keyword(text)
     if order_keyword:
-        return _reply_customer_orders(customer_name, order_keyword=order_keyword)
-    date_scope = _extract_date_scope(normalized)
-    if normalized in {'工單排程', '排程', '我的工單', '工單進度'} or date_scope:
-        return _reply_customer_orders(customer_name, date_scope=date_scope)
+        return _reply_customer_orders(customer_name, order_keyword=order_keyword, destination_id=destination_id, destination_type=destination_type, event_id=event_id)
+    if normalized in {'工單排程', '排程', '我的工單', '工單進度'} or _is_order_question(normalized) or _extract_order_status(normalized):
+        status = _extract_order_status(normalized) or '未完成'
+        page_match = re.search(r'第(\d+)頁', normalized)
+        return _reply_customer_orders(customer_name, status=status, page=int(page_match.group(1)) if page_match else 1)
     return _build_customer_help_text(customer_name)
 
 
@@ -360,41 +398,83 @@ def _build_customer_help_text(customer_name):
     return (
         f'【{customer_name}查詢窗口】\n'
         '請按下方按鈕，或 @三青 後輸入：\n'
-        '- 工單排程\n'
+        '- 未完成工單\n'
+        '- 已完成工單／已送出工單\n'
         '- 工單 115070051\n'
-        '- 今天交貨\n'
-        '- 明天交貨\n'
-        '此窗口只顯示貴公司的工單編號、交貨日期與狀態。'
+        '此窗口只顯示貴公司的工單編號、品名與狀態。'
     )
 
 
-def _reply_customer_orders(customer_name, order_keyword='', date_scope=''):
+class CustomerOrderReply(str):
+    def __new__(cls, text, order_numbers=(), status='未完成', page=1, pages=1):
+        result = super().__new__(cls, text)
+        result.order_numbers, result.status, result.page, result.pages = tuple(order_numbers), status, page, pages
+        return result
+
+
+def _extract_customer_order_keyword(text):
+    value = _strip_bot_prefix(text)
+    # Work-order numbers can interleave letters and digits (e.g. 26A05P0127).
+    explicit = re.search(r'(?:工單|訂單|單號|編號)\s*[:：#]?\s*([A-Za-z][A-Za-z0-9_-]{2,})(?![A-Za-z0-9_-])', value, re.IGNORECASE)
+    if explicit:
+        return explicit.group(1)
+    match = re.search(r'(?<![A-Za-z0-9_-])(?=[A-Za-z0-9_-]{3,}(?![A-Za-z0-9_-]))(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*(?![A-Za-z0-9_-])', value)
+    return match.group(0) if match else ''
+
+
+def _customer_order_created_key(row):
+    raw = str(row.get('createdAt') or '').strip()
+    try:
+        created = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return (1, created.timestamp(), str(row.get('orderNumber') or ''))
+    except (ValueError, TypeError, OverflowError, OSError):
+        return (0, 0, str(row.get('orderNumber') or ''))
+
+
+def _reply_customer_orders(customer_name, order_keyword='', status='未完成', page=1, destination_id='', destination_type='', event_id=''):
     try:
         rows = all_records('orders', order_keyword or customer_name)
     except Exception:
         return '工單資料讀取未完成，請稍後再試。'
-    customer_key = _company_key(customer_name)
-    rows = [row for row in rows if _company_key(row.get('billingCustomer')) == customer_key]
+    # The group is bound to one exact company, not a punctuation-insensitive or
+    # substring match that could expose another company's orders.
+    customer_key = str(customer_name or '').strip().casefold()
+    rows = [row for row in rows if str(row.get('billingCustomer') or '').strip().casefold() == customer_key]
     if order_keyword:
         order_key = re.sub(r'\s+', '', order_keyword).lower()
         rows = [row for row in rows if re.sub(r'\s+', '', str(row.get('orderNumber') or '')).lower() == order_key]
-    rows = _filter_orders_by_date(rows, date_scope)
-    rows.sort(key=lambda row: (str(row.get('orderDate') or row.get('deliveryDate') or '9999-99-99'), str(row.get('orderNumber') or '')))
+    if not order_keyword:
+        aliases = {'未完成': {'未完成'}, '已完成': {'已完成', '完成'}, '已送出': {'已送出', '已出貨', '送出'}}
+        rows = [row for row in rows if str(row.get('status') or '').strip() in aliases.get(status, set())]
+    rows.sort(key=_customer_order_created_key, reverse=True)
     if not rows:
-        scope = _date_scope_label(date_scope)
-        target = f'工單 {order_keyword}' if order_keyword else f'{scope}工單排程'
-        return f'目前查不到貴公司的{target}。'
-    title = '工單查詢' if order_keyword else f'{_date_scope_label(date_scope)}工單排程'
-    lines = [f'【{customer_name}｜{title}】共 {len(rows)} 筆']
-    lines.extend(_format_customer_order(row) for row in rows[:10])
-    return '\n'.join(lines)
+        reminder = ''
+        if order_keyword and destination_type in {'group', 'room'} and destination_id:
+            from api.line_tasks import record_group_issue
+            saved = record_group_issue(destination_id, 'order_not_found', order_number=order_keyword, customer_name=customer_name, event_id=event_id)
+            reminder = '已在網站通知中心留下提醒。' if saved else '網站提醒未建立，請群組內員工手動處理。'
+        return f'您好，目前查不到這張工單，請三青員工協助您確認。{reminder}' if order_keyword else f'目前沒有{status}工單。'
+    if order_keyword:
+        return f'您好，工單 {rows[0].get("orderNumber") or "-"} 目前狀態是「{rows[0].get("status") or "尚未填寫"}」。'
+    page_size = 8
+    pages = max(1, (len(rows) + page_size - 1) // page_size)
+    page = min(max(1, page), pages)
+    shown = rows[(page - 1) * page_size:page * page_size]
+    lines = [f'【{customer_name}｜{status}工單】共 {len(rows)} 筆，第 {page}/{pages} 頁']
+    lines.extend(_format_customer_order(row) for row in shown)
+    if any(not _customer_order_created_key(row)[0] for row in rows):
+        lines.append('部分舊工單未記錄建立時間，列於已知時間工單之後。')
+    lines.append('請點下方工單編號查詢，或選擇其他狀態。')
+    return CustomerOrderReply('\n'.join(lines), (row.get('orderNumber') for row in shown if row.get('orderNumber')), status, page, pages)
 
 
 def _format_customer_order(row):
     number = row.get('orderNumber') or '-'
-    date = row.get('orderDate') or row.get('deliveryDate') or '-'
-    status = row.get('status') or '未完成'
-    return f'- {number} / 交貨：{date} / {status}'
+    item = re.sub(r'\s+', ' ', str(row.get('itemName') or '品名未填')).strip()[:100]
+    status = row.get('status') or '尚未填寫'
+    return f'- {number} / {item} / {status}'
 
 
 def _company_key(value):

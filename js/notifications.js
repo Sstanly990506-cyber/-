@@ -3,6 +3,67 @@
 const LINE_OFFICIAL_ACCOUNT_ID = '@971smwet';
 const LINE_OFFICIAL_ACCOUNT_LINK = `https://line.me/R/ti/p/${LINE_OFFICIAL_ACCOUNT_ID}`;
 
+let lineTasks = [];
+let lineTaskToken = null;
+let lineTaskLoad = null;
+let lineTaskAgain = false;
+let lineTaskTimer = null;
+
+function renderLineTasks() {
+  const root = $('lineTaskList');
+  if (!root) return;
+  const filter = $('lineTaskFilter')?.value || 'pending';
+  const tasks = lineTasks.filter(task => task.taskStatus === filter);
+  if (!tasks.length) {
+    root.innerHTML = `<p class="sub">${filter === 'pending' ? '目前沒有待處理的 LINE 查詢。' : '目前沒有已處理的 LINE 查詢。'}</p>`;
+    return;
+  }
+  root.innerHTML = tasks.map(task => {
+    const label = escapeHtml(task.message || 'LINE 客戶查詢');
+    const group = escapeHtml(task.groupLabel || '');
+    const count = Number(task.count || 1);
+    const latest = escapeHtml(task.lastAt ? new Date(task.lastAt).toLocaleString() : '');
+    const resolved = task.taskStatus === 'done' ? `<p class="sub">已處理：${escapeHtml(task.resolvedBy || '員工')}｜${escapeHtml(task.resolvedAt ? new Date(task.resolvedAt).toLocaleString() : '')}</p>` : '';
+    const history = (task.history || []).map(item => `<li>${escapeHtml(item.resolvedAt ? new Date(item.resolvedAt).toLocaleString() : '')}｜${escapeHtml(item.resolvedBy || '員工')}｜${Number(item.count || 1)} 次詢問</li>`).join('');
+    return `<article class="card line-task-card"><strong>${label}</strong><p class="sub">${group}｜詢問 ${count} 次｜最近 ${latest}</p>${resolved}${history ? `<details><summary>先前處理紀錄</summary><ul>${history}</ul></details>` : ''}${task.taskStatus === 'pending' ? `<button type="button" class="btn small primary" data-resolve-line-task="${escapeHtml(task.id)}">標記已處理</button>` : ''}</article>`;
+  }).join('');
+}
+
+async function refreshLineTasks(state) {
+  if (!$('lineTaskList') || !state.authToken) return;
+  if (lineTaskLoad) { lineTaskAgain = true; return lineTaskLoad; }
+  const token = state.authToken;
+  lineTaskLoad = (async () => {
+    try {
+      const tasks = [];
+      let page = 1, pages;
+      do {
+        const response = await fetch(`/api/data/events?page=${page}&pageSize=500&q=line_task`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        tasks.push(...(data.items || []).filter(task => task.kind === 'line_task'));
+        pages = Number(data.pages || 0); page++;
+      } while (page <= pages);
+      if (state.authToken !== token) return;
+      lineTasks = tasks;
+      renderLineTasks();
+    } catch (error) {
+      if (state.authToken === token && $('lineTaskList')) $('lineTaskList').textContent = `LINE 待辦載入失敗：${error.message}`;
+    }
+  })();
+  try { await lineTaskLoad; } finally {
+    lineTaskLoad = null;
+    if (lineTaskAgain) { lineTaskAgain = false; scheduleLineTaskRefresh(state); }
+  }
+}
+
+function scheduleLineTaskRefresh(state) {
+  if (!$('lineTaskList')) return;
+  if (lineTaskToken !== state.authToken) { lineTaskToken = state.authToken; lineTasks = []; }
+  clearTimeout(lineTaskTimer);
+  lineTaskTimer = setTimeout(() => refreshLineTasks(state), 250);
+}
+
 function getFilteredEvents(state) {
   const events = state.systemEvents || [];
   const type = $('noticeTypeFilter')?.value || 'all';
@@ -20,6 +81,7 @@ function getFilteredEvents(state) {
 }
 
 export function renderNotifications(state) {
+  scheduleLineTaskRefresh(state);
   const events = state.systemEvents || [];
   const filtered = getFilteredEvents(state);
   const warningCount = events.filter((event) => event.level === 'warning').length;
@@ -144,6 +206,31 @@ async function sendLineTest(state) {
 }
 
 export function bindNotificationEvents(state, saveState, renderAll) {
+  $('lineTaskFilter')?.addEventListener('change', renderLineTasks);
+  $('lineTaskList')?.addEventListener('click', async event => {
+    const button = event.target.closest('[data-resolve-line-task]');
+    if (!button || button.disabled) return;
+    const task = lineTasks.find(row => row.id === button.dataset.resolveLineTask);
+    if (!task || task.taskStatus !== 'pending') return;
+    button.disabled = true;
+    button.textContent = '處理中…';
+    try {
+      const { _updatedAt, ...rest } = task;
+      const response = await fetch(`/api/data/events/${encodeURIComponent(task.id)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.authToken || ''}` },
+        body: JSON.stringify({ ...rest, taskStatus: 'done', resolvedAt: new Date().toISOString(), resolvedBy: state.user || '員工', _expectedVersion: _updatedAt || 0 }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) throw new Error(response.status === 409 ? '提醒已更新，請確認最新內容後再處理。' : data.error || `HTTP ${response.status}`);
+      await refreshLineTasks(state);
+    } catch (error) {
+      alert(`標記失敗：${error.message}`);
+      await refreshLineTasks(state);
+    } finally {
+      button.disabled = false;
+      button.textContent = '標記已處理';
+    }
+  });
   ['noticeTypeFilter', 'noticeDateFrom', 'noticeDateTo', 'noticeKeyword'].forEach((id) => {
     $(id)?.addEventListener('input', () => renderNotifications(state));
     $(id)?.addEventListener('change', () => renderNotifications(state));

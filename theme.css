@@ -1,0 +1,146 @@
+/* A quiet, warm visual layer. Layout and the existing navigation stay intact. */
+.theme-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 12px;
+}
+.theme-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.theme-control select {
+  width: auto;
+  min-height: 44px;
+  padding: 8px 32px 8px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+/* Resolve the administrator's configured card colour on the root before
+   deriving accessible surfaces in each mode. */
+html[data-color-mode] { --configured-panel: var(--card); }
+html[data-color-mode="dark"] body {
+  --bg: #19141c;
+  --card: #27202b;
+  --card-soft: #332b37;
+  --card-strong: #1d1823;
+  --text: #f5eef1;
+  --muted: #d0c2c8;
+  --border: rgba(230, 205, 210, .23);
+  background: radial-gradient(circle at 8% 0%, rgba(145, 91, 162, .18), transparent 32%),
+    radial-gradient(circle at 94% 2%, rgba(220, 129, 73, .15), transparent 30%),
+    linear-gradient(145deg, #17121b, #221b27 58%, #1b1821);
+}
+@supports (color: color-mix(in srgb, red, black)) {
+  html[data-color-mode="dark"] body {
+    --card: color-mix(in srgb, var(--configured-panel, #1f2937) 20%, #27202b);
+    --card-soft: color-mix(in srgb, var(--configured-panel, #1f2937) 20%, #332b37);
+    --card-strong: color-mix(in srgb, var(--configured-panel, #1f2937) 20%, #1d1823);
+  }
+}
+html[data-color-mode="dark"] .card { box-shadow: 0 12px 34px rgba(0, 0, 0, .22); }
+
+/* Deepened brand colours make white button text legible across both themes. */
+html[data-color-mode] .btn.primary,
+html[data-color-mode] .btn.active,
+html[data-color-mode] .settings-disclosure-pill,
+html[data-color-mode] .settings-module-nav-icon {
+  color: #fff;
+  background: linear-gradient(120deg, #993f21, #66418c);
+}
+@supports (background: color-mix(in srgb, red, black)) {
+  html[data-color-mode] .btn.primary,
+  html[data-color-mode] .btn.active,
+  html[data-color-mode] .settings-disclosure-pill,
+  html[data-color-mode] .settings-module-nav-icon {
+    background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 35%, #39110e), color-mix(in srgb, var(--accent) 35%, #1b1035));
+  }
+}
+
+html[data-color-mode="light"] body {
+  --bg: #f8f2ee;
+  --card: #fffdfa;
+  --card-soft: #fbf5f2;
+  --card-strong: #f4eae5;
+  --text: #2d2429;
+  --muted: #655960;
+  --border: rgba(101, 74, 83, .25);
+  background: radial-gradient(circle at 8% 0%, rgba(157, 115, 184, .13), transparent 31%),
+    radial-gradient(circle at 94% 2%, rgba(225, 150, 91, .16), transparent 30%),
+    linear-gradient(145deg, #fcf8f4, #f5edf0 58%, #faf4ec);
+}
+@supports (color: color-mix(in srgb, red, white)) {
+  html[data-color-mode="light"] body {
+    --card: color-mix(in srgb, var(--configured-panel, #1f2937) 3%, #fffdfa);
+    --card-soft: color-mix(in srgb, var(--configured-panel, #1f2937) 5%, #fff8f4);
+    --card-strong: color-mix(in srgb, var(--configured-panel, #1f2937) 8%, #fff7f2);
+  }
+}
+html[data-color-mode="light"] .card {
+  background: var(--card);
+  box-shadow: 0 10px 30px rgba(87, 57, 66, .09);
+}
+html[data-color-mode="light"] .card:hover { box-shadow: 0 12px 34px rgba(87, 57, 66, .13); }
+html[data-color-mode="light"] :is(input, select, textarea) {
+  background: #fffdfa;
+  color: var(--text);
+  border-color: #bcaeae;
+}
+html[data-color-mode="light"] :is(input, textarea)::placeholder { color: #71676b; opacity: 1; }
+html[data-color-mode="light"] .btn:not(.primary):not(.active):not(.order-sent-action) {
+  background: #fffdfa;
+  color: #3a2c35;
+  border-color: #bbabaa;
+}
+html[data-color-mode="light"] .btn.danger,
+html[data-color-mode="light"] .order-actions-dialog .order-delete-action { color: #a12e35; border-color: #c96d6f; }
+html[data-color-mode="light"] .order-row-actions .order-sent-action {
+  color: #fff;
+  background: #25598a;
+  border-color: #25598a;
+}
+html[data-color-mode="light"] :is(.login-register-card, .order-company-suggestions,
+  .dashboard-priority, .finance-action-card, .permission-chip, .account-permission-card,
+  .trip-route-item, .smart-tip, .settings-switch, .settings-module-nav-card,
+  .settings-module-editor, .settings-module-no-internals, .auto-alert-card,
+  .pricing-bounds, .pricing-matrix, .kpi) {
+  background: var(--card-soft);
+  color: var(--text);
+  border-color: var(--border);
+}
+html[data-color-mode="light"] :is(th, .orders-table th) { background: var(--card-strong); color: #40323a; }
+html[data-color-mode="light"] :is(.hero-badge, .toggle-pill) {
+  background: #f2e7e7; color: #40323a; border-color: #ddcbcc;
+}
+html[data-color-mode="light"] .toggle-pill.on { color: #17623a; background: #e2f2e8; }
+html[data-color-mode="light"] .toggle-pill.off { color: #9b3135; background: #fae7e5; }
+html[data-color-mode="light"] .sync-badge { color: #584a54; background: #eae2e7; }
+html[data-color-mode="light"] .sync-badge.ok { color: #165d36; background: #e0f1e5; }
+html[data-color-mode="light"] :is(.pricing-bounds-grid > span, .pricing-bounds-grid > strong,
+  .pricing-matrix-head, .pricing-matrix-row strong, .kpi strong, .settings-switch span,
+  .settings-preview-message, .auto-alert-list li) { color: var(--text); }
+html[data-color-mode="light"] :is(.build-version, .eyebrow, .settings-module-arrow,
+  .finance-concern-kpi strong, #monthlyWarnings, .stock-warning, .ai-recognition-review strong) { color: #864014; }
+html[data-color-mode="light"] :is(.stock-danger, .auto-alert-critical) { color: #a12e35; }
+html[data-color-mode="light"] .auto-alert-warning { color: #864014; }
+html[data-color-mode="light"] .order-status-badge[data-status="未完成"] { color: #805000; }
+html[data-color-mode="light"] .order-status-badge[data-status="已送出"] { color: #1b518c; }
+html[data-color-mode="light"] .order-status-badge[data-status="已完成"] { color: #17623a; }
+html[data-color-mode="light"] .tag.warn { background: #fae3df; color: #942c30; }
+html[data-color-mode="light"] .tag.danger { background: #f5d2cd; color: #86242b; }
+html[data-color-mode="light"] .orders-table tbody tr:hover { background: #f8eeec; }
+html[data-color-mode="light"] .order-actions-dialog { background: #fffdfa; color: var(--text); }
+html[data-color-mode="light"] :is(.sq-ai-panel, .sq-ai-head, .sq-ai-messages, .sq-ai-message,
+  .sq-ai-user, .sq-ai-form) { background: #fffaf7; color: #30262d; border-color: #d6c6c6; }
+html[data-color-mode="light"] :is(.sq-ai-sub, .sq-ai-hint, .sq-ai-status, .sq-ai-message small, .sq-ai-demo) { color: #754018; }
+html[data-color-mode="light"] .sq-ai-sources { color: #315a78; }
+html[data-color-mode="light"] :is(button, a, summary):focus-visible { outline-color: #8f3c22; }
+html[data-color-mode="dark"] :is(button, a, summary):focus-visible { outline-color: #ffc16b; }
+
+@media (pointer: coarse) {
+  .theme-control select, .btn, .order-row-actions .btn { min-height: 44px; }
+}

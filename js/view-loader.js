@@ -1,6 +1,6 @@
 window.__appBootstrapped = false;
 
-const APP_ASSET_VERSION = '20261114-login-speed-2';
+const APP_ASSET_VERSION = '20261115-line-theme-1';
 const mount = document.getElementById('appMount');
 const apiWarmup = fetch('/api/health', { cache: 'no-store' }).catch(() => null);
 
@@ -13,6 +13,8 @@ async function loadApplicationView() {
   if (!applicationMain) throw new Error('畫面元件缺少 main.app-shell');
 
   mount.replaceWith(document.importNode(applicationMain, true));
+  const { initializeTheme } = await import(`./theme.js?v=${APP_ASSET_VERSION}`);
+  initializeTheme();
   await import(`./main.js?v=${APP_ASSET_VERSION}`);
   apiWarmup.catch(() => null);
 }
