@@ -1,4 +1,4 @@
-import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js';
+import { formatTs, getTodayText, getDefaultSettings, mergeSettings } from './shared.js?v=20261116-settings-1';
 
 const ENTITY_MAP = {
   customers:'customers',

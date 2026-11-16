@@ -1,5 +1,5 @@
-import { $, COMPANY_INFO, money, downloadCsv, getTodayText, escapeHtml } from './shared.js';
-import { getOrderReceivableKey, isRecordDirty } from './store.js?v=20261115-line-theme-1';
+import { $, COMPANY_INFO, money, downloadCsv, getTodayText, escapeHtml } from './shared.js?v=20261116-settings-1';
+import { getOrderReceivableKey, isRecordDirty } from './store.js?v=20261116-settings-1';
 import { toTaiInch } from './pricing.js';
 import { buildMonthlyStatement, fetchStatementRecords, statementTableHtml, statementPrintHtml } from './monthly-statement.js';
 
@@ -90,7 +90,7 @@ function outputMonthlyStatement(state, print = false) {
   ]);
   const win = window.open('', '_blank', 'width=980,height=760');
   if (!win) return alert('請允許瀏覽器開啟彈出視窗。');
-  win.document.write(statementPrintHtml(report, { name: state.settings.companyName || COMPANY_INFO.name, address: state.settings.companyAddress || COMPANY_INFO.address, phone: $('monthlyCompanyPhone').value, fax: $('monthlyCompanyFax').value }));
+  win.document.write(statementPrintHtml(report, { name: state.settings.companyName || COMPANY_INFO.name, address: state.settings.companyAddress ?? COMPANY_INFO.address, phone: $('monthlyCompanyPhone').value, fax: $('monthlyCompanyFax').value }));
   win.document.close();
 }
 

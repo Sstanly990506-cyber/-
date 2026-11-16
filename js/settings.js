@@ -1,4 +1,4 @@
-import { $, MODULE_DEFINITIONS, applyRuntimeBranding, getDefaultSettings, getModuleMeta, mergeSettings, isModuleEnabledInSettings } from './shared.js';
+import { $, MODULE_DEFINITIONS, applyRuntimeBranding, getDefaultSettings, getModuleMeta, mergeSettings, isModuleEnabledInSettings } from './shared.js?v=20261116-settings-1';
 import { createBusyAction } from './busy-action.js?v=20261023-busy-actions-1';
 
 function ensureSettings(state) {
@@ -9,6 +9,8 @@ function ensureSettings(state) {
 let activeSettingsModuleId = null;
 let settingsDraft = null;
 let settingsDirty = false;
+let accessDirty = false;
+let accessDraft = false;
 const MODULES_WITH_INTERNAL_SETTINGS = ['ordersView', 'customersView', 'tripsView', 'financeView', 'inventoryView'];
 
 function moduleSettingsHtml(settings) {
@@ -243,6 +245,11 @@ function toPositiveNumber(value, fallback) {
   return Number.isFinite(num) && num > 0 ? num : fallback;
 }
 
+function optionalText(id, fallback) {
+  const field = $(id);
+  return field ? field.value.trim() : fallback;
+}
+
 function collectSettings() {
   const defaults = getDefaultSettings();
   const next = mergeSettings({
@@ -250,12 +257,12 @@ function collectSettings() {
     appTitle: $('settingsAppTitle')?.value.trim() || defaults.appTitle,
     loginTitle: $('settingsLoginTitle')?.value.trim() || defaults.loginTitle,
     companyName: $('settingsCompanyName')?.value.trim() || defaults.companyName,
-    companyAddress: $('settingsCompanyAddress')?.value.trim() || defaults.companyAddress,
-    companyPhone: $('settingsCompanyPhone')?.value.trim() || defaults.companyPhone,
+    companyAddress: optionalText('settingsCompanyAddress', defaults.companyAddress),
+    companyPhone: optionalText('settingsCompanyPhone', defaults.companyPhone),
     companyIndustry: $('settingsCompanyIndustry')?.value.trim() || defaults.companyIndustry,
-    companyEmail: $('settingsCompanyEmail')?.value.trim() || defaults.companyEmail,
-    companyWebsite: $('settingsCompanyWebsite')?.value.trim() || defaults.companyWebsite,
-    companyTaxId: $('settingsCompanyTaxId')?.value.trim() || defaults.companyTaxId,
+    companyEmail: optionalText('settingsCompanyEmail', defaults.companyEmail),
+    companyWebsite: optionalText('settingsCompanyWebsite', defaults.companyWebsite),
+    companyTaxId: optionalText('settingsCompanyTaxId', defaults.companyTaxId),
     loginMessage: $('settingsLoginMessage')?.value.trim() || defaults.loginMessage,
     dashboardHeroTitle: $('settingsDashboardHeroTitle')?.value.trim() || defaults.dashboardHeroTitle,
     dashboardHeroSubtitle: $('settingsDashboardHeroSubtitle')?.value.trim() || defaults.dashboardHeroSubtitle,
@@ -389,7 +396,7 @@ function updateSettingsPreview(settingsLike) {
   const enabledCount = MODULE_DEFINITIONS.filter((module) => isModuleEnabledInSettings(settings, module.id)).length;
   const landingView = normalizeLandingView(settings);
   if ($('settingsPreviewTitle')) $('settingsPreviewTitle').textContent = settings.appTitle;
-  if ($('settingsPreviewCompany')) $('settingsPreviewCompany').textContent = `${settings.companyName}｜${settings.companyIndustry}｜${settings.companyPhone}`;
+  if ($('settingsPreviewCompany')) $('settingsPreviewCompany').textContent = [settings.companyName, settings.companyIndustry, settings.companyPhone].filter(Boolean).join('｜');
   if ($('settingsPreviewMessage')) $('settingsPreviewMessage').textContent = settings.dashboardAnnouncement || settings.dashboardHeroSubtitle;
   if ($('settingsPreviewSummary')) $('settingsPreviewSummary').textContent = `已啟用 ${enabledCount} 個模組｜首頁 ${landingLabel(landingView)}｜${settings.openAccess ? '全員可用模式' : '角色權限模式'}`;
 }
@@ -399,7 +406,7 @@ export function applyUiSettings(state) {
   applyRuntimeBranding(settings);
 
   if ($('appLoginTitle')) $('appLoginTitle').textContent = settings.loginTitle;
-  if ($('appLoginAddress')) $('appLoginAddress').textContent = `${settings.companyAddress}｜${settings.companyIndustry}｜${settings.companyPhone}`;
+  if ($('appLoginAddress')) $('appLoginAddress').textContent = [settings.companyAddress, settings.companyIndustry, settings.companyPhone].filter(Boolean).join('｜');
   if ($('appLoginMessage')) $('appLoginMessage').textContent = settings.loginMessage;
   if ($('dashboardHeroTitle')) $('dashboardHeroTitle').textContent = settings.dashboardHeroTitle;
   if ($('dashboardHeroSubtitle')) $('dashboardHeroSubtitle').textContent = settings.dashboardHeroSubtitle;
@@ -432,8 +439,12 @@ export function applyUiSettings(state) {
 
 export function renderSettings(state) {
   const settings = ensureSettings(state);
-  if (settingsDirty) {
-    // A background refresh must not replace typed values or close the module editor.
+  const form = $('settingsForm');
+  const focused = document.activeElement;
+  const editing = !!focused && !!form?.contains?.(focused) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(focused.tagName);
+  if (settingsDirty || editing) {
+    // Background refreshes and successful saves must not replace a focused
+    // input or rebuild its module editor while someone is still working.
     if (settingsDraft) {
       applyRuntimeBranding(settingsDraft);
       updateSettingsPreview(settingsDraft);
@@ -441,28 +452,16 @@ export function renderSettings(state) {
     return;
   }
   fillForm(settings);
+  if (accessDirty && $('settingsOpenAccess')) $('settingsOpenAccess').checked = accessDraft;
 }
 
 export function bindSettingsEvents(state, saveState, renderAll) {
-  window.addEventListener?.('app:auth-changed', () => {
-    if (!state.authToken) {
-      settingsDirty = false;
-      settingsDraft = null;
-      activeSettingsModuleId = null;
-    }
-  });
   // Account updates share an endpoint that writes the account list. Keep this
   // tab's refresh/create/permission requests in one lane, without locking orders.
   const accountAction = createBusyAction();
   const runAccountAction = (button, task) => accountAction({
     button,
     controls: document.querySelectorAll('#accountPermissionsList input, #accountPermissionsList select, #accountPermissionsList button, #createAccountForm input, #createAccountForm select, #createAccountForm button, #refreshAccountsBtn'),
-    task,
-  });
-  const settingsAction = createBusyAction();
-  const runSettingsAction = (button, task) => settingsAction({
-    button,
-    controls: $('settingsForm')?.querySelectorAll('input, select, textarea, button') || [],
     task,
   });
   const bindBusyClick = (id, task) => {
@@ -482,9 +481,168 @@ export function bindSettingsEvents(state, saveState, renderAll) {
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok || !data.ok) {
+      const error = new Error(data.error || `HTTP ${res.status}`);
+      error.status = res.status;
+      error.conflict = !!data.conflict || res.status === 409;
+      throw error;
+    }
     return data;
   };
+
+  // General settings are versioned as one document. Serialize requests and
+  // remember which form revision each one contains, so edits made while a
+  // request is pending remain on screen and are saved with the new version.
+  let editRevision = 0;
+  let autosaveTimer = null;
+  let settingsInFlight = null;
+  let autosaveQueued = false;
+  let settingsBlocked = false;
+  let lastInputValues = new WeakMap();
+  let generalStatusMessage = '尚無變更';
+  const renderGlobalStatus = () => {
+    if (!$('settingsAutoSaveStatus')) return;
+    const access = accessDirty ? (settingsBlocked ? '｜權限儲存失敗，請到帳號與權限查看' : '｜權限變更尚未確認') : '';
+    $('settingsAutoSaveStatus').textContent = generalStatusMessage + access;
+  };
+  const status = (message) => { generalStatusMessage = message; renderGlobalStatus(); };
+  const accessStatus = (message) => { if ($('openAccessStatus')) $('openAccessStatus').textContent = message; renderGlobalStatus(); };
+  const clearAutosaveTimer = () => { if (autosaveTimer !== null) clearTimeout(autosaveTimer); autosaveTimer = null; };
+  const hasPendingSettings = () => settingsDirty || accessDirty || !!settingsInFlight;
+  const invalidSettings = () => {
+    const form = $('settingsForm');
+    const numberFields = form?.querySelectorAll('input[type="number"]') || [];
+    for (const input of numberFields) {
+      if (input.type === 'number' && (!String(input.value).trim() || input.validity?.valid === false || !(Number(input.value) > 0))) return true;
+    }
+    // These fields currently fall back to defaults when blank. Do not silently
+    // replace an unfinished edit with a default after the debounce expires.
+    for (const id of ['settingsAppTitle', 'settingsLoginTitle', 'settingsCompanyName', 'settingsCompanyIndustry', 'settingsLoginMessage', 'settingsDashboardHeroTitle', 'settingsDashboardHeroSubtitle', 'settingsDashboardAnnouncement', 'settingsWelcomePrefix']) {
+      const input = $(id);
+      if (input && !input.value.trim()) return true;
+    }
+    for (const input of document.querySelectorAll('[data-settings-module-label], [data-settings-module-description], [data-settings-module-page-note], [data-settings-module-icon]')) {
+      if (!input.value.trim()) return true;
+    }
+    return false;
+  };
+
+  const queueAutosave = () => {
+    clearAutosaveTimer();
+    if (settingsBlocked) return;
+    status('有未儲存的修改，等待自動儲存…');
+    autosaveTimer = setTimeout(() => {
+      autosaveTimer = null;
+      if (settingsInFlight) { autosaveQueued = true; return; }
+      void persistSettings('general');
+    }, 2000);
+  };
+
+  const persistSettings = async (kind = 'general') => {
+    if (settingsBlocked) {
+      status('無法確認儲存結果；請先複製保留修改，再重新整理核對。');
+      return false;
+    }
+    if (settingsInFlight) {
+      if (kind === 'general') autosaveQueued = true;
+      return false;
+    }
+    if (kind === 'general' && !settingsDirty) return true;
+    if (kind === 'general' && invalidSettings()) {
+      status('尚未儲存：請先填妥設定中的文字及數值欄位。');
+      return false;
+    }
+    const version = state.settingsVersion;
+    const token = state.authToken;
+    const revision = editRevision;
+    const requestedAccess = accessDraft;
+    let next;
+    if (kind === 'general') {
+      // Never save an unconfirmed change to the global permission switch.
+      next = { ...collectSettings(), openAccess: !!state.settings.openAccess };
+      next.defaultLandingView = normalizeLandingView(next);
+    } else if (kind === 'access') {
+      next = { ...state.settings, openAccess: requestedAccess };
+    } else {
+      // A general-settings reset must not change the global access permission.
+      next = { ...getDefaultSettings(), openAccess: !!state.settings.openAccess };
+    }
+    if (kind === 'access') accessStatus('權限設定儲存中…');
+    else status('儲存中…');
+    const task = (async () => {
+      try {
+        const result = await adminAction({ action: 'update_settings', settings: next, expectedVersion: version });
+        if (!result.settingsVersion) throw new Error('伺服器未回傳設定版本，無法確認儲存結果。');
+        if (state.authToken !== token) return false;
+        state.settingsVersion = result.settingsVersion;
+        state.settings = next;
+        if (kind === 'general') {
+          if (revision === editRevision) { settingsDirty = false; settingsDraft = next; status('已儲存'); }
+          else status('已儲存先前修改，新的修改等待儲存…');
+        } else if (kind === 'access') {
+          if (accessDraft === requestedAccess) accessDirty = false;
+          accessStatus(accessDirty ? '權限有新修改，請再次確認。' : '權限設定已儲存');
+        } else {
+          settingsDirty = false;
+          settingsDraft = next;
+          status('已恢復預設設定');
+        }
+        // Server confirmation is the source of truth. UI persistence and
+        // unrelated order synchronization continue independently.
+        try { Promise.resolve(saveState()).catch(error => console.warn('settings local sync failed', error)); }
+        catch (error) { console.warn('settings local sync failed', error); }
+        renderAll();
+        return true;
+      } catch (error) {
+        if (state.authToken !== token) return false;
+        // A lost response (or 5xx) might have committed. A 409 is an explicit
+        // stale version. Neither may be retried behind the user's back.
+        if (!error.status || error.status >= 500 || error.conflict) settingsBlocked = true;
+        const message = error.conflict
+          ? '設定已由其他人更新；請先複製保留目前修改，再重新整理核對。'
+          : settingsBlocked ? '儲存結果無法確認；請先複製保留目前修改，再重新整理核對。'
+          : `儲存失敗：${error.message}`;
+        if (kind === 'access') accessStatus(message);
+        else status(message);
+        return false;
+      }
+    })();
+    settingsInFlight = task;
+    try { return await task; } finally {
+      if (settingsInFlight === task) settingsInFlight = null;
+      if (autosaveQueued && !settingsBlocked && settingsDirty && state.authToken === token) {
+        autosaveQueued = false;
+        void persistSettings('general');
+      } else autosaveQueued = false;
+    }
+  };
+
+  window.addEventListener?.('app:auth-changed', () => {
+    if (!state.authToken) {
+      clearAutosaveTimer();
+      lastInputValues = new WeakMap();
+      settingsDirty = false;
+      accessDirty = false;
+      settingsDraft = null;
+      settingsBlocked = false;
+      autosaveQueued = false;
+      activeSettingsModuleId = null;
+      status('尚無變更');
+      accessStatus('尚無變更');
+    }
+  });
+  window.addEventListener?.('beforeunload', event => {
+    if (!hasPendingSettings()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+  document.addEventListener?.('click', event => {
+    if (!event.isTrusted || !event.target.closest?.('#logoutBtn') || !hasPendingSettings()) return;
+    if (!window.confirm('設定仍有未儲存的修改。若現在登出，這些修改可能遺失；確定要登出嗎？')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
 
   const renderNewAccountPermissions = () => {
     const role = $('newAccountRole')?.value || 'viewer';
@@ -543,6 +701,8 @@ export function bindSettingsEvents(state, saveState, renderAll) {
     renderModuleSettingsNavigator(collectSettings());
   });
   $('settingsModulesBack')?.addEventListener('click', () => {
+    const unfinished = [...document.querySelectorAll('[data-settings-module-label], [data-settings-module-description], [data-settings-module-page-note], [data-settings-module-icon]')].some(input => !input.value.trim());
+    if (unfinished) { status('尚未儲存：請先填妥模組設定欄位。'); return; }
     activeSettingsModuleId = null;
     renderModuleSettingsNavigator(collectSettings());
   });
@@ -712,51 +872,75 @@ export function bindSettingsEvents(state, saveState, renderAll) {
 
   $('settingsForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    return runSettingsAction(e.currentTarget.querySelector('button[type="submit"]'), async () => {
-      const next = collectSettings();
-      next.defaultLandingView = normalizeLandingView(next);
-      try {
-        const result = await adminAction({ action: 'update_settings', settings: next, expectedVersion: state.settingsVersion });
-        state.settingsVersion = result.settingsVersion;
-        state.settings = next;
-        settingsDirty = false;
-        await saveState();
-        renderAll();
-        alert('設定已儲存到伺服器，所有裝置會使用最新報價規則。');
-      } catch (err) {
-        alert(`儲存設定失敗：${err.message}`);
-      }
-    });
+    clearAutosaveTimer();
+    if (settingsInFlight) { autosaveQueued = true; return; }
+    await persistSettings('general');
   });
 
+  const resetAction = createBusyAction();
   $('resetSettingsBtn')?.addEventListener('click', async () => {
-    return runSettingsAction($('resetSettingsBtn'), async () => {
-      const next = getDefaultSettings();
-      try {
-        const result = await adminAction({ action: 'update_settings', settings: next, expectedVersion: state.settingsVersion });
-        state.settingsVersion = result.settingsVersion;
-        state.settings = next;
-        settingsDirty = false;
-        await saveState();
-        renderAll();
-        alert('已恢復並同步預設設定。');
-      } catch (err) {
-        alert(`恢復預設設定失敗：${err.message}`);
-      }
-    });
+    const form = $('settingsForm');
+    return resetAction({ button: $('resetSettingsBtn'), controls: form?.querySelectorAll('input, select, textarea, button') || [], task: async () => {
+      clearAutosaveTimer();
+      autosaveQueued = false;
+      while (settingsInFlight) await settingsInFlight;
+      if (settingsBlocked) { status('請先複製保留修改，再重新整理核對後恢復預設。'); return; }
+      await persistSettings('reset');
+    } });
   });
 
-  $('settingsForm')?.addEventListener('input', () => {
+  const accessAction = createBusyAction();
+  $('saveOpenAccessBtn')?.addEventListener('click', async () => {
+    const button = $('saveOpenAccessBtn');
+    return accessAction({ button, controls: [$('settingsOpenAccess')], task: async () => {
+      while (settingsInFlight) await settingsInFlight;
+      if (settingsBlocked) { accessStatus('請先複製保留修改，再重新整理核對。'); return; }
+      if (accessDirty) await persistSettings('access');
+      else accessStatus('權限設定沒有變更');
+    } });
+  });
+
+  $('settingsForm')?.addEventListener('settings:leave-category', (event) => {
+    const unfinished = [...document.querySelectorAll('[data-settings-module-label], [data-settings-module-description], [data-settings-module-page-note], [data-settings-module-icon]')].some(input => !input.value.trim());
+    if (unfinished) {
+      status('尚未儲存：請先填妥模組設定欄位。');
+      event.preventDefault();
+      return;
+    }
+    if (settingsDirty) collectSettings();
+  });
+
+  const trackSettingEdit = (event) => {
+    if (event.target?.id === 'settingsOpenAccess') {
+      accessDraft = !!event.target.checked;
+      accessDirty = accessDraft !== !!state.settings.openAccess;
+      accessStatus(accessDirty ? '權限已變更，請按「確認權限設定」。' : '權限設定沒有變更');
+      return;
+    }
     settingsDirty = true;
+    editRevision++;
     const preview = collectSettings();
     applyRuntimeBranding(preview);
     updateSettingsPreview(preview);
+    queueAutosave();
+  };
+  // Browsers commonly dispatch `change` only on blur, even after the same
+  // `input` value has already been saved. Track each control independently so
+  // that blur does not resend it, while change-only controls still save.
+  const settingControlValue = (target) => (
+    target?.type === 'checkbox' || target?.type === 'radio'
+      ? `checked:${!!target.checked}` : `value:${target?.value}`
+  );
+  $('settingsForm')?.addEventListener('input', (event) => {
+    if (event.target && typeof event.target === 'object') lastInputValues.set(event.target, settingControlValue(event.target));
+    trackSettingEdit(event);
   });
-
-  $('settingsForm')?.addEventListener('change', () => {
-    settingsDirty = true;
-    const preview = collectSettings();
-    updateSettingsPreview(preview);
-    if (!activeSettingsModuleId) renderModuleSettingsNavigator(preview);
+  $('settingsForm')?.addEventListener('change', (event) => {
+    const target = event.target;
+    const duplicate = !!target && typeof target === 'object' && lastInputValues.has(target)
+      && lastInputValues.get(target) === settingControlValue(target);
+    if (target && typeof target === 'object') lastInputValues.delete(target);
+    if (!duplicate) trackSettingEdit(event);
+    if (event.target?.id !== 'settingsOpenAccess' && !activeSettingsModuleId) renderModuleSettingsNavigator(collectSettings());
   });
 }

@@ -80,8 +80,14 @@ function sanitizeMap(values, defaults, maxLength) {
 export function mergeSettings(raw = {}) {
   const defaults = getDefaultSettings();
   const textFields = ['appTitle', 'loginTitle', 'companyName', 'companyAddress', 'companyPhone', 'companyIndustry', 'companyEmail', 'companyWebsite', 'companyTaxId', 'loginMessage', 'dashboardHeroTitle', 'dashboardHeroSubtitle', 'dashboardAnnouncement', 'welcomePrefix'];
+  // Contact details are optional. An explicit empty value means the user
+  // cleared the field, not that we should restore a placeholder company value.
+  const optionalContactFields = new Set(['companyAddress', 'companyPhone', 'companyEmail', 'companyWebsite', 'companyTaxId']);
   const merged = { ...defaults, ...raw };
-  textFields.forEach((field) => { merged[field] = sanitizePlainText(merged[field], field.includes('Subtitle') || field.includes('Message') ? 500 : 200) || defaults[field]; });
+  textFields.forEach((field) => {
+    const clean = sanitizePlainText(merged[field], field.includes('Subtitle') || field.includes('Message') ? 500 : 200);
+    merged[field] = optionalContactFields.has(field) && raw[field] != null ? clean : (clean || defaults[field]);
+  });
   merged.moduleLabels = sanitizeMap(raw.moduleLabels, defaults.moduleLabels, 80);
   merged.moduleDescriptions = sanitizeMap(raw.moduleDescriptions, defaults.moduleDescriptions, 300);
   merged.moduleIcons = sanitizeMap(raw.moduleIcons, defaults.moduleIcons, 8);

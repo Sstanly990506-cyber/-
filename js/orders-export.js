@@ -1,4 +1,4 @@
-import { COMPANY_INFO, escapeHtml } from './shared.js';
+import { COMPANY_INFO, escapeHtml } from './shared.js?v=20261116-settings-1';
 import { toTaiInch } from './pricing.js';
 
 function renderOrderTable(order) {

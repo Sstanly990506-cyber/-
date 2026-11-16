@@ -731,22 +731,51 @@
 
           </div>
           <div>
+            <span class="settings-autosave-indicator">設定：<span id="settingsAutoSaveStatus" role="status" aria-live="polite">尚無變更</span></span>
             <span class="sync-badge sync-badge-global">儲存中</span>
             <span class="sync-detail sync-detail-global">已儲存</span>
             <button class="btn" data-back>返回導航</button>
           </div>
         </header>
 
+        <div id="settingsCategoryHome" class="settings-category-grid" aria-label="設定分類">
+          <button class="settings-category-card" type="button" data-settings-category-open="company">
+            <span class="settings-category-icon" aria-hidden="true">🏢</span>
+            <span><strong>公司與外觀</strong><small>公司資料、網站文字和主題色</small></span>
+            <span class="settings-category-arrow" aria-hidden="true">›</span>
+          </button>
+          <button class="settings-category-card" type="button" data-settings-category-open="modules">
+            <span class="settings-category-icon" aria-hidden="true">⚙️</span>
+            <span><strong>功能模組</strong><small>各系統功能與報價設定</small></span>
+            <span class="settings-category-arrow" aria-hidden="true">›</span>
+          </button>
+          <button class="settings-category-card" type="button" data-settings-category-open="accounts">
+            <span class="settings-category-icon" aria-hidden="true">👥</span>
+            <span><strong>帳號與權限</strong><small>新增帳號、管理權限與密碼</small></span>
+            <span class="settings-category-arrow" aria-hidden="true">›</span>
+          </button>
+          <button class="settings-category-card" type="button" data-settings-category-open="maintenance">
+            <span class="settings-category-icon" aria-hidden="true">🗂️</span>
+            <span><strong>系統維護與備份</strong><small>查看系統狀態、備份與還原</small></span>
+            <span class="settings-category-arrow" aria-hidden="true">›</span>
+          </button>
+        </div>
+
+        <div id="settingsCategoryHeading" class="settings-category-heading card" hidden>
+          <button id="settingsCategoryBack" class="btn" type="button">← 返回設定分類</button>
+          <h3 id="settingsCategoryTitle" tabindex="-1"></h3>
+        </div>
+
         <form id="settingsForm" class="panel">
-          <div class="settings-grid compact-settings-grid">
+          <div class="settings-grid compact-settings-grid settings-category-section" data-settings-section="company" hidden>
             <article class="card settings-brand-card settings-disclosure-card">
-              <details id="settingsBrandDisclosure" class="settings-disclosure">
+              <details id="settingsBrandDisclosure" class="settings-disclosure" open>
                 <summary class="settings-disclosure-summary">
                   <span>
                     <strong>品牌與首頁文案</strong>
                     <small>網站標題、公司資料、首頁文字與預設首頁</small>
                   </span>
-                  <span class="settings-disclosure-pill">點我展開</span>
+                  <span class="settings-disclosure-pill"><span class="settings-disclosure-closed">點我展開</span><span class="settings-disclosure-open">點我收合</span></span>
                 </summary>
                 <div class="settings-disclosure-body">
                   <section class="settings-preview-card settings-preview-compact">
@@ -784,20 +813,6 @@
               </details>
             </article>
 
-            <article class="card settings-access-card">
-              <h3>可用性與安全性</h3>
-              <div class="settings-toggle-list">
-                <label class="settings-switch">
-                  <input id="settingsOpenAccess" type="checkbox" />
-                  <span>開啟「全員可用模式」：所有登入角色都可使用已啟用模組</span>
-                </label>
-                <label class="settings-switch">
-                  <input id="settingsEnableKeyboardShortcut" type="checkbox" />
-                  <span>啟用快速鍵（例如首頁按 A 進入稽核）</span>
-                </label>
-              </div>
-            </article>
-
             <article class="card settings-theme-card">
               <h3>主題色</h3>
               <div class="form-grid settings-form-grid">
@@ -806,9 +821,28 @@
                 <label>面板底色<input id="settingsThemePanel" type="color" /></label>
               </div>
             </article>
+            <article class="card">
+              <h3>操作偏好</h3>
+              <label class="settings-switch">
+                <input id="settingsEnableKeyboardShortcut" type="checkbox" />
+                <span>啟用快速鍵（例如首頁按 A 進入稽核）</span>
+              </label>
+            </article>
           </div>
 
-          <article class="card">
+            <article class="card settings-access-card settings-category-section" data-settings-section="accounts" hidden>
+              <h3>可用性與安全性</h3>
+              <div class="settings-toggle-list">
+                <label class="settings-switch">
+                  <input id="settingsOpenAccess" type="checkbox" />
+                  <span>開啟「全員可用模式」：所有登入角色都可使用已啟用模組</span>
+                </label>
+                <button class="btn" id="saveOpenAccessBtn" type="button">確認權限設定</button>
+                <span id="openAccessStatus" role="status" aria-live="polite">尚無變更</span>
+              </div>
+            </article>
+
+          <article class="card settings-category-section" data-settings-section="modules" hidden>
             <div class="section-head">
               <div>
                 <h3>功能模組設定</h3>
@@ -892,14 +926,18 @@
             </div>
           </article>
 
-          <div class="actions">
-            <button class="btn primary" type="submit">儲存設定</button>
-            <button class="btn" type="button" id="resetSettingsBtn">恢復預設</button>
+          <div class="settings-save-panel">
+            <button class="btn settings-category-section" data-settings-section="company modules accounts" type="submit" hidden>立即儲存／重試</button>
+          </div>
+          <div class="card settings-category-section" data-settings-section="maintenance" hidden>
+            <h3>恢復預設設定</h3>
+            <p class="sub">將所有一般設定恢復為系統預設值。</p>
+            <button class="btn" type="button" id="resetSettingsBtn">恢復所有設定</button>
           </div>
         </form>
 
         <div class="settings-grid compact-settings-grid">
-          <article class="card">
+          <article class="card settings-category-section" data-settings-section="accounts" hidden>
             <h3>新增登入帳戶</h3>
             <form id="createAccountForm" class="form-grid compact">
               <label>帳號<input id="newAccountUsername" autocomplete="off" required /></label>
@@ -922,13 +960,13 @@
               <button class="btn primary" type="submit">新增帳戶</button>
             </form>
           </article>
-          <article class="card">
+          <article class="card settings-category-section" data-settings-section="accounts" hidden>
             <h3>帳號權限管理</h3>
 
             <div class="actions"><button class="btn" type="button" id="refreshAccountsBtn">刷新帳號</button></div>
             <div id="accountPermissionsList" class="account-permissions-list"></div>
           </article>
-          <article class="card">
+          <article class="card settings-category-section" data-settings-section="maintenance" hidden>
             <h3>系統健康 / 容量監控</h3>
 
             <div class="actions"><button class="btn primary" type="button" id="refreshCapacityBtn">重新檢測</button></div>
@@ -936,7 +974,7 @@
             <div id="capacityMetrics" class="capacity-grid"></div>
             <ul id="capacityWarnings" class="list"></ul>
           </article>
-          <article class="card">
+          <article class="card settings-category-section" data-settings-section="accounts" hidden>
             <h3>更改財經系統密碼</h3>
             <p class="sub">不需要舊密碼。新密碼會以雜湊儲存，至少需要 8 個字元。</p>
             <form id="financePasswordForm" class="form-grid compact">
@@ -945,7 +983,7 @@
               <button class="btn primary" type="submit">更新財經密碼</button>
             </form>
           </article>
-          <article class="card">
+          <article class="card settings-category-section" data-settings-section="maintenance" hidden>
             <h3>系統維護</h3>
             <p class="sub">備份會包含營運資料與設定，不包含登入密碼、財務密碼或伺服器金鑰。還原與清空都需要管理員確認。</p>
             <div class="actions">

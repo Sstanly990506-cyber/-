@@ -2,11 +2,11 @@ import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview
 import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-mobile-delete-1';
 import { $, getTodayText } from './shared.js';
 import { renderAiCorrectionCenter, loadAiCorrections, exportAiCorrections } from './orders-ai-corrections.js?v=20261114-ai-corrections-1';
-import { syncOrderToReceivables, moveOrder } from './store.js?v=20261115-line-theme-1';
+import { syncOrderToReceivables, moveOrder } from './store.js?v=20261116-settings-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js?v=20261016-concise-ui-1';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
-import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js';
+import { openOrderExportWindow as openOrderExportWindowFromModule } from './orders-export.js?v=20261116-settings-1';
 import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
 import { requestOrderRecognition } from './orders-ai-request.js';
 import { bindMissingCustomerEvents, hideMissingCustomerPrompt } from './orders-customers.js?v=20260715-mobile-company-suggestions-1';
