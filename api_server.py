@@ -6,7 +6,7 @@ import os
 from api.http_server import create_server, is_blocked_static_path
 from api.routes import GET_ROUTES, POST_ROUTES, resolve_get_route, resolve_post_route
 from api.line_bot import LineBotError, handle_line_webhook
-from api.service import ApiError, delete_entity_payload, list_entity_payload, upsert_entity_payload
+from api.service import ApiError, delete_entity_payload, get_order_payload, list_entity_payload, upsert_entity_payload
 from api.storage import BASE_DIR, DATABASE_URL, LOCAL_STATE_PATH, ensure_storage, get_storage_mode
 from api import local_ai
 from api import remember_session
@@ -15,10 +15,10 @@ if os.environ.get('VERCEL') == '1':
     local_ai.configure_production()
 
 try:
-    from flask import Flask, abort, jsonify, request, send_from_directory
+    from flask import Flask, abort, jsonify, make_response, request, send_from_directory
 except ImportError:
     Flask = None
-    abort = jsonify = request = send_from_directory = None
+    abort = jsonify = make_response = request = send_from_directory = None
 
 
 app = Flask(__name__, static_folder=None) if Flask is not None else None
@@ -48,7 +48,7 @@ if app is not None:
 
     @app.after_request
     def private_ai_response(response):
-        if request.path.startswith('/api/local-ai/'):
+        if request.path.startswith('/api/local-ai/') or request.path == '/api/orders/draft-key':
             response.headers['Cache-Control'] = 'no-store'
             response.headers['X-Content-Type-Options'] = 'nosniff'
         return response
@@ -153,6 +153,12 @@ if app is not None:
             request.args.get('pageSize', 100),
             request.args.get('q', ''),
         )
+
+    @app.get('/api/data/orders/<record_id>')
+    def get_order(record_id):
+        response = make_response(service_response(get_order_payload, bearer_token(), record_id))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     @app.put('/api/data/<entity>/<record_id>')
     def put_entity(entity, record_id):

@@ -183,9 +183,11 @@
               </fieldset>
               <div class="actions order-form-actions">
                 <button id="saveOrderBtn" class="btn primary" type="submit">儲存工單</button>
+                <button id="orderVerifySaveBtn" class="btn hidden" type="button">核對儲存結果</button>
                 <button class="btn" type="button" id="clearOrderBtn">清空</button>
                 <button class="btn" type="button" id="exportOrderBtn">匯出工單</button>
               </div>
+              <p id="orderSaveStatus" class="sub order-field-wide" role="status" aria-live="polite"></p>
             </form>
           </article>
         <div id="ordersPricingScreen" class="hidden">

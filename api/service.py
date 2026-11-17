@@ -152,6 +152,14 @@ def list_entity_payload(token,entity,page=1,page_size=100,query=''):
         result['items']=[visible_record(account,entity,row) for row in result.get('items',[])]
         return result
     except ValueError as err:raise ApiError(str(err),400) from err
+
+def get_order_payload(token,record_id):
+    """Read one authorized order by its exact id for save reconciliation."""
+    account=require_entity_access(token,'orders')
+    row=get_record('orders',str(record_id or ''))
+    if not row:raise ApiError('order not found',404)
+    return {'ok':True,'item':visible_record(account,'orders',row)}
+
 def upsert_entity_payload(token,entity,record_id,payload):
     account=require_entity_access(token,entity)
     if not isinstance(payload,dict):raise ApiError('invalid record',400)

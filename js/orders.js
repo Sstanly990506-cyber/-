@@ -2,7 +2,7 @@ import { createOrderDragPreview } from './orders-drag.js?v=20261016-drag-preview
 import { bindOrderDeleteHold } from './orders-delete-hold.js?v=20261017-mobile-delete-1';
 import { $, getTodayText } from './shared.js';
 import { renderAiCorrectionCenter, loadAiCorrections, exportAiCorrections } from './orders-ai-corrections.js?v=20261114-ai-corrections-1';
-import { syncOrderToReceivables, moveOrder } from './store.js?v=20261116-settings-1';
+import { syncOrderToReceivables, moveOrder, saveOrderConfirmed, verifyOrderSave } from './store.js?v=20261117-order-drafts-1';
 import { calculateOrderQuote, classifyOrderPricingTier, coatingTypeCode, normalizeCustomerTierBounds, normalizePricingTier, toTaiInch } from './pricing.js';
 import { applySizeNotation } from './size-notation.js?v=20261016-concise-ui-1';
 import { COATING_LABELS, formatRuleSize, isCustomerPricingConfigRule, isCustomerTierPriceRule, pricingTierLabel } from './orders-pricing.js';
@@ -10,10 +10,76 @@ import { openOrderExportWindow as openOrderExportWindowFromModule } from './orde
 import { AI_RECOGNITION_FIELDS, clearAiRecognitionReview, prepareOrderImage, renderAiRecognitionReview } from './orders-ai.js?v=20260714-ai-precision-1';
 import { requestOrderRecognition } from './orders-ai-request.js';
 import { bindMissingCustomerEvents, hideMissingCustomerPrompt } from './orders-customers.js?v=20260715-mobile-company-suggestions-1';
+import { createOrderDraftVault } from './order-drafts.js?v=20261117-order-drafts-1';
 let lastRecognizedOrder = null;
 let lastAutoPrice = 0;
 let highlightedOrderId = null;
 let pendingOrderMove = null;
+let orderFormGeneration = 0;
+let orderSaveInFlight = false;
+let orderDraftVault = null;
+let unprotectedOrderForm = false;
+let draftProtectionPending = false;
+
+function canLeaveOrderForm() {
+  if (!unprotectedOrderForm) return true;
+  alert(draftProtectionPending
+    ? '草稿正在保存，請稍候再切換或清空。工單列表仍可查看和移動。'
+    : '此裝置目前無法保存工單草稿，為避免資料遺失，請先完成儲存並保留此畫面。工單列表仍可查看和移動。');
+  return false;
+}
+
+function notifyOrderDraftChange() {
+  $('orderForm')?.dispatchEvent(new CustomEvent('order:draft-change'));
+}
+
+function updateOrderSaveStatus(message = '') {
+  const form = $('orderForm');
+  const blocked = form?.dataset.saveBlocked;
+  const status = $('orderSaveStatus');
+  if (status) status.textContent = message || (blocked === 'uncertain'
+    ? '儲存結果尚未確認。資料已保留，請先核對儲存結果，勿重新建立同一張工單。'
+    : blocked === 'conflict' ? '這張工單已有其他修改，請保留目前內容並核對最新資料。' : '');
+  const saveButton = $('saveOrderBtn');
+  if (saveButton) {
+    saveButton.disabled = orderSaveInFlight || !!blocked;
+    saveButton.textContent = orderSaveInFlight ? '儲存中…' : '儲存工單';
+  }
+  const verifyButton = $('orderVerifySaveBtn');
+  verifyButton?.classList.toggle('hidden', blocked !== 'uncertain');
+  if (verifyButton) verifyButton.disabled = orderSaveInFlight;
+}
+
+function orderFormFingerprint() {
+  return JSON.stringify(Array.from($('orderForm').elements)
+    .filter(element => element.id && !['button', 'submit', 'file'].includes(element.type))
+    .map(element => [element.id, element.value, element.checked]));
+}
+
+// Called before logout while the current account's encryption key is available.
+export async function prepareOrderLogout() {
+  const hasContent = !!orderDraftVault?.revision() || ['orderId', 'orderNumber', 'orderItemName', 'billingCustomerInput', 'upstreamInput', 'downstreamInput', 'orderAddress', 'sheetCountText', 'sheetCount', 'sizeNotation', 'sizeLength', 'sizeWidth', 'totalPrice', 'actualCost', 'orderUnitPrice']
+    .some(id => String($(id)?.value || '').trim());
+  if (!hasContent && !$('orderForm')?.dataset.saveBlocked) return true;
+  notifyOrderDraftChange();
+  const revision = orderDraftVault?.revision();
+  try {
+    const saved = !!await orderDraftVault?.flush(revision);
+    unprotectedOrderForm = !saved;
+    return saved;
+  } catch {
+    unprotectedOrderForm = true;
+    return false;
+  }
+}
+
+// Always clear the shared DOM at an account boundary. Detached encrypted drafts
+// belong to the previous account and remain available only to that account.
+export function resetOrderFormForAccountChange() {
+  unprotectedOrderForm = false;
+  draftProtectionPending = false;
+  clearOrderForm();
+}
 const ORDER_ENTRY_FIELD_IDS = [
   'orderNumber',
   'orderDate',
@@ -404,8 +470,8 @@ function buildOrderFromForm(state) {
   };
   const quote = calculateOrderQuote(state, order);
   const enteredPrice = $('orderUnitPrice').value;
-  order.unitPrice = enteredPrice !== '' ? Number(enteredPrice) : $('orderId').value ? null : quote?.unitPrice ?? null;
   const existing = state.orders.find(row => row.id === $('orderId').value);
+  order.unitPrice = enteredPrice !== '' ? Number(enteredPrice) : existing ? null : quote?.unitPrice ?? null;
   order.pricingMode = existing?.pricingMode || quote?.pricingMode || (order.machineType === 'SMALL' ? 'sheet' : 'ream');
   return order;
 }
@@ -574,6 +640,13 @@ export function renderOrders(state, renderCustomerOptions) {
 }
 
 export function clearOrderForm() {
+  if (!canLeaveOrderForm()) return false;
+  orderDraftVault?.detach();
+  orderFormGeneration += 1;
+  delete $('orderForm').dataset.saveBlocked;
+  delete $('orderForm').dataset.pendingPayload;
+  delete $('orderForm').dataset.pendingVersion;
+  $('orderForm').dataset.expectedVersion = '0';
   $('orderForm').reset();
   $('orderId').value = '';
   $('actualCost').value = '';
@@ -588,11 +661,21 @@ export function clearOrderForm() {
   document.querySelectorAll('.ai-review-required').forEach((input) => input.classList.remove('ai-review-required'));
   clearAiRecognitionReview();
   hideMissingCustomerPrompt();
+  updateOrderSaveStatus();
+  return true;
 }
 
 export function openOrderForEdit(state, orderId) {
   const order = state.orders.find((o) => o.id === orderId);
   if (!order) return false;
+  if (!canLeaveOrderForm()) return false;
+  orderDraftVault?.detach();
+  orderFormGeneration += 1;
+  delete $('orderForm').dataset.saveBlocked;
+  delete $('orderForm').dataset.pendingPayload;
+  delete $('orderForm').dataset.pendingVersion;
+  $('orderForm').dataset.expectedVersion = String(Number(order._updatedAt) || 0);
+  updateOrderSaveStatus();
   $('orderId').value = order.id;
   $('orderNumber').value = order.orderNumber || '';
   $('orderItemName').value = order.itemName || '';
@@ -623,7 +706,7 @@ export function openOrderForEdit(state, orderId) {
 function copyOrderAsNew(state, orderId) {
   const order = state.orders.find((item) => item.id === orderId);
   if (!order) return false;
-  clearOrderForm();
+  if (!clearOrderForm()) return false;
   $('orderNumber').value = '';
   $('orderItemName').value = order.itemName || '';
   $('orderUnitPrice').value = order.unitPrice ?? '';
@@ -648,6 +731,7 @@ function copyOrderAsNew(state, orderId) {
   updateTaiInchPreview();
   updateOrderSmartHint(state);
   $('orderNumber')?.focus();
+  notifyOrderDraftChange();
   return true;
 }
 
@@ -683,6 +767,7 @@ function applyRecognizedOrder(state, order) {
     Object.values(AI_RECOGNITION_FIELDS).forEach(({ input }) => $(input)?.classList.add('ai-review-required'));
   }
   renderAiRecognitionReview(order);
+  notifyOrderDraftChange();
   return addressFilledFromCustomer;
 }
 
@@ -742,6 +827,38 @@ async function recognizeOrderFromImage(state) {
 }
 
 export function bindOrderEvents(state, saveState, renderAll) {
+  orderDraftVault = createOrderDraftVault(state);
+  const trackDraftProtection = () => {
+    const generation = orderFormGeneration;
+    const revision = orderDraftVault?.revision();
+    unprotectedOrderForm = true;
+    draftProtectionPending = !!revision;
+    if (!revision) return;
+    orderDraftVault.whenSettled(revision).then((saved) => {
+      const current = orderDraftVault?.revision();
+      if (generation !== orderFormGeneration || current?.id !== revision.id || current?.rev !== revision.rev) return;
+      draftProtectionPending = false;
+      unprotectedOrderForm = !saved;
+    }).catch(() => {
+      const current = orderDraftVault?.revision();
+      if (generation !== orderFormGeneration || current?.id !== revision.id || current?.rev !== revision.rev) return;
+      draftProtectionPending = false;
+      unprotectedOrderForm = true;
+    });
+  };
+  const form = $('orderForm');
+  form?.addEventListener('input', (event) => {
+    if (event.target.id) trackDraftProtection();
+  });
+  form?.addEventListener('change', (event) => {
+    if (event.target.id) trackDraftProtection();
+  });
+  form?.addEventListener('order:draft-change', trackDraftProtection);
+  window.addEventListener('beforeunload', (event) => {
+    if (!unprotectedOrderForm) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
   $('recognizeOrderBtn')?.addEventListener('click', () => recognizeOrderFromImage(state));
   $('reportAiCorrectionBtn')?.addEventListener('click', () => reportAiCorrection(state));
   $('aiRecognitionReview')?.addEventListener('click', (event) => {
@@ -754,6 +871,7 @@ export function bindOrderEvents(state, saveState, renderAll) {
     input.classList.remove('ai-review-required');
     if (button.dataset.aiCandidateField === 'downstream') syncAddressFromDownstream(state);
     updateOrderSmartHint(state);
+    notifyOrderDraftChange();
   });
   $('refreshAiCorrectionsBtn')?.addEventListener('click', () => loadAiCorrections(state).catch((err) => alert(`載入 AI 修正紀錄失敗：${err.message}`)));
   $('exportAiCorrectionsBtn')?.addEventListener('click', () => exportAiCorrections());
@@ -772,8 +890,10 @@ export function bindOrderEvents(state, saveState, renderAll) {
   if (getOrderModuleSettings(state).showAiTools !== false) {
     loadAiCorrections(state).catch(() => renderAiCorrectionCenter());
   }
-  $('orderForm')?.addEventListener('submit', (e) => {
+  $('orderForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const form = $('orderForm');
+    if (orderSaveInFlight || form.dataset.saveBlocked) return;
     const id = $('orderId').value || crypto.randomUUID();
     const existing = state.orders.find((o) => o.id === id);
     const payload = {
@@ -786,19 +906,104 @@ export function bindOrderEvents(state, saveState, renderAll) {
     if (!payload.orderNumber) payload.orderNumber = nextOrderNumber(state);
     const duplicated = state.orders.find((o) => o.id !== id && (o.orderNumber || '').trim() === payload.orderNumber.trim());
     if (duplicated) return alert(`工單編號已存在：${payload.orderNumber}`);
-
-    if (existing) {
-      Object.assign(existing, payload);
-      syncOrderToReceivables(existing);
-    } else {
-      syncOrderToReceivables(payload);
-      state.orders.unshift(payload);
+    $('orderId').value = id;
+    $('orderNumber').value = payload.orderNumber;
+    const expectedVersion = Number(form.dataset.expectedVersion || 0);
+    const generation = orderFormGeneration;
+    const fingerprint = orderFormFingerprint();
+    // Persist the exact request before sending, so an interrupted response can
+    // only be reconciled against the request that may actually have committed.
+    form.dataset.saveBlocked = 'uncertain';
+    form.dataset.pendingPayload = JSON.stringify(payload);
+    form.dataset.pendingVersion = String(expectedVersion);
+    orderSaveInFlight = true;
+    unprotectedOrderForm = true;
+    updateOrderSaveStatus('儲存中，請稍候…');
+    notifyOrderDraftChange();
+    const draftRevision = orderDraftVault?.revision();
+    let draftProtected = false;
+    try {
+      draftProtected = orderDraftVault ? await orderDraftVault.flush(draftRevision) : false;
+      if (generation === orderFormGeneration) unprotectedOrderForm = !draftProtected;
+      if (!draftProtected && generation === orderFormGeneration) updateOrderSaveStatus('無法在裝置保存草稿；儲存中請勿關閉本頁。');
+      const result = await saveOrderConfirmed(payload, expectedVersion);
+      // A local cleanup failure must never be reported as a failed server write.
+      try { await orderDraftVault?.clearIfRevision(draftRevision); } catch (error) { console.warn('清理工單草稿失敗', error); }
+      if (generation !== orderFormGeneration) return;
+      delete form.dataset.saveBlocked;
+      delete form.dataset.pendingPayload;
+      delete form.dataset.pendingVersion;
+      form.dataset.expectedVersion = String(result.updatedAt);
+      if (orderFormFingerprint() === fingerprint) unprotectedOrderForm = false;
+      if (orderFormFingerprint() === fingerprint && state.orderScreen === 'form') {
+        clearOrderForm();
+        state.orderScreen = 'list';
+        renderAll();
+      } else {
+        notifyOrderDraftChange();
+        updateOrderSaveStatus('工單已儲存；畫面上的後續修改尚未儲存。');
+      }
+    } catch (error) {
+      if (generation !== orderFormGeneration) return;
+      if (error.uncertain) {
+        form.dataset.saveBlocked = 'uncertain';
+        updateOrderSaveStatus(`儲存結果待核對，請先核對，勿重新建立同一張工單。${draftProtected ? '' : ' 此裝置未能保存草稿，請勿關閉本頁。'}`);
+      } else {
+        delete form.dataset.pendingPayload;
+        delete form.dataset.pendingVersion;
+        if (error.conflict) form.dataset.saveBlocked = 'conflict';
+        else delete form.dataset.saveBlocked;
+        updateOrderSaveStatus(error.conflict ? '這張工單已有其他修改，請保留目前內容並核對最新資料。' : `儲存失敗，內容已保留：${error.message || '請稍後再試。'}`);
+      }
+      notifyOrderDraftChange();
+    } finally {
+      orderSaveInFlight = false;
+      if (generation === orderFormGeneration) {
+        const message = $('orderSaveStatus')?.textContent || '';
+        updateOrderSaveStatus(message);
+      } else updateOrderSaveStatus();
     }
+  });
 
-    saveState();
-    clearOrderForm();
-    state.orderScreen = 'list';
-    renderAll();
+  $('orderVerifySaveBtn')?.addEventListener('click', async () => {
+    const form = $('orderForm');
+    if (orderSaveInFlight || form.dataset.saveBlocked !== 'uncertain') return;
+    let payload;
+    try { payload = JSON.parse(form.dataset.pendingPayload || 'null'); } catch { payload = null; }
+    if (!payload?.id) return updateOrderSaveStatus('缺少原始送出資料，請保留畫面並由員工核對工單。');
+    const generation = orderFormGeneration;
+    orderSaveInFlight = true;
+    $('orderVerifySaveBtn').disabled = true;
+    updateOrderSaveStatus('正在核對儲存結果…');
+    try {
+      const result = await verifyOrderSave(payload, Number(form.dataset.pendingVersion || 0));
+      if (generation !== orderFormGeneration) return;
+      if (result.status === 'saved') {
+        delete form.dataset.saveBlocked;
+        delete form.dataset.pendingPayload;
+        delete form.dataset.pendingVersion;
+        form.dataset.expectedVersion = String(result.item._updatedAt);
+        notifyOrderDraftChange();
+        updateOrderSaveStatus('已確認先前送出的工單已儲存；目前畫面保留，請核對後續修改。');
+      } else {
+        updateOrderSaveStatus('目前無法確認是否已儲存；內容仍保留，請稍後再核對或請員工協助，勿重新建立同一張工單。');
+      }
+    } catch (error) {
+      if (generation === orderFormGeneration) updateOrderSaveStatus(`核對失敗，內容已保留：${error.message || '請稍後再試。'}`);
+    } finally {
+      orderSaveInFlight = false;
+      $('orderVerifySaveBtn').disabled = false;
+      updateOrderSaveStatus(generation === orderFormGeneration ? $('orderSaveStatus')?.textContent : '');
+    }
+  });
+  $('orderForm')?.addEventListener('order:draft-restored', () => {
+    orderFormGeneration += 1;
+    updateTaiInchPreview();
+    updateOrderSaveStatus();
+    trackDraftProtection();
+  });
+  $('orderForm')?.addEventListener('order:before-draft-restore', (event) => {
+    if (!canLeaveOrderForm()) event.preventDefault();
   });
 
   let pendingRowClick = null;
@@ -1011,11 +1216,19 @@ export function bindOrderEvents(state, saveState, renderAll) {
     $(id)?.addEventListener('change', () => { updateTaiInchPreview(); updateOrderSmartHint(state); });
   });
   $('sizeNotation')?.addEventListener('change', () => { applySizeNotation(state, updateTaiInchPreview); updateOrderSmartHint(state); });
-  $('sizeNotation')?.addEventListener('blur', () => { applySizeNotation(state, updateTaiInchPreview); updateOrderSmartHint(state); });
+  $('sizeNotation')?.addEventListener('blur', () => {
+    const before = orderFormFingerprint();
+    if (applySizeNotation(state, updateTaiInchPreview)) updateOrderSmartHint(state);
+    if (orderFormFingerprint() !== before) notifyOrderDraftChange();
+  });
   updateTaiInchPreview();
 
   $('downstreamInput')?.addEventListener('change', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
-  $('downstreamInput')?.addEventListener('blur', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
+  $('downstreamInput')?.addEventListener('blur', () => {
+    const before = orderFormFingerprint();
+    if (syncAddressFromDownstream(state)) updateOrderSmartHint(state);
+    if (orderFormFingerprint() !== before) notifyOrderDraftChange();
+  });
   $('downstreamInput')?.addEventListener('input', () => { syncAddressFromDownstream(state); updateOrderSmartHint(state); });
   $('billingCustomerInput')?.addEventListener('input', () => updateOrderSmartHint(state));
   $('billingCustomerInput')?.addEventListener('change', () => updateOrderSmartHint(state));

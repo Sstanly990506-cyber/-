@@ -5,7 +5,7 @@ import test from 'node:test';
 
 async function harness(fetch, events = [], hooks = {}) {
   const context = vm.createContext({
-    fetch, console, setTimeout, clearTimeout, setInterval: hooks.setInterval || setInterval,
+    fetch, console, setTimeout: hooks.setTimeout || setTimeout, clearTimeout: hooks.clearTimeout || clearTimeout, AbortController, setInterval: hooks.setInterval || setInterval,
     queueMicrotask: () => {},
     document: hooks.document || { getElementById: () => null },
     window: { dispatchEvent: event => events.push(event.type), alert: hooks.alert },
@@ -569,4 +569,156 @@ test('legacy orders do not gain an invented creation time after an edit', async 
   store.state.orders[0].note = 'edited';
   await store.saveState();
   assert.equal(Object.prototype.hasOwnProperty.call(store.state.orders[0], 'createdAt'), false);
+});
+
+async function confirmedOrderHarness(fetch, hooks = {}) {
+  const store = await harness(fetch, [], hooks);
+  store.state.allowedViews = ['ordersView'];
+  store.hydrateBootstrap({ initialPages: { customers: { items: [] }, priceRules: { items: [] }, orders: { items: [{ id: 'order-1', orderNumber: 'WO-1', itemName: 'original', _updatedAt: 10 }] } } });
+  return store;
+}
+
+test('a confirmed order is staged outside shared state and does not block movement', async () => {
+  let release;
+  const writes = [];
+  const store = await confirmedOrderHarness(async (url, options) => {
+    if (url === '/api/dashboard') return response({summary:{}});
+    if (url === '/api/orders/move') return response({orders: [], updatedAt: 11});
+    writes.push(url);
+    await new Promise(resolve => { release = resolve; });
+    return response({ok:true, id:'order-1', updatedAt: 12, createdAt: 'created'});
+  });
+  const pending = store.saveOrderConfirmed({ id: 'order-1', orderNumber:'WO-1', itemName:'edited' }, 10);
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(store.state.orders[0].itemName, 'original');
+  await store.moveOrder('a', 'b');
+  release();
+  const saved = await pending;
+  assert.equal(saved.order.itemName, 'edited');
+  assert.equal(store.state.orders[0]._updatedAt, 12);
+  assert.equal(store.state.orders[0].createdAt, 'created');
+  await store.saveState();
+  assert.equal(writes.length, 1);
+});
+
+test('a lost or malformed order response is uncertain and other saves cannot replay the draft', async () => {
+  for (const fail of [() => { throw new TypeError('lost'); }, () => response({ok:true})]) {
+    let writes = 0;
+    const store = await confirmedOrderHarness(async url => {
+      if (url === '/api/dashboard') return response({summary:{}});
+      writes++;
+      return fail();
+    });
+    await assert.rejects(store.saveOrderConfirmed({id:'new-id',orderNumber:'new'}, 0), error => error.uncertain === true);
+    assert.equal(store.state.orders.some(row => row.id === 'new-id'), false);
+    await store.saveState();
+    assert.equal(writes, 1);
+  }
+});
+
+test('a definite order conflict retains the baseline and requires the viewed version', async () => {
+  let writes = 0;
+  const store = await confirmedOrderHarness(async () => {
+    writes++;
+    return {ok:false,status:409,json:async()=>({error:'changed',conflict:true})};
+  });
+  const payload = {id:'order-1',orderNumber:'WO-1',itemName:'local'};
+  await assert.rejects(store.saveOrderConfirmed(payload, 9), error => error.conflict === true);
+  assert.equal(writes, 0);
+  await assert.rejects(store.saveOrderConfirmed(payload, 10), error => error.conflict === true && !error.uncertain);
+  assert.equal(store.state.orders[0].itemName, 'original');
+  assert.equal(store.state.orders[0]._updatedAt, 10);
+});
+
+test('uncertain order verification uses the exact id and only confirms matching later data', async () => {
+  let serverItem = {id:'order-1',orderNumber:'WO-1',itemName:'saved',_updatedAt:11};
+  const requests = [];
+  const store = await confirmedOrderHarness(async (url, options) => {
+    if (url === '/api/dashboard') return response({summary:{}});
+    requests.push({url, method: options.method || 'GET'});
+    if (serverItem === null) return {ok:false,status:404,json:async()=>({error:'missing'})};
+    return response({ok:true,item:serverItem});
+  });
+  const payload = {id:'order-1',orderNumber:'WO-1',itemName:'saved'};
+  serverItem.itemName = 'different';
+  assert.equal((await store.verifyOrderSave(payload, 10)).status, 'different');
+  serverItem = null;
+  assert.equal((await store.verifyOrderSave(payload, 10)).status, 'missing');
+  serverItem = {id:'order-1',orderNumber:'WO-1',itemName:'saved',_updatedAt:11};
+  const result = await store.verifyOrderSave(payload, 10);
+  assert.equal(result.status, 'saved');
+  assert.equal(result.item._updatedAt, 11);
+  assert.equal(store.state.orders[0].itemName, 'saved');
+  assert.ok(requests.every(call => call.url === '/api/data/orders/order-1' && call.method === 'GET'));
+});
+
+test('verification does not replace or rebase another local edit', async () => {
+  const store = await confirmedOrderHarness(async url => url === '/api/dashboard' ? response({summary:{}}) : response({ok:true,item:{id:'order-1',orderNumber:'WO-1',itemName:'saved',_updatedAt:11}}));
+  store.state.orders[0].itemName = 'another local edit';
+  const result = await store.verifyOrderSave({id:'order-1',orderNumber:'WO-1',itemName:'saved'}, 10);
+  assert.equal(result.status, 'different');
+  assert.equal(store.state.orders[0].itemName, 'another local edit');
+  assert.equal(store.state.orders[0]._updatedAt, 10);
+});
+
+test('order confirmation checks permission and discards a response after switching accounts', async () => {
+  let release, calls = 0;
+  const store = await confirmedOrderHarness(async () => {
+    calls++;
+    await new Promise(resolve => { release = resolve; });
+    return response({ok:true,id:'order-1',updatedAt:11});
+  });
+  store.state.allowedViews = ['customersView'];
+  await assert.rejects(store.saveOrderConfirmed({id:'order-1'}, 10), /權限/);
+  assert.equal(calls, 0);
+  store.state.allowedViews = ['ordersView'];
+  const pending = store.saveOrderConfirmed({id:'order-1',itemName:'private'}, 10);
+  const rejected = assert.rejects(pending, error => error.uncertain === true);
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  store.setAuthToken('other-account');
+  release(); await rejected;
+  assert.equal(store.state.orders.length, 0);
+});
+
+test('unknown HTTP rejection and non-advancing success cannot prove the order was saved', async () => {
+  for (const reply of [
+    {ok:false,status:429,json:async()=>({error:'rate limited'})},
+    response({ok:true,id:'order-1',updatedAt:10}),
+  ]) {
+    const store = await confirmedOrderHarness(async () => reply);
+    await assert.rejects(store.saveOrderConfirmed({id:'order-1',itemName:'edited'}, 10), error => error.uncertain === true);
+    assert.equal(store.state.orders[0].itemName, 'original');
+  }
+});
+
+test('a separately dirty order cannot be silently replaced by a form save', async () => {
+  let calls = 0;
+  const store = await confirmedOrderHarness(async () => { calls++; return response(); });
+  store.state.orders[0].itemName = 'other local edit';
+  await assert.rejects(store.saveOrderConfirmed({id:'order-1',itemName:'form edit'}, 10), error => error.conflict === true);
+  assert.equal(calls, 0);
+  assert.equal(store.state.orders[0].itemName, 'other local edit');
+});
+
+test('a timed-out order save aborts waiting, stays uncertain, and is never replayed by sync', async () => {
+  let timeout, duration, requestSignal, writes = 0, cleared = false;
+  const store = await confirmedOrderHarness(async (url, options) => {
+    if (url === '/api/dashboard') return response({summary:{}});
+    writes++;
+    requestSignal = options.signal;
+    return new Promise(() => {}); // An uncooperative transport must not hold the UI either.
+  }, {
+    setTimeout: (fn, ms) => { timeout = fn; duration = ms; return 17; },
+    clearTimeout: id => { if (id === 17) cleared = true; },
+  });
+  const pending = store.saveOrderConfirmed({id:'new-order',orderNumber:'NEW'}, 0);
+  const rejected = assert.rejects(pending, error => error.uncertain === true);
+  assert.equal(duration, 20000);
+  timeout();
+  await rejected;
+  assert.equal(requestSignal.aborted, true);
+  assert.equal(cleared, true);
+  assert.equal(store.state.orders.some(order => order.id === 'new-order'), false);
+  await store.saveState();
+  assert.equal(writes, 1);
 });

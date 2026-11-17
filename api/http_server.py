@@ -6,7 +6,7 @@ from urllib.parse import parse_qs,unquote,urlparse
 from api._common import get_bearer_token,json_response,read_json_body,discard_small_rejected_body
 from api.line_bot import LineBotError,handle_line_webhook
 from api.routes import resolve_get_route,resolve_post_route
-from api.service import ApiError,delete_entity_payload,list_entity_payload,upsert_entity_payload
+from api.service import ApiError,delete_entity_payload,get_order_payload,list_entity_payload,upsert_entity_payload
 from api.storage import BASE_DIR
 from api import local_ai
 from api import remember_session
@@ -67,6 +67,8 @@ class AppRequestHandler(BaseHTTPRequestHandler):
         route=resolve_get_route(path,token,q)
         if route:
             op,args=route;self.send_service_response(op,*args)
+        elif path.startswith('/api/data/orders/') and len(path.split('/')) == 5:
+            self.send_service_response(get_order_payload,token,unquote(path.split('/')[4]))
         elif path.startswith('/api/data/'):
             entity=path.split('/')[3];self.send_service_response(list_entity_payload,token,entity,q.get('page',['1'])[0],q.get('pageSize',['100'])[0],q.get('q',[''])[0])
         elif path=='/':self.serve_file('index.html')

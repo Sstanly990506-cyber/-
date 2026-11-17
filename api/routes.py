@@ -1,5 +1,6 @@
 """Shared API route table for Flask, Vercel, and the built-in HTTP server."""
 from api.presence import presence_payload
+from api.order_draft_key import order_draft_key_payload
 
 from api.local_ai import public_config, demo_session, chat_payload, preview_payload, confirm_payload, stop_payload, session_payload, ticket_payload
 
@@ -40,6 +41,7 @@ def query_value(query, key, default=''):
 
 
 GET_ROUTES = {
+    '/api/orders/draft-key': lambda token, query: (order_draft_key_payload, (token,)),
     '/api/local-ai/session': lambda token, query: (session_payload, (token,)),
     '/api/local-ai/config': lambda token, query: (public_config, (token, query)),
     '/api/health': lambda token, query: (health_payload, ()),

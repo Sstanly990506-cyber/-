@@ -57,6 +57,7 @@ const SEARCH_INPUTS = {
 
 export const state = {
   user: null,
+  accountId: null,
   userRole: 'viewer',
   allowedViews: null,
   glossOptions: [],
@@ -240,8 +241,10 @@ function refresh() {
   queueMicrotask(renderAllPagers);
 }
 
-export function setAuthToken(token) {
-  if (state.authToken !== (token || null)) {
+export function setAuthToken(token, accountId = null) {
+  const nextToken = token || null;
+  const nextAccountId = nextToken && accountId ? String(accountId) : null;
+  if (state.authToken !== nextToken || state.accountId !== nextAccountId) {
     sessionVersion += 1;
     initializedRemote = false;
     conflictNotices.clear();
@@ -256,7 +259,8 @@ export function setAuthToken(token) {
     state.financeUntil = 0;
     state.financeRecords = null;
   }
-  state.authToken = token || null;
+  state.authToken = nextToken;
+  state.accountId = nextAccountId;
   window.dispatchEvent(new Event('app:auth-changed'));
 }
 
@@ -629,6 +633,137 @@ async function pushChanges() {
   // A committed write must release the save queue immediately. Recomputing
   // dashboard totals is a separate read and must not delay saves or movement.
   refreshDashboardInBackground();
+}
+
+// A form draft is sent independently and is never inserted into the global
+// mutable state until confirmed. Other saveState() calls cannot replay it.
+function canSaveOrders() {
+  if (!state.authToken) return false;
+  if (state.userRole === 'admin') return true;
+  return Array.isArray(state.allowedViews)
+    ? state.allowedViews.includes('ordersView')
+    : state.userRole === 'ops';
+}
+
+const orderSavesInFlight = new Set();
+const ORDER_SAVE_TIMEOUT_MS = 20000;
+
+async function requestOrderWithTimeout(url, options) {
+  const controller = new AbortController();
+  let timer;
+  try {
+    return await Promise.race([
+      jsonRequest(url, { ...options, signal: controller.signal }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error('工單儲存逾時，請先核對結果。'));
+        }, ORDER_SAVE_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function recordOrderConfirmation(row) {
+  const incoming = normalizeOrder(row);
+  const id = incoming.id;
+  snapshots.orders ||= new Map();
+  const baseline = JSON.parse(snapshots.orders.get(id) || 'null');
+  // A later pull may already have applied a more recent server version.
+  if (Number(baseline?._updatedAt || 0) > Number(incoming._updatedAt || 0)) return;
+  const index = state.orders.findIndex(item => item.id === id);
+  const live = index < 0 ? null : state.orders[index];
+  const merged = { ...incoming };
+  if (live && baseline && JSON.stringify(live) !== JSON.stringify(baseline)) {
+    // Preserve local edits made while the server write was pending.
+    for (const key of Object.keys({ ...baseline, ...live })) {
+      if (['_updatedAt', 'createdAt'].includes(key) || JSON.stringify(live[key]) === JSON.stringify(baseline[key])) continue;
+      if (key in live) merged[key] = live[key]; else delete merged[key];
+    }
+  }
+  snapshots.orders.set(id, JSON.stringify(incoming));
+  if (index >= 0) state.orders[index] = merged;
+  else state.orders.unshift(merged);
+  refresh();
+  setIdleSyncUi('工單已確認');
+  refreshDashboardInBackground();
+}
+
+export function saveOrderConfirmed(payload, expectedVersion) {
+  const version = sessionVersion;
+  const order = JSON.parse(JSON.stringify(payload || {}));
+  const expected = Number(expectedVersion);
+  const saveKey = `${version}:${order.id}`;
+  if (orderSavesInFlight.has(saveKey)) return Promise.reject(new Error('此工單正在儲存，請稍候。'));
+  orderSavesInFlight.add(saveKey);
+  const operation = (async () => {
+    if (version !== sessionVersion || !canSaveOrders()) throw new Error('登入或工單權限已變更，無法儲存。');
+    if (!order.id || !Number.isSafeInteger(expected) || expected < 0) throw new Error('工單資料或版本不完整。');
+    const baseline = JSON.parse(snapshots.orders?.get(order.id) || 'null');
+    const live = state.orders.find(item => item.id === order.id);
+    if ((!baseline && expected !== 0) || (baseline && !live) ||
+        (baseline && Number(baseline._updatedAt || 0) !== expected) ||
+        (live && baseline && isRecordDirty('orders', live)) || (live && !baseline)) {
+      const error = new Error('工單已有其他修改，請先保留草稿並核對最新資料。');
+      error.conflict = true;
+      throw error;
+    }
+    const sent = cleanRecord(order);
+    delete sent.createdAt;
+    delete sent._expectedVersion;
+    setUi('儲存中', '工單', false);
+    let result;
+    try {
+      result = await requestOrderWithTimeout(`/api/data/orders/${encodeURIComponent(order.id)}`, {
+        method: 'PUT', headers: headers(true), body: JSON.stringify({ ...sent, _expectedVersion: expected }),
+      });
+      if (!result?.ok || result.id !== order.id || !Number.isSafeInteger(result.updatedAt) || result.updatedAt <= expected) throw new Error('伺服器回覆不完整。');
+    } catch (error) {
+      // Only errors known to be raised before the order transaction commits
+      // are definite. An intermediary or unknown response can be ambiguous.
+      if (![400, 401, 403, 404, 409].includes(error.httpStatus)) error.uncertain = true;
+      if (error.httpStatus === 409) error.conflict = true;
+      if (version === sessionVersion) setUi(error.uncertain ? '工單儲存結果待核對' : '工單未儲存', error.message, false);
+      throw error;
+    }
+    if (version !== sessionVersion) {
+      const error = new Error('登入已變更，請核對剛才的工單。'); error.uncertain = true; throw error;
+    }
+    const saved = { ...(baseline || {}), ...sent, id: order.id, _updatedAt: result.updatedAt };
+    if (Object.prototype.hasOwnProperty.call(result, 'createdAt')) saved.createdAt = result.createdAt;
+    recordOrderConfirmation(saved);
+    return { ...result, order: saved };
+  })();
+  return operation.finally(() => orderSavesInFlight.delete(saveKey));
+}
+
+// Explicit, read-only reconciliation; a missing or different record is never
+// retried automatically and must be reviewed by the user.
+export async function verifyOrderSave(payload, expectedVersion) {
+  const version = sessionVersion;
+  if (!canSaveOrders()) throw new Error('請先登入有工單權限的帳號。');
+  if (!payload?.id || !Number.isSafeInteger(Number(expectedVersion)) || Number(expectedVersion) < 0) throw new Error('工單資料或版本不完整。');
+  let missing = false;
+  const result = await jsonRequest(`/api/data/orders/${encodeURIComponent(payload.id)}`, { headers: headers(), cache: 'no-store' }).catch(error => {
+    if (error.httpStatus === 404) { missing = true; return null; }
+    throw error;
+  });
+  if (version !== sessionVersion) throw new Error('登入已變更，請重新核對。');
+  if (missing) return { status: 'missing' };
+  const item = result?.item;
+  if (!result?.ok || !item) throw new Error('無法確認伺服器回覆。');
+  if (item.id !== payload.id || !Number.isSafeInteger(item._updatedAt)) throw new Error('無法確認伺服器回覆。');
+  const ignored = new Set(['_updatedAt', '_expectedVersion', 'createdAt', 'sortOrder', 'updatedAt']);
+  const matches = Object.keys(payload).filter(key => !ignored.has(key)).every(key => JSON.stringify(item[key]) === JSON.stringify(payload[key]));
+  if (matches && item._updatedAt > Number(expectedVersion)) {
+    const live = state.orders.find(row => row.id === payload.id);
+    if (live && isRecordDirty('orders', live)) return { status: 'different', item };
+    recordOrderConfirmation(item);
+    return { status: 'saved', item };
+  }
+  return { status: 'different', item };
 }
 
 export function saveOrderSortOrder(ids, expectedVersions) {
